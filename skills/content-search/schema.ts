@@ -4,6 +4,9 @@ export const contentSearchInputSchema = z.object({
   queries: z.array(z.string()).min(1, '搜索词不能为空'),
   topicId: z.string(),
   limit: z.number().int().positive().default(10),
+  publishTime: z
+    .enum(['none', '1d', '7d', '14d', '30d'])
+    .default('none'),
 })
 
 export const contentSearchOutputSchema = z.object({

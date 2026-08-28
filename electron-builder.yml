@@ -1,0 +1,110 @@
+# ─── Electron Builder Configuration ───────────────────
+# Content OS — Desktop Application Packaging
+
+appId: com.contentos.desktop
+productName: Content OS
+copyright: Copyright © 2026 Content OS
+executableName: ContentOS
+
+directories:
+  output: electron-dist
+  buildResources: build
+
+# ─── Files to include in the app (ASAR disabled) ─────
+files:
+  - 'dist-electron/**/*'
+  - 'package.json'
+  - 'build/**/*'
+
+# ─── Extra Resources (outside app, for runtime access) ──
+extraResources:
+  # Next.js standalone server (includes server.js + minimal node_modules)
+  - from: .next/standalone
+    to: app
+    filter:
+      - '**/*'
+  # Next.js static assets (CSS, JS chunks)
+  - from: .next/static
+    to: app/.next/static
+    filter:
+      - '**/*'
+  # Public assets (images, icons)
+  - from: public
+    to: app/public
+    filter:
+      - '**/*'
+  # Prisma schema + migrations
+  - from: prisma
+    to: app/prisma
+    filter:
+      - '**/*'
+  # Generated Prisma client (from source, not standalone)
+  - from: src/generated
+    to: app/src/generated
+    filter:
+      - '**/*'
+  # Skills (runtime prompt files)
+  - from: skills
+    to: app/skills
+    filter:
+      - '**/*'
+  # Prompts
+  - from: prompts
+    to: app/prompts
+    filter:
+      - '**/*'
+  # Config files needed by prisma
+  - from: package.json
+    to: app/package.json
+  - from: prisma.config.ts
+    to: app/prisma.config.ts
+
+# ─── Windows Configuration ────────────────────────────
+win:
+  target:
+    - target: dir
+      arch:
+        - x64
+  icon: build/icon.png
+  artifactName: ContentOS-${version}.${ext}
+
+# ─── NSIS Installer Configuration ─────────────────────
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Content OS
+  runAfterFinish: true
+
+# ─── macOS Configuration ──────────────────────────────
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  icon: build/icon.png
+  category: public.app-category.productivity
+  artifactName: ContentOS-${version}-${arch}.${ext}
+
+# ─── Linux Configuration ─────────────────────────────
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: build/icon.png
+  category: Office
+  artifactName: ContentOS-${version}.${ext}
+
+# ─── Native Modules ───────────────────────────────────
+nodeGypRebuild: false
+npmRebuild: false
+
+# ─── ASAR Settings ────────────────────────────────────
+asar: false
+
+# ─── Publish (disabled for local builds) ──────────────
+publish: null

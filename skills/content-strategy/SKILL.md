@@ -36,6 +36,10 @@ interface ContentStrategyInput {
   contentType?: string
   tone?: string
   wordCount?: number
+  persona?: {
+    name: string
+    description: string | null
+  }
 }
 ```
 
@@ -82,7 +86,8 @@ interface ContentStrategyOutput {
 - 结构至少 3 个段落
 - 不虚构引用数据
 - 基于 selectedAngle 生成
+- 如果提供了 persona，策略必须符合人设的语调、风格和限制条件
 
 ## Version
 
-1.0.0
+1.1.0

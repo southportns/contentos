@@ -19,7 +19,8 @@ export const CONTENT_STRATEGY_SYSTEM_PROMPT = `你是一个内容策略师。你
 - 策略必须基于选定的角度
 - 不虚构引用和数据
 - 结构要符合逻辑
-- 适合目标平台`
+- 适合目标平台
+- 如果提供了创作人设，策略中的语调、钩子风格、结构选择必须符合人设设定`
 
 export const CONTENT_STRATEGY_PROMPT = (
   topic: string,
@@ -36,6 +37,10 @@ export const CONTENT_STRATEGY_PROMPT = (
   contentType?: string,
   tone?: string,
   wordCount?: number,
+  persona?: {
+    name: string
+    description: string | null
+  },
 ): string => {
   const profileStr = topicProfile
     ? `
@@ -49,6 +54,13 @@ export const CONTENT_STRATEGY_PROMPT = (
 受众痛点：${audienceInsights.painPoints.join('、')}`
     : ''
 
+  const personaStr = persona
+    ? `
+创作人设：
+- 名称：${persona.name}
+${persona.description ? `- 描述：${persona.description}` : ''}`
+    : ''
+
   return `主题：${topic}
 
 选定角度：
@@ -56,12 +68,12 @@ export const CONTENT_STRATEGY_PROMPT = (
 - 切入角度：${selectedAngle.angle}
 - 目标情绪：${selectedAngle.targetEmotion}
 - 关键要点：${selectedAngle.keyPoints.join('\n')}
-${profileStr}${audienceStr}
+${profileStr}${audienceStr}${personaStr}
 
 ${platform ? `目标平台：${platform}` : ''}
 ${contentType ? `内容类型：${contentType}` : ''}
 ${tone ? `期望语调：${tone}` : ''}
 ${wordCount ? `目标字数：${wordCount}` : ''}
 
-请生成完整的内容策略。`
+${persona ? '请严格按照创作人设的设定生成内容策略，确保语调、风格、结构都符合人设要求。' : ''}请生成完整的内容策略。`
 }

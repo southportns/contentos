@@ -49,6 +49,7 @@ export async function runWriting(
       validated.platform,
       validated.tone,
       validated.wordCount,
+      validated.persona,
     ),
   })
 

@@ -12,18 +12,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { StepHeader } from './step-header'
 import { cn } from '@/lib/utils'
 import type {
-  ContentAngle, ContentStrategy, WritingDraft, EvaluationResult,
+  ContentAngle, ContentStrategy, WritingDraft, EvaluationResult, StrategyEvaluationResult,
 } from '@/hooks/use-workflow'
 
 const scoreLabels: Record<string, string> = {
@@ -55,21 +47,21 @@ interface StepGenerateProps {
   strategy: ContentStrategy | null
   draft: WritingDraft | null
   evaluation: EvaluationResult | null
+  strategyEvaluation?: StrategyEvaluationResult | null
   onGenerate: () => void
   generating: boolean
   loadingLabel: string
-  platform: string
-  setPlatform: (v: string) => void
   duration: number
   setDuration: (v: number) => void
   wordCount: number
   error: string | null
+  onUpdateDraft?: (patch: Partial<WritingDraft>) => void
 }
 
 export function StepGenerate({
-  selectedAngle, strategy, draft, evaluation,
+  selectedAngle, strategy, draft, evaluation, strategyEvaluation,
   onGenerate, generating, loadingLabel,
-  platform, setPlatform, duration, setDuration, wordCount, error,
+  duration, setDuration, wordCount, error, onUpdateDraft,
 }: StepGenerateProps) {
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null)
   const done = !!evaluation
@@ -89,24 +81,9 @@ export function StepGenerate({
 
         {/* Options */}
         {!draft && (
-          <div className="flex gap-4">
-            <div className="flex-1 flex flex-col gap-2">
-              <Label className="text-xs">发布平台</Label>
-              <Select value={platform} onValueChange={(v) => setPlatform(v ?? '')}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="选择平台..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="抖音短视频">抖音短视频</SelectItem>
-                  <SelectItem value="小红书">小红书</SelectItem>
-                  <SelectItem value="公众号">公众号</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="gen-duration" className="text-xs">目标时长（秒）</Label>
-              <Input id="gen-duration" type="number" min={15} max={600} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-28" />
-            </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="gen-duration" className="text-xs">目标时长（秒）</Label>
+            <Input id="gen-duration" type="number" min={15} max={600} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-28" />
           </div>
         )}
         {!draft && duration > 0 && (
@@ -169,10 +146,10 @@ export function StepGenerate({
               </div>
               <Badge variant="secondary" className="text-xs">{draft.wordCount} 字</Badge>
             </div>
-            <ScrollArea className="max-h-[400px] rounded-lg border p-4">
+            <div className="rounded-lg border p-4">
               <div className="text-sm font-medium mb-2">{draft.title}</div>
               <pre className="whitespace-pre-wrap font-sans text-sm">{draft.content}</pre>
-            </ScrollArea>
+            </div>
           </>
         )}
 

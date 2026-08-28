@@ -32,6 +32,12 @@ export const writingInputSchema = z.object({
   platform: z.string().optional(),
   tone: z.string().optional(),
   wordCount: z.number().int().positive().optional(),
+  persona: z
+    .object({
+      name: z.string(),
+      description: z.string().nullable(),
+    })
+    .optional(),
 })
 
 export const writingOutputSchema = z.object({

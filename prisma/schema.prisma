@@ -1,15 +1,13 @@
 // Content OS — Prisma Schema
-// Data Domains: Identity, Projects, Topics, Research, Content, Analysis, Insights, Angles, Strategy, Drafts, Evaluation, Agents, Skills, Runs
+// Data Domains: Identity, Projects, Topics, Research, Content, Analysis, Insights, Angles, Strategy, Drafts, Evaluation, Humanization, StrategyEvaluation, Agents, Skills, Runs
 
 generator client {
-  provider        = "prisma-client-js"
-  output          = "../src/generated/prisma"
-  previewFeatures = ["postgresqlExtensions"]
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
-  provider   = "postgresql"
-  extensions = [vector]
+  provider = "sqlite"
 }
 
 // ─── Identity ───────────────────────────────────────────
@@ -22,7 +20,11 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  projects Project[]
+  projects            Project[]
+  inspirations        Inspiration[]
+  contentArchives     UserContentArchive[]
+  writingProfile      UserWritingProfile?
+  personas            Persona[]
 }
 
 // ─── Projects ───────────────────────────────────────────
@@ -38,6 +40,24 @@ model Project {
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   topics Topic[]
+}
+
+// ─── Persona ───────────────────────────────────────────
+// 用户自定义人设，影响内容策略和写作风格
+
+model Persona {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topics Topic[]
+
+  @@index([userId])
 }
 
 // ─── Topics ─────────────────────────────────────────────
@@ -57,17 +77,22 @@ model Topic {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  researchSessions ResearchSession[]
-  contents         Content[]
-  analyses         ContentAnalysis[]
-  insights         AudienceInsight[]
-  angles           Angle[]
-  strategy         ContentStrategy?
-  drafts           Draft[]
-  evaluations      Evaluation[]
+  project              Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  researchSessions     ResearchSession[]
+  contents             Content[]
+  analyses             ContentAnalysis[]
+  insights             AudienceInsight[]
+  angles               Angle[]
+  strategy             ContentStrategy?
+  drafts               Draft[]
+  evaluations          Evaluation[]
+  humanizations       Humanization[]
+  strategyEvaluations  StrategyEvaluation[]
+  persona              Persona?  @relation(fields: [personaId], references: [id], onDelete: SetNull)
+  personaId            String?
 
   @@index([projectId])
+  @@index([personaId])
 }
 
 // ─── Research ────────────────────────────────────────────
@@ -107,8 +132,8 @@ model Content {
   favorites         Int?
   views             Int?
   engagementRate    Float?
-  keywords          String[] // array of keywords
-  emotions          String[] // array of emotions
+  keywords          Json?    // array of keywords (stored as JSON for SQLite)
+  emotions          Json?    // array of emotions (stored as JSON for SQLite)
   contentStructure  Json? // content structure graph
   rawHtml           String?
   createdAt         DateTime @default(now())
@@ -151,9 +176,14 @@ model ContentAnalysis {
   conflictScore    Int?
   storyScore       Int?
   viralScore       Int?
+  controversyScore Int?
+  utilityScore     Int?
   reasoning        String?
   contentStructure Json? // hook, problem, emotion, insight, story, conflict, resolution, cta
   emotionCurve     Json?  // emotion progression
+  strengths       Json?    // array of strings (stored as JSON for SQLite)
+  weaknesses       Json?    // array of strings (stored as JSON for SQLite)
+  keyFactors       Json?    // array of strings (stored as JSON for SQLite)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -168,14 +198,20 @@ model ContentAnalysis {
 model AudienceInsight {
   id             String   @id @default(cuid())
   topicId        String
-  painPoints     String[]
-  emotions       String[]
-  questions      String[]
-  opinions       String[]
-  controversies  String[]
-  stories        String[]
-  desires        String[]
-  fears          String[]
+  painPoints     Json?    // array of strings (stored as JSON for SQLite)
+  emotions       Json?    // array of strings (stored as JSON for SQLite)
+  questions      Json?    // array of strings (stored as JSON for SQLite)
+  opinions       Json?    // array of strings (stored as JSON for SQLite)
+  controversies  Json?    // array of strings (stored as JSON for SQLite)
+  stories        Json?    // array of strings (stored as JSON for SQLite)
+  desires        Json?    // array of strings (stored as JSON for SQLite)
+  fears          Json?    // array of strings (stored as JSON for SQLite)
+  needs          Json?    // array of strings (stored as JSON for SQLite)
+  behaviors      Json?    // array of strings (stored as JSON for SQLite)
+  preferences    Json?    // array of strings (stored as JSON for SQLite)
+  contentGaps   Json?    // array of strings (stored as JSON for SQLite)
+  demographics   Json?    // { primaryAgeRange, primaryGender, secondaryAgeRange, secondaryGender }
+  emotionDetails Json?    // [{ emotion, intensity, percentage }]
   summary        String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -199,6 +235,9 @@ model Angle {
   shareabilityScore  Int?
   risk               String?
   supportingEvidence String?
+  keyPoints          Json?    // array of strings (stored as JSON for SQLite)
+  audienceAppeal     String?
+  estimatedViralScore Int?
   status             String   @default("GENERATED") // GENERATED | WAITING_FOR_APPROVAL | APPROVED | REJECTED
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -224,6 +263,10 @@ model ContentStrategy {
   turningPoint     String?
   endingStrategy   String?
   ctaStrategy      String?
+  keyArguments     Json?    // array of strings (stored as JSON for SQLite)
+  suggestedReferences Json? // array of strings (stored as JSON for SQLite)
+  tone             String?
+  estimatedWordCount Int?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -246,8 +289,10 @@ model Draft {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  topic      Topic       @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  evaluation Evaluation?
+  topic               Topic                @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  evaluation          Evaluation?
+  humanization        Humanization?
+  strategyEvaluation  StrategyEvaluation?
 
   @@index([topicId])
 }
@@ -263,16 +308,71 @@ model Evaluation {
   relatabilityScore Int?
   noveltyScore      Int?
   structureScore    Int?
-  readabilityScore  Int?
+  readabilityScore   Int?
   shareabilityScore Int?
-  platformFitScore  Int?
+  platformFitScore   Int?
   aiStyleScore      Int?
+  utilityScore       Int?
+  emotionalImpactScore Int?
+  logicalClarityScore  Int?
   overallScore      Int?
-  strengths         String[]
-  issues            String[]
-  suggestions       Json? // array of { issue, suggestion, priority }
+  strengths         Json?    // array of strings (stored as JSON for SQLite)
+  issues            Json?    // array of strings (stored as JSON for SQLite)
+  suggestions       Json? // array of { section, issue, suggestion, priority }
+  emotionalArcAnalysis Json? // { achieved: boolean, analysis: string }
+  conclusion        String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  topic  Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+}
+
+// ─── Humanization ─────────────────────────────────────
+
+model Humanization {
+  id              String   @id @default(cuid())
+  draftId         String   @unique
+  topicId         String
+  aiStyleScore    Int?
+  humanizedScore   Int?
+  changes         Json?    // [{ original, revised, reason, type }]
+  issues          Json?    // [{ type, description, severity }]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  topic  Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+}
+
+// ─── Strategy Evaluation ──────────────────────────────
+
+model StrategyEvaluation {
+  id                  String   @id @default(cuid())
+  draftId             String   @unique
+  topicId             String
+  platform            String
+  overallScore        Int?
+  grade               String?   // exceptional | strong | good | average | poor
+  scores             Json?     // Record<string, number>
+  platformFit         Int?
+  strategyConsistency Int?
+  strengths           Json?    // array of strings (stored as JSON for SQLite)
+  weaknesses           Json?    // array of strings (stored as JSON for SQLite)
+  criticalIssues      Json?    // array of strings (stored as JSON for SQLite)
+  improvementPriorities Json?  // [{ priority, problem, reason, suggestion }]
+  shareAnalysis       Json?    // { motivation, target, context }
+  aiStyleRisk         Int?
+  authenticityScore   Int?
+  evidenceQuality     Int?
+  confidence          Float?
+  verdict             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
   topic  Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
@@ -312,4 +412,71 @@ model Skill {
   config      Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// ─── Inspiration ──────────────────────────────────────
+// 用户自行添加的灵感、思路、好内容记录
+
+model Inspiration {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  content   String
+  source    String   @default("manual") // manual | url | imported
+  sourceUrl String?
+  tags      Json?    // array of strings (stored as JSON for SQLite)
+  category  String?  // idea | reference | angle | structure | hook | other
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([category])
+}
+
+// ─── User Content Archive ─────────────────────────────
+// 记录用户每次用 Content OS 生成的最终稿及微调记录，用于风格蒸馏
+
+model UserContentArchive {
+  id                String   @id @default(cuid())
+  userId            String
+  topic             String
+  platform          String?
+  finalTitle        String
+  finalContent      String
+  finalHook         String?
+  refineChanges     Json?    // 微调变更记录 [{ type, original, revised, reason }]
+  selectedAngleTitle String?
+  strategyTone      String?
+  wordCount         Int?
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([platform])
+}
+
+// ─── User Writing Profile ─────────────────────────────
+// 蒸馏后的用户写作画像，供 Writing Skill 参照
+
+model UserWritingProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  toneProfile         Json?    // 语调特征 { formality, energy, humor, directness, ... }
+  personality         Json?    // 性格标签 ["理性分析型", "情感共鸣型", ...] (stored as JSON for SQLite)
+  languagePatterns    Json?    // 语言模式 { sentenceRhythm, vocabularyTend, catchphrases, ... }
+  preferredTopics     Json?    // 偏好的主题方向 (stored as JSON for SQLite)
+  preferredStructures Json?    // 偏好的内容结构 [{ structure, frequency }]
+  hookStyles          Json?    // 偏好的钩子风格 ["悬念型", "冲突型", ...] (stored as JSON for SQLite)
+  emotionalTendencies Json?    // 情绪倾向 { primary, secondary, intensity }
+  summary             String?  // AI 生成的综合风格描述
+  version             Int      @default(1)
+  lastDistillAt       DateTime?
+  distillSampleCount  Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

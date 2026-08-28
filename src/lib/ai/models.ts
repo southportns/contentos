@@ -43,7 +43,7 @@ function getProvider(provider?: ModelProvider) {
       }
       return createOpenAI({
         apiKey: process.env.DEEPSEEK_API_KEY,
-        baseURL: 'https://api.deepseek.com/v1',
+        baseURL: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/v1',
       })
     }
     case 'glm': {
@@ -52,7 +52,7 @@ function getProvider(provider?: ModelProvider) {
       }
       return createOpenAI({
         apiKey: process.env.GLM_API_KEY,
-        baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+        baseURL: process.env.GLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4',
       })
     }
     default:

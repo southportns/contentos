@@ -63,20 +63,30 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>研究工具配置</CardTitle>
-          <CardDescription>配置 Firecrawl API Key 用于网页研究</CardDescription>
+          <CardDescription>网页搜索与内容抓取（内置 DuckDuckGo + Jina Reader，无需配置 API Key）</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="firecrawl-key">Firecrawl API Key</Label>
+            <Label htmlFor="web-search">网页搜索</Label>
             <Input
-              id="firecrawl-key"
-              type="password"
-              placeholder="fc-..."
+              id="web-search"
+              type="text"
+              placeholder="内置 DuckDuckGo 搜索（无需配置）"
+              disabled
+            />
+          </div>
+          <Separator />
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="web-scrape">网页抓取</Label>
+            <Input
+              id="web-scrape"
+              type="text"
+              placeholder="内置 Jina Reader 抓取（无需配置）"
               disabled
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            通过 .env.local 文件配置。
+            网页研究与内容抓取使用免费的 DuckDuckGo 搜索和 Jina Reader，无需配置任何 API Key。
           </p>
         </CardContent>
       </Card>
@@ -84,7 +94,7 @@ export default function SettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>数据库配置</CardTitle>
-          <CardDescription>PostgreSQL 连接配置</CardDescription>
+          <CardDescription>SQLite 数据库配置</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -92,7 +102,7 @@ export default function SettingsPage() {
             <Input
               id="db-url"
               type="password"
-              placeholder="postgresql://..."
+              placeholder="file:./dev.db"
               disabled
             />
           </div>

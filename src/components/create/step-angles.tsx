@@ -1,12 +1,12 @@
 'use client'
 
 import {
-  Target, Check, Flame, Gauge, Heart, Loader2,
+  Target, Check, Flame, Gauge, Heart, ArrowRight,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { StepHeader } from './step-header'
 import { cn } from '@/lib/utils'
 import type { ContentAngle } from '@/hooks/use-workflow'
@@ -18,15 +18,16 @@ interface StepAnglesProps {
   angles: ContentAngle[]
   selectedAngle: ContentAngle | null
   onSelect: (angle: ContentAngle | null) => void
+  onContinue?: () => void
+  onUpdateAngle?: (id: string, patch: Partial<ContentAngle>) => void
 }
 
-export function StepAngles({ angles, selectedAngle, onSelect }: StepAnglesProps) {
+export function StepAngles({ angles, selectedAngle, onSelect, onContinue, onUpdateAngle }: StepAnglesProps) {
   return (
     <Card>
       <StepHeader step={3} title="选择角度" active={!selectedAngle} done={!!selectedAngle} />
       <CardContent className="flex flex-col gap-3">
-        <ScrollArea className="max-h-[400px]">
-          <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
             {angles.map((angle) => {
               const isSelected = selectedAngle?.id === angle.id
               return (
@@ -84,7 +85,23 @@ export function StepAngles({ angles, selectedAngle, onSelect }: StepAnglesProps)
               )
             })}
           </div>
-        </ScrollArea>
+
+        {/* Next step button */}
+        <Separator />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Target className="size-4" />
+            {selectedAngle ? '已选择角度，进入内容生成' : '请选择一个内容角度'}
+          </div>
+          <Button
+            onClick={onContinue}
+            disabled={!selectedAngle}
+            size="sm"
+          >
+            下一步
+            <ArrowRight className="size-4" />
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

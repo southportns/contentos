@@ -25,6 +25,10 @@ interface ContentStrategyInput {
   contentType?: string
   tone?: string
   wordCount?: number
+  persona?: {
+    name: string
+    description: string | null
+  }
 }
 
 interface StrategySection {

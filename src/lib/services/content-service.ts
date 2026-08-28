@@ -1,7 +1,10 @@
 import { topicRepository } from '@/lib/repositories/topic-repository'
 import { contentRepository } from '@/lib/repositories/content-repository'
 import { agentRunRepository } from '@/lib/repositories/agent-run-repository'
-import type { Topic, Content, AgentRun } from '@/generated/prisma'
+import { inspirationRepository } from '@/lib/repositories/inspiration-repository'
+import { profileRepository } from '@/lib/repositories/profile-repository'
+import { Prisma } from '@/generated/prisma'
+import type { Topic, Content, AgentRun, Inspiration, UserWritingProfile, UserContentArchive } from '@/generated/prisma'
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -178,7 +181,7 @@ export const contentService = {
         shares: c.shares ?? null,
         favorites: c.favorites ?? null,
         views: c.views ?? null,
-        keywords: c.keywords || [],
+        keywords: c.keywords as unknown as Prisma.InputJsonValue | undefined,
         rawHtml: c.rawHtml || null,
       })),
     )
@@ -291,8 +294,8 @@ export const contentService = {
       platformFitScore: input.platformFitScore,
       aiStyleScore: input.aiStyleScore,
       overallScore: input.overallScore,
-      strengths: input.strengths,
-      issues: input.issues,
+      strengths: input.strengths as unknown as Prisma.InputJsonValue,
+      issues: input.issues as unknown as Prisma.InputJsonValue,
       suggestions: input.suggestions as string | undefined,
     })
   },
@@ -326,6 +329,104 @@ export const contentService = {
       status: data.status,
       error: data.error,
       completedAt: data.completedAt,
+    })
+  },
+
+  // ── Inspiration ────────────────────────────────────
+
+  async createInspiration(
+    userId: string,
+    data: { title: string; content: string; source?: string; sourceUrl?: string; tags?: string[]; category?: string },
+  ): Promise<Inspiration> {
+    return inspirationRepository.create({
+      ...data,
+      source: data.source || 'manual',
+      tags: data.tags as unknown as Prisma.InputJsonValue | undefined,
+      user: { connect: { id: userId } },
+    })
+  },
+
+  async getInspirations(
+    userId: string,
+    options?: { category?: string; limit?: number; offset?: number },
+  ): Promise<Inspiration[]> {
+    return inspirationRepository.findByUserId(userId, options)
+  },
+
+  async updateInspiration(
+    id: string,
+    data: { title?: string; content?: string; tags?: string[]; category?: string },
+  ): Promise<Inspiration> {
+    return inspirationRepository.update(id, data)
+  },
+
+  async deleteInspiration(id: string): Promise<void> {
+    return inspirationRepository.delete(id)
+  },
+
+  // ── User Content Archive ───────────────────────────
+
+  async archiveContent(
+    userId: string,
+    data: {
+      topic: string
+      platform?: string
+      finalTitle: string
+      finalContent: string
+      finalHook?: string
+      refineChanges?: unknown
+      selectedAngleTitle?: string
+      strategyTone?: string
+      wordCount?: number
+    },
+  ): Promise<UserContentArchive> {
+    return profileRepository.createArchive({
+      ...data,
+      refineChanges: data.refineChanges as Prisma.InputJsonValue | undefined,
+      user: { connect: { id: userId } },
+    })
+  },
+
+  async getArchives(userId: string, limit?: number): Promise<UserContentArchive[]> {
+    return profileRepository.findArchivesByUserId(userId, limit)
+  },
+
+  async countArchives(userId: string): Promise<number> {
+    return profileRepository.countArchivesByUserId(userId)
+  },
+
+  // ── User Writing Profile ───────────────────────────
+
+  async getWritingProfile(userId: string): Promise<UserWritingProfile | null> {
+    return profileRepository.findProfileByUserId(userId)
+  },
+
+  async saveWritingProfile(
+    userId: string,
+    data: {
+      toneProfile?: unknown
+      personality: string[]
+      languagePatterns?: unknown
+      preferredTopics: string[]
+      preferredStructures?: unknown
+      hookStyles: string[]
+      emotionalTendencies?: unknown
+      summary?: string | null
+      distillSampleCount?: number
+      lastDistillAt?: Date
+    },
+  ): Promise<UserWritingProfile> {
+    return profileRepository.upsertProfile(userId, {
+      toneProfile: data.toneProfile as Prisma.InputJsonValue | undefined,
+      personality: data.personality as unknown as Prisma.InputJsonValue,
+      languagePatterns: data.languagePatterns as Prisma.InputJsonValue | undefined,
+      preferredTopics: data.preferredTopics as unknown as Prisma.InputJsonValue,
+      preferredStructures: data.preferredStructures as Prisma.InputJsonValue | undefined,
+      hookStyles: data.hookStyles as unknown as Prisma.InputJsonValue,
+      emotionalTendencies: data.emotionalTendencies as Prisma.InputJsonValue | undefined,
+      summary: data.summary,
+      distillSampleCount: data.distillSampleCount ?? 0,
+      lastDistillAt: data.lastDistillAt ?? new Date(),
     })
   },
 }

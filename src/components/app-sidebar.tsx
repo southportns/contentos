@@ -1,123 +1,138 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  Sparkles,
-  LayoutDashboard,
-  Rocket,
   Settings,
-  Search,
-  Compass,
   FolderKanban,
-  PenSquare,
+  Home,
+  UserCircle,
+  Activity,
+  BookOpen,
+  Compass,
+  Sparkles,
+  Flame,
+  TrendingUp,
+  FileText,
+  ChevronRight,
 } from 'lucide-react'
 
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from '@/components/ui/sidebar'
+import { cn } from '@/lib/utils'
 
 const navItems = [
-  {
-    title: '工作台',
-    items: [
-      { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { title: '创建内容', href: '/create', icon: Rocket },
-      { title: '工作台', href: '/workspace', icon: PenSquare },
-    ],
-  },
-  {
-    title: '数据',
-    items: [
-      { title: '研究', href: '/research', icon: Search },
-      { title: '内容浏览', href: '/explorer', icon: Compass },
-      { title: '项目', href: '/projects', icon: FolderKanban },
-    ],
-  },
-  {
-    title: '系统',
-    items: [
-      { title: '设置', href: '/settings', icon: Settings },
-    ],
-  },
+  { title: '主页', href: '/', icon: Home },
+  { title: '人设管理', href: '/personas', icon: UserCircle },
+  { title: '创作', href: '/projects', icon: FolderKanban },
+  { title: '内容浏览器', href: '/explorer', icon: Compass, hasSub: true },
+  { title: '使用指导', href: '/guide', icon: BookOpen },
+  { title: '环境检测', href: '/diagnostics', icon: Activity },
+  { title: '设置', href: '/settings', icon: Settings },
+]
+
+const explorerSubItems = [
+  { title: '账号研究', href: '/explorer/research', icon: Sparkles },
+  { title: '话题搜索', href: '/explorer/search', icon: Flame },
+  { title: '抖音热搜', href: '/explorer/hot', icon: TrendingUp },
+  { title: '内容库', href: '/explorer/library', icon: FileText },
 ]
 
 export function AppSidebar() {
   const pathname = usePathname()
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader>
+    <Sidebar collapsible="none">
+      <SidebarHeader className="px-3 py-3">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
-              render={<Link href="/dashboard" />}
+              render={<Link href="/projects" />}
               tooltip="Content OS"
             >
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Sparkles className="size-4" />
-              </div>
-              <div className="flex flex-col gap-0.5 leading-none">
-                <span className="font-semibold">Content OS</span>
-                <span className="text-xs text-muted-foreground">v0.1.0</span>
-              </div>
+              <Image
+                src="/logo.png"
+                alt="Content OS"
+                width={120}
+                height={36}
+                className="h-8 w-auto object-contain"
+                priority
+              />
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
-        {navItems.map((group) => (
-          <SidebarGroup key={group.title}>
-            <SidebarGroupLabel>{group.title}</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => {
-                  const isActive =
-                    pathname === item.href ||
-                    pathname.startsWith(`${item.href}/`)
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        render={<Link href={item.href} />}
-                        isActive={isActive}
-                        tooltip={item.title}
-                      >
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+      <SidebarContent className="justify-start">
+        <SidebarGroup className="px-1 py-2">
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1 px-2">
+              {navItems.map((item) => {
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== '/' && pathname.startsWith(`${item.href}/`))
+                const isExplorerActive =
+                  item.hasSub && pathname.startsWith('/explorer')
+
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      render={<Link href={item.href} />}
+                      isActive={isActive}
+                      tooltip={item.title}
+                    >
+                      <item.icon />
+                      <span>{item.title}</span>
+                      {item.hasSub && (
+                        <ChevronRight
+                          className={cn(
+                            'ml-auto size-4 transition-transform duration-200',
+                            isExplorerActive && 'rotate-90',
+                          )}
+                        />
+                      )}
+                    </SidebarMenuButton>
+
+                    {/* 二级导航 */}
+                    {item.hasSub && isExplorerActive && (
+                      <SidebarMenuSub className="mt-0.5 gap-0.5">
+                        {explorerSubItems.map((sub) => {
+                          const isSubActive = pathname === sub.href
+                          return (
+                            <SidebarMenuSubItem key={sub.href}>
+                              <SidebarMenuSubButton
+                                render={<Link href={sub.href} />}
+                                isActive={isSubActive}
+                              >
+                                <sub.icon className="size-3.5" />
+                                <span>{sub.title}</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          )
+                        })}
+                      </SidebarMenuSub>
+                    )}
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              render={<Link href="/settings" />}
-              tooltip="设置"
-            >
-              <Settings />
-              <span>设置</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
     </Sidebar>
   )
 }

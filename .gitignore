@@ -42,3 +42,36 @@ next-env.d.ts
 
 # prisma generated
 src/generated/
+
+# electron build output
+/electron-dist/
+/dist-electron/
+/dist-release/
+/release/
+/release-out/
+/electron-build*.log
+
+# ─── Local database (do not commit user data) ───────
+dev.db
+dev.db-journal
+*.db
+*.db-journal
+
+# ─── Temporary test / debug files ────────────────────
+null
+test-config.ts
+test-filtered.json
+test-minimal.json
+test-pg-connection.js
+test-pg-regions.js
+test-prisma.ts
+test-regions.cjs
+test-regions.ps1
+test-search-full.json
+test-topic-result.json
+prisma-generate.log
+find-region.js
+
+# ─── OS / editor artifacts ────────────────────────────
+.mignore
+*.log

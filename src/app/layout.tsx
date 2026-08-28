@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Content OS — AI 内容研究与写作系统',
+  title: 'Content OS — AI 账号研究与写作系统',
   description:
-    'AI 内容研究、爆款分析、内容决策与写作系统。从选题到发布的完整内容生产闭环。',
+    'AI 账号研究、爆款分析、内容决策与写作系统。从选题到发布的完整内容生产闭环。',
 }
 
 export default function RootLayout({

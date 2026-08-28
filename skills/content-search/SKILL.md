@@ -43,16 +43,17 @@ interface ContentSearchOutput {
 ## Workflow
 
 1. 遍历 queries
-2. 调用 Firecrawl search 搜索每个 query
+2. 调用 DuckDuckGo 搜索每个 query
 3. 获取搜索结果 URL 列表
-4. 调用 Firecrawl scrape 抓取每个 URL 的内容
+4. 调用 Jina Reader 抓取每个 URL 的内容（转换为 Markdown）
 5. 结构化提取标题、作者、正文、发布时间、指标等
 6. 去重
 7. 返回结构化 Content[]
 
 ## Tools
 
-- Firecrawl (search + scrape)
+- DuckDuckGo HTML API (搜索 — 无需 API Key)
+- Jina Reader (r.jina.ai) (网页抓取 — 无需 API Key)
 
 ## Constraints
 
@@ -75,4 +76,4 @@ interface ContentSearchOutput {
 
 ## Version
 
-1.0.0
+1.1.0

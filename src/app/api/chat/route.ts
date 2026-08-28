@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       model,
       messages,
       system:
-        '你是 Content OS 的 AI 助手。你帮助用户进行内容研究、爆款分析和写作。请用中文回复。',
+        '你是 Content OS 的 AI 助手。你帮助用户进行账号研究、爆款分析和写作。请用中文回复。',
     })
 
     return result.toTextStreamResponse()

@@ -11,6 +11,7 @@ export interface TopicProfile {
   relatedTopics: string[]
   coreQuestions: string[]
   audience?: string
+  platform?: string
   potentialAngles: string[]
   researchQueries: string[]
 }
@@ -113,7 +114,71 @@ export interface EvaluationResult {
   conclusion: string
 }
 
+export interface StrategyEvaluationResult {
+  platform: string
+  overallScore: number
+  grade: 'exceptional' | 'strong' | 'good' | 'average' | 'poor'
+  scores: Record<string, number>
+  platformFit: number
+  strategyConsistency: number
+  strengths: string[]
+  weaknesses: string[]
+  criticalIssues: string[]
+  improvementPriorities: Array<{
+    priority: number
+    problem: string
+    reason: string
+    suggestion: string
+  }>
+  shareAnalysis: {
+    motivation: string
+    target: string
+    context: string
+  }
+  aiStyleRisk: number
+  authenticityScore: number
+  evidenceQuality: number
+  confidence: number
+  verdict: string
+}
+
+export interface RefineResult {
+  content: string
+  title: string
+  hook: string
+  wordCount: number
+  changes: Array<{
+    type: string
+    original: string
+    revised: string
+    reason: string
+  }>
+  hookCandidates?: string[]
+  titleCandidates?: string[]
+  summary: string
+}
+
+export interface FinalOutput {
+  title: string
+  content: string
+  hook: string
+  wordCount: number
+  platform?: string
+}
+
+export interface Persona {
+  id: string
+  name: string
+  description: string | null
+}
+
 export interface WorkflowState {
+  // Project association
+  projectId: string | null
+
+  // Persona association
+  persona: Persona | null
+
   // Step 1: Research
   topicProfile: TopicProfile | null
   contents: SearchedContent[]
@@ -133,11 +198,22 @@ export interface WorkflowState {
 
   // Step 6: Evaluation
   evaluation: EvaluationResult | null
+
+  // Step 7: Strategy Evaluation
+  strategyEvaluation: StrategyEvaluationResult | null
+
+  // Step 8: Refine
+  refineData: RefineResult | null
+
+  // Step 9: Final Output
+  finalOutput: FinalOutput | null
 }
 
 // ── Store ─────────────────────────────────────────────
 
 const initialState: WorkflowState = {
+  projectId: null,
+  persona: null,
   topicProfile: null,
   contents: [],
   viralResult: null,
@@ -146,6 +222,9 @@ const initialState: WorkflowState = {
   strategy: null,
   draft: null,
   evaluation: null,
+  strategyEvaluation: null,
+  refineData: null,
+  finalOutput: null,
 }
 
 const STORAGE_KEY = 'content-os-workflow'
@@ -155,7 +234,13 @@ function loadFromStorage(): WorkflowState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return initialState
-    return { ...initialState, ...JSON.parse(raw) }
+    const parsed = JSON.parse(raw) as Partial<WorkflowState>
+    return {
+      ...initialState,
+      ...parsed,
+      // Ensure array fields are always arrays even if localStorage has null/garbage
+      angles: Array.isArray(parsed.angles) ? parsed.angles : [],
+    }
   } catch {
     return initialState
   }
@@ -199,17 +284,50 @@ function subscribe(listener: () => void): () => void {
 // ── Actions (stable references) ─────────────────────
 
 export const workflowActions = {
+  getContents: () => state.contents,
+
+  setProjectId: (id: string | null) =>
+    setState((prev) => ({ ...prev, projectId: id })),
+
+  setPersona: (persona: Persona | null) =>
+    setState((prev) => ({ ...prev, persona })),
+
   setTopicProfile: (profile: TopicProfile) =>
     setState((prev) => ({ ...prev, topicProfile: profile })),
 
+  updateTopicProfile: (patch: Partial<TopicProfile>) =>
+    setState((prev) => ({
+      ...prev,
+      topicProfile: prev.topicProfile ? { ...prev.topicProfile, ...patch } : null,
+    })),
+
   setContents: (contents: SearchedContent[]) =>
     setState((prev) => ({ ...prev, contents })),
+
+  removeContent: (url: string) =>
+    setState((prev) => ({
+      ...prev,
+      contents: prev.contents.filter((c) => c.url !== url),
+    })),
+
+  clearContents: () =>
+    setState((prev) => ({ ...prev, contents: [] })),
 
   setViralResult: (result: ViralResult) =>
     setState((prev) => ({ ...prev, viralResult: result })),
 
   setAngles: (angles: ContentAngle[]) =>
     setState((prev) => ({ ...prev, angles })),
+
+  updateAngle: (id: string, patch: Partial<ContentAngle>) =>
+    setState((prev) => ({
+      ...prev,
+      angles: prev.angles.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+      selectedAngle:
+        prev.selectedAngle?.id === id
+          ? { ...prev.selectedAngle, ...patch }
+          : prev.selectedAngle,
+    })),
 
   setSelectedAngle: (angle: ContentAngle | null) =>
     setState((prev) => ({ ...prev, selectedAngle: angle })),
@@ -220,8 +338,42 @@ export const workflowActions = {
   setDraft: (draft: WritingDraft) =>
     setState((prev) => ({ ...prev, draft })),
 
+  updateDraft: (patch: Partial<WritingDraft>) =>
+    setState((prev) => ({
+      ...prev,
+      draft: prev.draft ? { ...prev.draft, ...patch } : null,
+    })),
+
   setEvaluation: (evaluation: EvaluationResult) =>
     setState((prev) => ({ ...prev, evaluation })),
+
+  setStrategyEvaluation: (result: StrategyEvaluationResult) =>
+    setState((prev) => ({ ...prev, strategyEvaluation: result })),
+
+  setRefineData: (data: RefineResult) =>
+    setState((prev) => ({ ...prev, refineData: data })),
+
+  updateRefineData: (patch: Partial<RefineResult>) =>
+    setState((prev) => ({
+      ...prev,
+      refineData: prev.refineData ? { ...prev.refineData, ...patch } : null,
+    })),
+
+  setFinalOutput: (output: FinalOutput) =>
+    setState((prev) => ({ ...prev, finalOutput: output })),
+
+  clearDownstream: () =>
+    setState((prev) => ({
+      ...prev,
+      angles: [],
+      selectedAngle: null,
+      strategy: null,
+      draft: null,
+      evaluation: null,
+      strategyEvaluation: null,
+      refineData: null,
+      finalOutput: null,
+    })),
 
   reset: () => {
     setState(() => ({ ...initialState }))

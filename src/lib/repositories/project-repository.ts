@@ -6,7 +6,7 @@ export const projectRepository = {
     return prisma.project.create({ data })
   },
 
-  async findById(id: string): Promise<Project | null> {
+  async findById(id: string): Promise<Prisma.ProjectGetPayload<{ include: { topics: true } }> | null> {
     return prisma.project.findUnique({
       where: { id },
       include: { topics: true },

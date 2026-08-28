@@ -41,6 +41,10 @@ interface WritingInput {
   platform?: string
   tone?: string
   wordCount?: number
+  persona?: {
+    name: string
+    description: string | null
+  }
 }
 ```
 
@@ -77,7 +81,8 @@ interface WritingOutput {
 - 保持语调一致
 - 遵循策略结构
 - 适合目标平台格式
+- 如果提供了 persona，写作语气、用词风格、表达习惯必须符合人设的设定
 
 ## Version
 
-1.0.0
+1.1.0

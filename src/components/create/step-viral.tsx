@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { StepHeader } from './step-header'
 import type { ViralResult } from '@/hooks/use-workflow'
 
@@ -73,8 +72,7 @@ export function StepViral({ viralResult, onGenerateAngles, generatingAngles, err
 
         {/* Individual analyses (collapsible summary) */}
         <Separator />
-        <ScrollArea className="max-h-[300px]">
-          <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2">
             {viralResult.analyses.map((a) => (
               <div key={a.url} className="flex flex-col gap-1.5 rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-2">
@@ -96,7 +94,6 @@ export function StepViral({ viralResult, onGenerateAngles, generatingAngles, err
               </div>
             ))}
           </div>
-        </ScrollArea>
 
         {/* Next: generate angles */}
         <Separator />

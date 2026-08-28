@@ -113,7 +113,7 @@ async function topicProfilingNode(
   }
 }
 
-// ── Node: Content Search (Firecrawl) ─────────────────
+// ── Node: Content Search (DuckDuckGo + Jina Reader) ─────
 
 async function contentSearchNode(
   state: typeof StateAnnotation.State,
@@ -131,6 +131,7 @@ async function contentSearchNode(
       queries,
       topicId: state.topicId,
       limit: 10,
+      publishTime: 'none',
     })
 
     const contents = result.contents.map((c, i) => ({

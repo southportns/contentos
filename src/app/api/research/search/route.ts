@@ -11,6 +11,9 @@ const searchInputSchema = z.object({
   queries: z.array(z.string()).min(1),
   topicId: z.string(),
   limit: z.number().int().positive().max(30).default(10),
+  publishTime: z
+    .enum(['none', '1d', '7d', '14d', '30d'])
+    .default('none'),
 })
 
 export async function POST(req: NextRequest) {

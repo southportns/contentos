@@ -11,6 +11,7 @@ export const WRITING_SYSTEM_PROMPT = `你是一个优秀的内容写手。你的
 6. 不虚构数据和引用
 7. 适合目标平台的内容风格
 8. 标题要吸引人但不要标题党
+9. 如果提供了创作人设，写作语气、用词风格、表达习惯必须符合人设的设定
 
 输出格式：
 - 完整的正文内容（markdown 格式）
@@ -23,6 +24,10 @@ export const WRITING_PROMPT = (
   platform?: string,
   tone?: string,
   wordCount?: number,
+  persona?: {
+    name: string
+    description: string | null
+  },
 ): string => {
   const structureStr = strategy.structure
     .map(
@@ -33,6 +38,13 @@ export const WRITING_PROMPT = (
 预计字数：${s.estimatedWords}`,
     )
     .join('\n\n')
+
+  const personaStr = persona
+    ? `
+创作人设：
+- 名称：${persona.name}
+${persona.description ? `- 描述：${persona.description}` : ''}`
+    : ''
 
   return `主题：${topic}
 
@@ -50,9 +62,10 @@ export const WRITING_PROMPT = (
 
 结构大纲：
 ${structureStr}
+${personaStr}
 
 ${platform ? `目标平台：${platform}` : ''}
 ${wordCount ? `目标字数：${wordCount}` : `预计总字数：${strategy.estimatedWordCount}`}
 
-请基于以上策略，写出完整的内容初稿。`
+${persona ? '请严格按照创作人设的设定来写作，确保语气、用词风格、表达习惯都符合人设要求。' : ''}请基于以上策略，写出完整的内容初稿。`
 }
