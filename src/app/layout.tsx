@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   title: 'Content OS — AI 账号研究与写作系统',
   description:
     'AI 账号研究、爆款分析、内容决策与写作系统。从选题到发布的完整内容生产闭环。',
+  icons: {
+    icon: '/icon.ico',
+    shortcut: '/icon.ico',
+  },
 }
 
 export default function RootLayout({
