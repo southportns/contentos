@@ -276,7 +276,7 @@ export async function checkDouyinHealth(): Promise<boolean> {
 
 const DOUYIN_INGEST_BIN =
   process.env.DOUYIN_INGEST_BIN || 'douyin-ingest'
-const DOUYIN_INGEST_TIMEOUT_MS = 180_000 // 3 min (下载+转写)
+const DOUYIN_INGEST_TIMEOUT_MS = 300_000 // 5 min (下载+模型加载+转写)
 
 interface IngestVideo {
   aweme_id: string
@@ -335,10 +335,27 @@ export async function getVideoTranscript(
     join(workDir, 'transcripts'),
   ]
 
-  // 如果设置了 DOUYIN_INGEST_HOME，让 douyin-ingest 在该目录查找 storage_state
+  // 构建子进程环境变量
+  // 确保包含完整 PATH（winget 安装的 ffmpeg/ffprobe 可能不在 dev server 的 PATH 中）
+  // 设置 HF 镜像加速 Whisper 模型下载
   const env: NodeJS.ProcessEnv = { ...process.env }
+
+  // 如果设置了 DOUYIN_INGEST_HOME，让 douyin-ingest 在该目录查找 storage_state
   if (process.env.DOUYIN_INGEST_HOME) {
     env.DOUYIN_INGEST_HOME = process.env.DOUYIN_INGEST_HOME
+  }
+
+  // 设置 HuggingFace 镜像（如果未设置），加速 Whisper 模型下载
+  if (!env.HF_ENDPOINT) {
+    env.HF_ENDPOINT = 'https://hf-mirror.com'
+  }
+
+  // Windows: 确保 winget Links 目录在 PATH 中（ffmpeg/ffprobe 安装位置）
+  if (process.platform === 'win32' && env.PATH) {
+    const wingetLinks = `${process.env.USERPROFILE}\\AppData\\Local\\Microsoft\\WinGet\\Links`
+    if (!env.PATH.includes('WinGet\\Links')) {
+      env.PATH = `${env.PATH};${wingetLinks}`
+    }
   }
 
   try {
