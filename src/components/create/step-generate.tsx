@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   Rocket, Loader2, CheckCircle2, AlertCircle, FileText,
   ClipboardCheck, ChevronDown, ChevronRight, Sparkles,
-  PenLine,
+  PenLine, ShieldAlert,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator'
 import { StepHeader } from './step-header'
 import { cn } from '@/lib/utils'
 import type {
-  ContentAngle, ContentStrategy, WritingDraft, EvaluationResult, StrategyEvaluationResult,
+  ContentAngle, ContentStrategy, WritingDraft, EvaluationResult, StrategyEvaluationResult, RiskAnalysisResult,
 } from '@/hooks/use-workflow'
 
 const scoreLabels: Record<string, string> = {
@@ -26,6 +26,33 @@ const priorityColors: Record<string, string> = {
   high: 'bg-red-50 text-red-600', medium: 'bg-yellow-50 text-yellow-600', low: 'bg-green-50 text-green-600',
 }
 const priorityLabels: Record<string, string> = { high: '高优先', medium: '中优先', low: '低优先' }
+
+const riskCategoryLabels: Record<string, string> = {
+  political_sensitive: '政治敏感',
+  social_sensitive: '社会敏感',
+  personal_privacy: '隐私侵权',
+  misinformation: '虚假信息',
+  hate_speech: '仇恨言论',
+  commercial_compliance: '商业合规',
+  platform_violation: '平台违规',
+  legal_risk: '法律风险',
+}
+const riskSeverityColors: Record<string, string> = {
+  high: 'bg-red-50 text-red-600',
+  medium: 'bg-yellow-50 text-yellow-600',
+  low: 'bg-blue-50 text-blue-600',
+}
+const riskSeverityLabels: Record<string, string> = {
+  high: '高风险',
+  medium: '中风险',
+  low: '低风险',
+}
+const riskLevelConfig: Record<string, { label: string; color: string; icon: string }> = {
+  safe: { label: '安全', color: 'text-green-600', icon: '✅' },
+  low: { label: '低风险', color: 'text-blue-600', icon: 'ℹ️' },
+  medium: { label: '中风险', color: 'text-yellow-600', icon: '⚠️' },
+  high: { label: '高风险', color: 'text-red-600', icon: '🚫' },
+}
 
 function ScoreBar({ label, score }: { label: string; score: number }) {
   const color = score >= 80 ? 'bg-green-500' : score >= 60 ? 'bg-yellow-500' : 'bg-red-500'
@@ -48,6 +75,7 @@ interface StepGenerateProps {
   draft: WritingDraft | null
   evaluation: EvaluationResult | null
   strategyEvaluation?: StrategyEvaluationResult | null
+  riskAnalysis?: RiskAnalysisResult | null
   onGenerate: () => void
   generating: boolean
   loadingLabel: string
@@ -59,17 +87,18 @@ interface StepGenerateProps {
 }
 
 export function StepGenerate({
-  selectedAngle, strategy, draft, evaluation, strategyEvaluation,
+  selectedAngle, strategy, draft, evaluation, strategyEvaluation, riskAnalysis,
   onGenerate, generating, loadingLabel,
   duration, setDuration, wordCount, error, onUpdateDraft,
 }: StepGenerateProps) {
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null)
+  const [expandedRisk, setExpandedRisk] = useState<string | null>(null)
   const done = !!evaluation
 
   return (
     <Card>
       <StepHeader step={4} title="生成内容 + 评估" active={!done} done={done} />
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-3">
         {/* Selected angle summary */}
         <div className="rounded-lg border bg-muted/30 p-3">
           <div className="flex items-center gap-2">
@@ -88,7 +117,7 @@ export function StepGenerate({
         )}
         {!draft && duration > 0 && (
           <div className="text-xs text-muted-foreground">
-            预计约 {wordCount} 字（按 4.5 字/秒）
+            预计约 {wordCount} 字（按 5.4 字/秒，含 20% 气口冗余）
           </div>
         )}
 
@@ -226,6 +255,76 @@ export function StepGenerate({
                       <div className="ml-6 flex flex-col gap-0.5 text-xs text-muted-foreground">
                         <div><span className="font-medium text-foreground">问题：</span> {sug.issue}</div>
                         <div><span className="font-medium text-foreground">建议：</span> {sug.suggestion}</div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Risk Analysis */}
+        {riskAnalysis && (
+          <>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="size-4 text-primary" />
+                <span className="text-sm font-medium">风险分析</span>
+              </div>
+              <div className={cn(
+                'flex items-center gap-1 rounded-lg px-3 py-1',
+                riskAnalysis.overallRiskLevel === 'safe' ? 'bg-green-50' :
+                riskAnalysis.overallRiskLevel === 'low' ? 'bg-blue-50' :
+                riskAnalysis.overallRiskLevel === 'medium' ? 'bg-yellow-50' : 'bg-red-50',
+              )}>
+                <span className="text-xs">
+                  {riskLevelConfig[riskAnalysis.overallRiskLevel]?.icon}
+                </span>
+                <span className={cn('text-sm font-bold', riskLevelConfig[riskAnalysis.overallRiskLevel]?.color)}>
+                  {riskLevelConfig[riskAnalysis.overallRiskLevel]?.label}
+                </span>
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="rounded-lg bg-muted/50 p-3 text-sm">
+              <span className="font-medium">总结：</span> {riskAnalysis.summary}
+            </div>
+
+            {/* Risk items */}
+            {riskAnalysis.risks.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-green-600">
+                <CheckCircle2 className="size-4" />
+                未发现明显风险，可以放心发布
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                {riskAnalysis.risks.map((risk, i) => (
+                  <div key={`risk-${i}`} className="flex flex-col gap-1">
+                    <button
+                      className="flex items-center gap-2 text-left"
+                      onClick={() => setExpandedRisk(expandedRisk === `risk-${i}` ? null : `risk-${i}`)}
+                    >
+                      {expandedRisk === `risk-${i}` ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                      <Badge variant="secondary" className={cn('text-xs', riskSeverityColors[risk.severity])}>
+                        {riskSeverityLabels[risk.severity]}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {riskCategoryLabels[risk.category] || risk.category}
+                      </Badge>
+                      <span className="text-sm line-clamp-1">{risk.description}</span>
+                    </button>
+                    {expandedRisk === `risk-${i}` && (
+                      <div className="ml-6 flex flex-col gap-1 text-xs text-muted-foreground">
+                        {risk.quote && (
+                          <div className="rounded border-l-2 border-muted-foreground/30 bg-muted/30 p-2">
+                            <span className="font-medium text-foreground">原文：</span> {risk.quote}
+                          </div>
+                        )}
+                        <div><span className="font-medium text-foreground">说明：</span> {risk.description}</div>
+                        <div><span className="font-medium text-foreground">建议：</span> {risk.suggestion}</div>
                       </div>
                     )}
                   </div>

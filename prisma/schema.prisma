@@ -88,6 +88,7 @@ model Topic {
   evaluations          Evaluation[]
   humanizations       Humanization[]
   strategyEvaluations  StrategyEvaluation[]
+  contentAdaptations   ContentAdaptation[]
   persona              Persona?  @relation(fields: [personaId], references: [id], onDelete: SetNull)
   personaId            String?
 
@@ -145,6 +146,38 @@ model Content {
   comments        Comment[]
 
   @@index([topicId])
+  @@index([platform])
+}
+
+// ─── Content Library ───────────────────────────────────────
+// 内容库：独立于 Topic 的采集内容存储，用于对标改编和参考
+
+model ContentLibraryItem {
+  id              String   @id @default(cuid())
+  userId          String  @default("default")
+  platform        String  @default("web") // douyin | xiaohongshu | weibo | web
+  url             String
+  title           String?
+  content         String?
+  author          String?
+  cover           String?
+  publishedAt     String?
+  // 互动指标
+  likes           Int?
+  commentsCount   Int?
+  shares          Int?
+  favorites       Int?
+  views           Int?
+  // 口播文案（语音转文字）
+  transcript      Json?   // { text, language, duration, model }
+  // 采集的评论数据
+  collectedComments Json? // [{ text, nickname, diggCount, createTime }]
+  // 评论分析结果
+  commentAnalysis Json?   // { topComments, keywords, sentiment, summary }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
   @@index([platform])
 }
 
@@ -376,6 +409,40 @@ model StrategyEvaluation {
 
   draft Draft @relation(fields: [draftId], references: [id], onDelete: Cascade)
   topic  Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+}
+
+// ─── Content Adaptation ───────────────────────────────
+// 对标内容改编：从 Explorer 发现的内容进行二次改编创作
+
+model ContentAdaptation {
+  id              String   @id @default(cuid())
+  topicId         String
+  // 对标内容信息
+  referencePlatform  String?  // douyin | xiaohongshu | weibo | ...
+  referenceUrl      String?
+  referenceTitle    String?
+  referenceAuthor   String?
+  referenceContent  String?  // 原文文案/口播文本
+  referenceMetrics  Json?    // { likes, comments, shares, favorites, views }
+  // 用户想法
+  userIdea         String?  // 用户自身的想法和补充
+  // Persona
+  personaId        String?
+  // 对标内容拆解结果
+  referenceAnalysis Json?    // { hookType, contentStructure, emotionalArc, keyPoints, viralFactors, weaknesses }
+  // 改编角度
+  adaptedAngles    Json?     // [{ id, title, angle, reasoning, targetEmotion, keyPoints, whatChanged, estimatedViralScore }]
+  // 改编策略建议
+  strategySuggestion Json?   // { tone, structure, hookStrategy, ctaStrategy }
+  // 选中的改编角度
+  selectedAngleId  String?
+  status           String   @default("PENDING") // PENDING | ANALYZED | ANGLE_SELECTED | COMPLETED
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@index([topicId])
 }

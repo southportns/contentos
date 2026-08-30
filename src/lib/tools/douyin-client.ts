@@ -15,6 +15,7 @@ import { z } from 'zod'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { rm } from 'node:fs/promises'
+import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
@@ -26,7 +27,7 @@ const execFileAsync = promisify(execFile)
 const DOUYIN_API_BASE =
   process.env.DOUYIN_API_BASE || 'http://localhost:8800'
 
-const DOUYIN_TIMEOUT_MS = 30_000
+const DOUYIN_TIMEOUT_MS = 15_000
 
 // ─── Types ─────────────────────────────────────────────
 
@@ -69,6 +70,10 @@ export interface DouyinSearchResult {
   desc: string
   cover: string
   publish_time?: string
+  digg_count?: number
+  comment_count?: number
+  share_count?: number
+  collect_count?: number
 }
 
 export interface DouyinTranscriptSegment {
@@ -84,6 +89,10 @@ export interface DouyinTranscript {
   duration: number
   model: string
   segments: DouyinTranscriptSegment[]
+  /** 视频标题/描述，作为 LLM 纠错的上下文 */
+  videoDesc?: string
+  /** 视频作者，辅助 LLM 理解语境 */
+  videoAuthor?: string
 }
 
 // ─── Schemas ───────────────────────────────────────────
@@ -133,6 +142,10 @@ const searchSchema = z.object({
       desc: z.string(),
       cover: z.string(),
       publish_time: z.string().optional(),
+      digg_count: z.number().optional().default(0),
+      comment_count: z.number().optional().default(0),
+      share_count: z.number().optional().default(0),
+      collect_count: z.number().optional().default(0),
     }),
   ),
   source: z.string(),
@@ -182,6 +195,7 @@ export async function getVideoDetail(
 ): Promise<DouyinVideoDetail> {
   const data = await douyinFetch<unknown>(
     `/api/v1/video/${awemeId}`,
+    { timeoutMs: 30_000 }, // 视频详情可能涉及 Cookie 刷新，15s 默认不够
   )
   return videoDetailSchema.parse(data)
 }
@@ -189,6 +203,7 @@ export async function getVideoDetail(
 export async function getHotSearch(): Promise<DouyinHotSearchItem[]> {
   const data = await douyinFetch<{ count: number; items: DouyinHotSearchItem[] }>(
     '/api/v1/hot-search',
+    { timeoutMs: 30_000 }, // 微服务有 5 分钟缓存，首次请求可能慢，后续秒回
   )
   return hotSearchSchema.parse(data).items
 }
@@ -200,6 +215,7 @@ export async function getComments(
 ): Promise<DouyinCommentResponse> {
   const data = await douyinFetch<unknown>(
     `/api/v1/comments/${awemeId}?count=${count}&cursor=${cursor}`,
+    { timeoutMs: 30_000 }, // 评论采集可能涉及 Cookie 刷新，15s 默认不够
   )
   return commentsSchema.parse(data) as DouyinCommentResponse
 }
@@ -216,9 +232,55 @@ export async function searchDouyin(
   }>('/api/v1/search', {
     method: 'POST',
     body: { keyword, count, publish_time: publishTime },
-    timeoutMs: 45_000, // 搜索通过浏览器代理，需要更长时间
+    timeoutMs: 60_000, // API 搜索 + 浏览器降级搜索，Playwright 搜索可能较慢
   })
   return searchSchema.parse(data).items
+}
+
+/**
+ * 检查输入是否为抖音短链接（如 https://v.douyin.com/xxx/）
+ */
+export function isDouyinShortUrl(input: string): boolean {
+  const lower = input.toLowerCase().trim()
+  return lower.includes('v.douyin.com') || lower.includes('iesdouyin.com')
+}
+
+/**
+ * 解析抖音短链接，跟随重定向获取真实 URL，再提取 awemeId
+ * 返回 awemeId 或 null
+ */
+export async function resolveDouyinShortUrl(
+  shortUrl: string,
+): Promise<string | null> {
+  try {
+    // 使用 HEAD 请求跟随重定向，获取最终 URL
+    const response = await fetch(shortUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10_000),
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    })
+
+    // 从最终 URL 提取 awemeId
+    const finalUrl = response.url
+    const awemeId = extractAwemeId(finalUrl)
+    if (awemeId) return awemeId
+
+    // 如果 URL 中没有，尝试从页面内容中提取
+    const html = await response.text()
+    const videoMatch = html.match(/\/video\/(\d{15,20})/)
+    if (videoMatch) return videoMatch[1]
+
+    const noteMatch = html.match(/\/note\/(\d{15,20})/)
+    if (noteMatch) return noteMatch[1]
+
+    return null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -226,7 +288,7 @@ export async function searchDouyin(
  * 支持格式:
  *  - 纯 ID: 7648778898376854818
  *  - URL: https://www.douyin.com/video/7648778898376854818
- *  - 短链: https://v.douyin.com/xxx/
+ *  - 短链: https://v.douyin.com/xxx/（需调用 resolveDouyinShortUrl 异步解析）
  */
 export function extractAwemeId(input: string): string | null {
   const trimmed = input.trim()
@@ -257,17 +319,31 @@ export function extractAwemeId(input: string): string | null {
   return null
 }
 
+// ─── Health check cache ─────────────────────────────────────
+// Cache health status for 5 seconds to avoid redundant HTTP round-trips
+// when multiple API routes check health in the same request cycle.
+let cachedHealth: { ok: boolean; timestamp: number } | null = null
+const HEALTH_CACHE_MS = 5_000
+
 /**
- * 检查微服务是否可用
+ * 检查微服务是否可用（带 5 秒缓存，避免频繁请求）
  */
 export async function checkDouyinHealth(): Promise<boolean> {
+  // Return cached result if still fresh
+  if (cachedHealth && Date.now() - cachedHealth.timestamp < HEALTH_CACHE_MS) {
+    return cachedHealth.ok
+  }
+
   try {
     const data = await douyinFetch<{ status: string }>(
       '/api/v1/health',
-      { timeoutMs: 5_000 },
+      { timeoutMs: 3_000 },
     )
-    return data.status === 'ok'
+    const ok = data.status === 'ok'
+    cachedHealth = { ok, timestamp: Date.now() }
+    return ok
   } catch {
+    cachedHealth = { ok: false, timestamp: Date.now() }
     return false
   }
 }
@@ -276,6 +352,64 @@ export async function checkDouyinHealth(): Promise<boolean> {
 
 const DOUYIN_INGEST_BIN =
   process.env.DOUYIN_INGEST_BIN || 'douyin-ingest'
+
+// Whisper model configuration — favor accuracy for Chinese transcription
+// Model options: tiny < small < base < medium < large-v3
+// Default: small (244M) — fits 3GB VRAM GPUs with int8 compute type
+const WHISPER_MODEL = process.env.WHISPER_MODEL || 'small'
+const WHISPER_DEVICE = process.env.WHISPER_DEVICE || 'cpu'
+// beam_size=5 enables multi-candidate comparison instead of greedy decoding
+const WHISPER_BEAM_SIZE = parseInt(process.env.WHISPER_BEAM_SIZE || '5', 10)
+const WHISPER_COMPUTE_TYPE = process.env.WHISPER_COMPUTE_TYPE || '' // auto: int8 for CPU
+const INGEST_CACHE_TTL = process.env.INGEST_CACHE_TTL || '1800' // 30 min cache
+
+/**
+ * Resolve the full path to douyin-ingest on Windows.
+ * Node.js execFile without shell:true does not resolve bare names via PATHEXT.
+ */
+function resolveDouyinIngestBin(): string {
+  if (process.env.DOUYIN_INGEST_BIN) {
+    return process.env.DOUYIN_INGEST_BIN
+  }
+  if (process.platform === 'win32') {
+    // Try common Python Scripts locations
+    const candidates = [
+      `${process.env.APPDATA}\\Python\\Python312\\Scripts\\douyin-ingest.exe`,
+      `${process.env.APPDATA}\\Python\\Python311\\Scripts\\douyin-ingest.exe`,
+      `${process.env.APPDATA}\\Python\\Python310\\Scripts\\douyin-ingest.exe`,
+    ]
+    for (const p of candidates) {
+      try {
+        if (existsSync(p)) return p
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return DOUYIN_INGEST_BIN
+}
+
+/**
+ * On Windows, douyin-ingest.exe (PyInstaller bundle) may not inherit the
+ * parent process PATH. Using a Python wrapper script ensures the PATH
+ * is set correctly before importing the package, so shutil.which()
+ * can find ffprobe/ffmpeg.
+ */
+function resolveDouyinIngestCommand(): { cmd: string; args: string[] } {
+  if (process.platform === 'win32') {
+    // Use python + wrapper script for reliable PATH inheritance
+    const wrapperPath = join(
+      process.cwd(),
+      'scripts',
+      'di-wrapper.py',
+    )
+    if (existsSync(wrapperPath)) {
+      return { cmd: 'python', args: [wrapperPath] }
+    }
+  }
+  // Fallback: call douyin-ingest directly
+  return { cmd: resolveDouyinIngestBin(), args: [] }
+}
 const DOUYIN_INGEST_TIMEOUT_MS = 300_000 // 5 min (下载+模型加载+转写)
 
 interface IngestVideo {
@@ -324,16 +458,28 @@ export async function getVideoTranscript(
   const sessionId = randomUUID().slice(0, 8)
   const workDir = join(tmpdir(), `douyin-ingest-${sessionId}`)
 
+  // Ensure work directory exists before using it as cwd
+  mkdirSync(workDir, { recursive: true })
+
   const args = [
     url,
     '--headless',
     '--json',
     '--transcribe',
+    '--model', WHISPER_MODEL,
+    '--device', WHISPER_DEVICE,
+    '--beam-size', String(WHISPER_BEAM_SIZE),
+    '--cache-ttl', INGEST_CACHE_TTL,
     '--speech-audio-dir',
     join(workDir, 'audio'),
     '--transcript-dir',
     join(workDir, 'transcripts'),
   ]
+
+  // Optional: compute type override (e.g. int8_float16 for GPU, int8 for CPU)
+  if (WHISPER_COMPUTE_TYPE) {
+    args.push('--compute-type', WHISPER_COMPUTE_TYPE)
+  }
 
   // 构建子进程环境变量
   // 确保包含完整 PATH（winget 安装的 ffmpeg/ffprobe 可能不在 dev server 的 PATH 中）
@@ -350,23 +496,49 @@ export async function getVideoTranscript(
     env.HF_ENDPOINT = 'https://hf-mirror.com'
   }
 
-  // Windows: 确保 winget Links 目录在 PATH 中（ffmpeg/ffprobe 安装位置）
+  // Force Python UTF-8 output — Windows default is cp936 (GBK) which garbles Chinese
+  env.PYTHONUTF8 = '1'
+  env.PYTHONIOENCODING = 'utf-8'
+
+  // Windows: ensure all needed directories are in PATH
   if (process.platform === 'win32' && env.PATH) {
+    const pathDirs = env.PATH.split(';').filter(Boolean)
+    const prependIfMissing = (dir: string) => {
+      if (!pathDirs.some(d => d.toLowerCase() === dir.toLowerCase())) {
+        pathDirs.unshift(dir)
+      }
+    }
+    // winget Links (ffmpeg/ffprobe) — prepend so PyInstaller exes find them
+    prependIfMissing(`${process.env.USERPROFILE}\\AppData\\Local\\Microsoft\\WinGet\\Links`)
+    // Python Scripts (douyin-ingest.exe)
+    prependIfMissing(`${process.env.APPDATA}\\Python\\Python312\\Scripts`)
+    env.PATH = pathDirs.join(';')
+  }
+
+  // Also set FFMPEG/FFPROBE binary paths explicitly for douyin-ingest
+  if (process.platform === 'win32') {
     const wingetLinks = `${process.env.USERPROFILE}\\AppData\\Local\\Microsoft\\WinGet\\Links`
-    if (!env.PATH.includes('WinGet\\Links')) {
-      env.PATH = `${env.PATH};${wingetLinks}`
+    if (!env.FFPROBE_BINARY) {
+      env.FFPROBE_BINARY = `${wingetLinks}\\ffprobe.exe`
+    }
+    if (!env.FFMPEG_BINARY) {
+      env.FFMPEG_BINARY = `${wingetLinks}\\ffmpeg.exe`
     }
   }
 
+  // Resolve command — use python wrapper on Windows for reliable PATH
+  const { cmd: ingestCmd, args: ingestArgs } = resolveDouyinIngestCommand()
+
   try {
     const { stdout } = await execFileAsync(
-      DOUYIN_INGEST_BIN,
-      args,
+      ingestCmd,
+      [...ingestArgs, ...args],
       {
         timeout: DOUYIN_INGEST_TIMEOUT_MS,
         maxBuffer: 10 * 1024 * 1024, // 10 MB
         env,
         cwd: workDir,
+        encoding: 'utf-8', // Force UTF-8 decoding — douyin-ingest outputs JSON with Chinese text
       },
     )
 
@@ -396,6 +568,20 @@ export async function getVideoTranscript(
       )
     }
 
+    // 获取视频详情，作为 LLM 纠错的上下文
+    let videoDesc: string | undefined
+    let videoAuthor: string | undefined
+    try {
+      const finalAwemeId = video.aweme_id || awemeId || ''
+      if (finalAwemeId) {
+        const detail = await getVideoDetail(finalAwemeId)
+        videoDesc = detail.desc || undefined
+        videoAuthor = detail.author || undefined
+      }
+    } catch {
+      // 获取详情失败不影响转写结果
+    }
+
     return {
       awemeId: video.aweme_id || awemeId || urlOrId,
       text: tr.text,
@@ -403,6 +589,8 @@ export async function getVideoTranscript(
       duration: tr.duration,
       model: tr.model,
       segments: tr.segments || [],
+      videoDesc,
+      videoAuthor,
     }
   } catch (error) {
     // execFile 超时或非零退出码

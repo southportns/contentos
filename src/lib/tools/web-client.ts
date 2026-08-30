@@ -118,7 +118,7 @@ export async function scrapeUrl(url: string): Promise<ScrapeResult> {
         Accept: 'text/markdown',
         'User-Agent': 'ContentOS/1.0',
       },
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(20000),
     })
 
     if (!response.ok) {
@@ -162,20 +162,20 @@ export async function scrapeUrl(url: string): Promise<ScrapeResult> {
 export async function scrapeMultipleUrls(
   urls: string[],
 ): Promise<ScrapeResult[]> {
-  const results: ScrapeResult[] = []
+  // Scrape all URLs in parallel — no artificial delay needed since
+  // Jina Reader handles concurrent requests well.
+  const results = await Promise.all(
+    urls.map(async (url) => {
+      try {
+        return await scrapeUrl(url)
+      } catch (error) {
+        console.error(`Failed to scrape ${url}:`, error)
+        return null
+      }
+    }),
+  )
 
-  for (const url of urls) {
-    try {
-      const result = await scrapeUrl(url)
-      results.push(result)
-      // Small delay between requests
-      await new Promise((resolve) => setTimeout(resolve, 500))
-    } catch (error) {
-      console.error(`Failed to scrape ${url}:`, error)
-    }
-  }
-
-  return results
+  return results.filter((r): r is ScrapeResult => r !== null)
 }
 
 /**
@@ -198,16 +198,18 @@ export async function crawlWebsite(
       .map((m) => m[2])
       .filter((link) => link.startsWith('http') && !link.includes('jina.ai'))
 
-    // Scrape up to (limit - 1) additional pages
-    for (const link of links.slice(0, limit - 1)) {
-      try {
-        const result = await scrapeUrl(link)
-        results.push(result)
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      } catch {
-        // Skip failed scrapes
-      }
-    }
+    // Scrape up to (limit - 1) additional pages in parallel
+    const subLinks = links.slice(0, limit - 1)
+    const subResults = await Promise.all(
+      subLinks.map(async (link) => {
+        try {
+          return await scrapeUrl(link)
+        } catch {
+          return null
+        }
+      }),
+    )
+    results.push(...subResults.filter((r): r is ScrapeResult => r !== null))
 
     return results
   } catch (error) {

@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content OS — 抖音视频研究流程图</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-card: #161b22;
+    --bg-hover: #1c2128;
+    --border: #30363d;
+    --border-hover: #58a6ff;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-bright: #f0f6fc;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --cyan: #39d2c0;
+    --pink: #f778ba;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif;
+    line-height: 1.6;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  .container { max-width: 1400px; margin: 0 auto; }
+  h1 {
+    font-size: 2rem; font-weight: 700; color: var(--text-bright);
+    text-align: center; margin-bottom: 8px; letter-spacing: -0.5px;
+  }
+  .subtitle {
+    text-align: center; color: var(--text-dim); font-size: 0.95rem; margin-bottom: 48px;
+  }
+  .subtitle code {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 6px; font-size: 0.85rem; color: var(--blue);
+  }
+  .flow-section { margin-bottom: 56px; }
+  .section-title {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--border);
+  }
+  .section-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 8px; font-size: 0.85rem; font-weight: 700; flex-shrink: 0;
+  }
+  .badge-blue { background: rgba(31,111,235,0.15); color: var(--blue); border: 1px solid rgba(31,111,235,0.3); }
+  .badge-green { background: rgba(35,134,54,0.15); color: var(--green); border: 1px solid rgba(35,134,54,0.3); }
+  .badge-orange { background: rgba(158,106,3,0.15); color: var(--orange); border: 1px solid rgba(158,106,3,0.3); }
+  .section-title h2 { font-size: 1.3rem; font-weight: 600; color: var(--text-bright); }
+  .section-title .desc { color: var(--text-dim); font-size: 0.85rem; margin-left: auto; }
+  .flow-container { display: flex; flex-direction: column; gap: 0; position: relative; }
+  .flow-row { display: flex; align-items: stretch; gap: 0; position: relative; }
+  .step-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; flex: 1; min-width: 0; position: relative;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .step-card:hover { border-color: var(--border-hover); background: var(--bg-hover); }
+  .arrow-h {
+    display: flex; align-items: center; justify-content: center; width: 40px;
+    color: var(--text-dim); font-size: 1.2rem; flex-shrink: 0;
+  }
+  .step-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px; font-size: 0.8rem; font-weight: 700; flex-shrink: 0;
+  }
+  .step-num.blue { background: rgba(31,111,235,0.15); color: var(--blue); }
+  .step-num.green { background: rgba(35,134,54,0.15); color: var(--green); }
+  .step-num.orange { background: rgba(158,106,3,0.15); color: var(--orange); }
+  .step-num.purple { background: rgba(137,87,229,0.15); color: var(--purple); }
+  .step-num.cyan { background: rgba(31,184,165,0.15); color: var(--cyan); }
+  .step-num.pink { background: rgba(247,120,186,0.15); color: var(--pink); }
+  .step-title { font-size: 0.95rem; font-weight: 600; color: var(--text-bright); }
+  .step-body { display: flex; flex-direction: column; gap: 10px; }
+  .tool-row { display: flex; align-items: flex-start; gap: 8px; font-size: 0.82rem; }
+  .tool-label { color: var(--text-dim); white-space: nowrap; min-width: 52px; padding-top: 1px; }
+  .tool-value { color: var(--text); flex: 1; }
+  .tool-value code {
+    background: rgba(88,166,255,0.08); color: var(--blue);
+    padding: 1px 5px; border-radius: 4px; font-size: 0.8rem;
+    font-family: "SFMono-Regular", Consolas, monospace;
+  }
+  .tool-value .file { color: var(--cyan); }
+  .tool-value .service { color: var(--orange); }
+  .tool-value .llm { color: var(--purple); }
+  .tool-value .cli { color: var(--green); }
+  .parallel-wrapper { position: relative; padding-top: 24px; }
+  .parallel-label {
+    position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+    background: var(--bg); color: var(--text-dim); font-size: 0.75rem; padding: 0 12px; white-space: nowrap;
+  }
+  .parallel-split { display: flex; gap: 40px; }
+  .parallel-split > div { flex: 1; }
+  .mode-card { border-radius: 12px; padding: 20px; margin-bottom: 20px; position: relative; }
+  .mode-green { background: linear-gradient(135deg, rgba(35,134,54,0.06), rgba(35,134,54,0.02)); border: 1px solid rgba(35,134,54,0.2); }
+  .mode-blue { background: linear-gradient(135deg, rgba(31,111,235,0.06), rgba(31,111,235,0.02)); border: 1px solid rgba(31,111,235,0.2); }
+  .mode-orange { background: linear-gradient(135deg, rgba(158,106,3,0.06), rgba(158,106,3,0.02)); border: 1px solid rgba(158,106,3,0.2); }
+  .mode-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .mode-icon { font-size: 1.3rem; }
+  .mode-name { font-size: 1.05rem; font-weight: 700; color: var(--text-bright); }
+  .mode-tag { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; margin-left: auto; }
+  .tag-blue { background: rgba(31,111,235,0.15); color: var(--blue); }
+  .tag-green { background: rgba(35,134,54,0.15); color: var(--green); }
+  .tag-orange { background: rgba(158,106,3,0.15); color: var(--orange); }
+  .mini-flow { display: flex; align-items: stretch; gap: 0; }
+  .mini-step {
+    flex: 1; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px; font-size: 0.8rem;
+  }
+  .mini-step .mini-title { font-weight: 600; color: var(--text-bright); margin-bottom: 6px; }
+  .mini-step .mini-tool { color: var(--text-dim); font-size: 0.75rem; }
+  .mini-step .mini-tool code { color: var(--blue); font-size: 0.72rem; }
+  .mini-arrow { display: flex; align-items: center; color: var(--text-dim); padding: 0 4px; font-size: 0.9rem; }
+  .legend {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; margin-bottom: 48px;
+  }
+  .legend-title { font-size: 1rem; font-weight: 600; color: var(--text-bright); margin-bottom: 16px; }
+  .legend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .legend-item { display: flex; align-items: flex-start; gap: 10px; font-size: 0.82rem; }
+  .legend-color { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; margin-top: 4px; }
+  .legend-text { color: var(--text-dim); }
+  .legend-text strong { color: var(--text); }
+  .legend-text code { color: var(--blue); font-size: 0.8rem; }
+  .failover-box {
+    background: rgba(218,54,51,0.04); border: 1px solid rgba(218,54,51,0.15);
+    border-radius: 8px; padding: 12px 16px; margin-top: 12px; font-size: 0.8rem; color: var(--text-dim);
+  }
+  .failover-box strong { color: var(--red); }
+  .result-box {
+    background: linear-gradient(135deg, rgba(35,134,54,0.08), rgba(35,134,54,0.03));
+    border: 1px solid rgba(35,134,54,0.2); border-radius: 12px; padding: 20px; text-align: center;
+  }
+  .result-box .result-icon { font-size: 1.5rem; margin-bottom: 8px; }
+  .result-box .result-title { font-weight: 700; color: var(--green); font-size: 0.95rem; margin-bottom: 4px; }
+  .result-box .result-desc { color: var(--text-dim); font-size: 0.8rem; }
+  @media (max-width: 900px) {
+    .flow-row { flex-direction: column; }
+    .arrow-h { width: auto; height: 32px; transform: rotate(90deg); }
+    .parallel-split { flex-direction: column; gap: 0; }
+    .mini-flow { flex-direction: column; gap: 0; }
+    .mini-arrow { transform: rotate(90deg); height: 32px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Content OS — 抖音视频研究流程图</h1>
+<p class="subtitle">用户输入抖音视频链接后的完整数据采集流程 · <code>useDouyinSearch.researchContent()</code></p>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- Legend -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="legend">
+  <div class="legend-title">📐 图例 — 工具类型说明</div>
+  <div class="legend-grid">
+    <div class="legend-item">
+      <div class="legend-color" style="background: var(--orange);"></div>
+      <div class="legend-text"><strong>抖音微服务</strong> — <code>localhost:8800</code>，基于 jiji262/douyin-downloader，Tabbit 浏览器自动获取 Cookie</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: var(--green);"></div>
+      <div class="legend-text"><strong>douyin-ingest CLI</strong> — <code>scripts/di-wrapper.py</code>，基于 ltppp/douyin-ingest，下载视频 + FFmpeg 提取音频 + faster-whisper ASR</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: var(--purple);"></div>
+      <div class="legend-text"><strong>LLM (Vercel AI SDK)</strong> — <code>src/lib/ai/models.ts</code>，支持 DeepSeek / GLM / Qwen 等，<code>generateText()</code></div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: var(--cyan);"></div>
+      <div class="legend-text"><strong>文件系统</strong> — 临时目录 <code>%TEMP%/di-audio-*</code>，音频提取中间产物</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: var(--blue);"></div>
+      <div class="legend-text"><strong>Next.js API Route</strong> — 后端接口，Zod 验证输入，调用 Skill / Tool 层</div>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: var(--pink);"></div>
+      <div class="legend-text"><strong>阿里云百炼 API</strong> — <code>dashscope.aliyuncs.com</code>，云端 ASR（Fun-ASR / Qwen3-ASR-Flash）</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- Part 1: Common Frontend Flow -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="flow-section">
+  <div class="section-title">
+    <span class="section-badge badge-blue">1</span>
+    <h2>前端编排 — 通用入口</h2>
+    <span class="desc">所有模式共享的前 3 步，由 <code>useDouyinSearch</code> hook 编排</span>
+  </div>
+
+  <div class="flow-container">
+    <div class="flow-row">
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-num blue">1</span>
+          <span class="step-title">用户输入抖音链接</span>
+        </div>
+        <div class="step-body">
+          <div class="tool-row">
+            <span class="tool-label">入口</span>
+            <span class="tool-value"><code>explorer/research/page.tsx</code></span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">Hook</span>
+            <span class="tool-value"><code>useDouyinSearch.researchContent(input)</code></span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">判断</span>
+            <span class="tool-value">
+              <code>isDouyinVideoUrl(input)</code><br>
+              匹配 <code>douyin.com/video/</code>、<code>v.douyin.com</code>、<code>iesdouyin.com</code>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">初始化</span>
+            <span class="tool-value">
+              进度状态机 <code>researchSteps[]</code><br>
+              4 步: search → detail → transcript → comments
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-h">→</div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-num blue">2</span>
+          <span class="step-title">搜索视频（获取详情）</span>
+        </div>
+        <div class="step-body">
+          <div class="tool-row">
+            <span class="tool-label">API</span>
+            <span class="tool-value"><code>POST /api/research/search</code></span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">Skill</span>
+            <span class="tool-value"><code>runContentSearch()</code></span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">路径</span>
+            <span class="tool-value">
+              <span class="service">抖音 URL → </span>
+              <code>extractAwemeId()</code> 提取 ID<br>
+              <span class="service">短链接 → </span>
+              <code>resolveDouyinShortUrl()</code> 跟随 301<br>
+              → <code>getVideoDetail(awemeId)</code>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">工具</span>
+            <span class="tool-value">
+              <span class="service">douyin-downloader 微服务</span><br>
+              <code>GET localhost:8800/api/v1/video/{awemeId}</code><br>
+              <span style="color: var(--text-dim)">超时 30s · 返回: 标题/作者/点赞/评论数/封面</span>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">输出</span>
+            <span class="tool-value">
+              <code>SearchedContent[]</code><br>
+              <span style="color: var(--text-dim)">含 url, title, author, metrics, cover</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-h">→</div>
+
+      <div class="step-card" style="flex: 0 0 280px; display: flex; align-items: center; justify-content: center; border-style: dashed;">
+        <div style="text-align: center; color: var(--text-dim);">
+          <div style="font-size: 2rem; margin-bottom: 8px;">⏳</div>
+          <div style="font-weight: 600; color: var(--text);">搜索完成</div>
+          <div style="font-size: 0.8rem; margin-top: 4px;">并行触发 ↓</div>
+          <div style="font-size: 0.75rem; margin-top: 8px; color: var(--green);">detail 步骤标记 done</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- Part 2: Parallel Branches -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="flow-section">
+  <div class="section-title">
+    <span class="section-badge badge-orange">2</span>
+    <h2>并行分支 — 口播文案 &amp; 评论采集</h2>
+    <span class="desc">搜索完成后同时触发，互不阻塞</span>
+  </div>
+
+  <div class="parallel-wrapper">
+    <div class="parallel-label">⇄ 并行执行（Promise.all 语义）</div>
+    <div class="parallel-split">
+
+      <!-- ═══ Left Branch: Transcript ═══ -->
+      <div>
+        <div class="step-card" style="border-left: 3px solid var(--green);">
+          <div class="step-header">
+            <span class="step-num green">3T</span>
+            <span class="step-title">提取口播文案（ASR）</span>
+          </div>
+          <div class="step-body">
+            <div class="tool-row">
+              <span class="tool-label">前端</span>
+              <span class="tool-value"><code>extractTranscript(url, awemeId)</code></span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-label">API</span>
+              <span class="tool-value"><code>POST /api/research/douyin-transcript</code></span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-label">Service</span>
+              <span class="tool-value"><code>executeTranscript()</code> — 编排层</span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-label">输入</span>
+              <span class="tool-value">
+                <code>urlOrId</code> · <code>mode</code> · <code>quality</code><br>
+                <span style="color: var(--text-dim)">mode 优先级: 前端 > ASR_MODE 环境变量 > auto</span>
+              </span>
+            </div>
+
+            <!-- ─── Mode-specific flows ─── -->
+            <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 16px;">
+
+              <!-- LOCAL MODE -->
+              <div class="mode-card mode-green">
+                <div class="mode-header">
+                  <span class="mode-icon">🖥️</span>
+                  <span class="mode-name">Local 模式</span>
+                  <span class="mode-tag tag-green">WHISPER_DEVICE=cuda|cpu</span>
+                </div>
+                <div class="mini-flow">
+                  <div class="mini-step">
+                    <div class="mini-title">3T-L1: 构建 AudioInput</div>
+                    <div class="mini-tool">
+                      <code>audioInput = { url }</code><br>
+                      <span style="color: var(--text-dim)">不预提取音频，直接传 URL</span>
+                    </div>
+                  </div>
+                  <div class="mini-arrow">→</div>
+                  <div class="mini-step">
+                    <div class="mini-title">3T-L2: routeASR()</div>
+                    <div class="mini-tool">
+                      Provider 选择<br>
+                      <span style="color: var(--text-dim)">mode=local → LocalWhisperProvider</span>
+                    </div>
+                  </div>
+                  <div class="mini-arrow">→</div>
+                  <div class="mini-step" style="border-color: rgba(35,134,54,0.3);">
+                    <div class="mini-title" style="color: var(--green);">3T-L3: douyin-ingest CLI</div>
+                    <div class="mini-tool">
+                      <span class="cli">python scripts/di-wrapper.py</span><br>
+                      <code>URL --transcribe --model {WHISPER_MODEL}</code><br>
+                      <span style="color: var(--text-dim)">下载视频 → FFmpeg 提取音频 → faster-whisper ASR</span><br>
+                      <span style="color: var(--text-dim)">超时 300s · 缓存 TTL 1800s</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="margin-top: 12px; font-size: 0.75rem; color: var(--text-dim);">
+                  输出: <code>rawText</code> + <code>segments[]</code> + <code>duration</code> + <code>model</code> + <code>confidence</code>
+                </div>
+              </div>
+
+              <!-- CLOUD MODE -->
+              <div class="mode-card mode-blue">
+                <div class="mode-header">
+                  <span class="mode-icon">☁️</span>
+                  <span class="mode-name">Cloud 模式</span>
+                  <span class="mode-tag tag-blue">ALIBABA_ASR_API_KEY=sk-...</span>
+                </div>
+                <div class="mini-flow">
+                  <div class="mini-step" style="border-color: rgba(88,166,255,0.3);">
+                    <div class="mini-title" style="color: var(--blue);">3T-C1: 预提取音频</div>
+                    <div class="mini-tool">
+                      <code>extractAudio(url)</code><br>
+                      <span class="cli">douyin-ingest</span> <code>--speech-audio-dir</code><br>
+                      <span style="color: var(--text-dim)">下载视频 → FFmpeg 提取音频</span><br>
+                      <span style="color: var(--text-dim)">不执行 ASR（无 --transcribe）</span><br>
+                      <span class="file">输出: {awemeId}.speech.mp3</span>
+                    </div>
+                  </div>
+                  <div class="mini-arrow">→</div>
+                  <div class="mini-step">
+                    <div class="mini-title">3T-C2: routeASR()</div>
+                    <div class="mini-tool">
+                      <code>audioInput.filePath = mp3路径</code><br>
+                      → CloudAlibabaProvider<br>
+                      <span style="color: var(--text-dim)">直接使用 filePath</span>
+                    </div>
+                  </div>
+                  <div class="mini-arrow">→</div>
+                  <div class="mini-step" style="border-color: rgba(247,120,186,0.3);">
+                    <div class="mini-title" style="color: var(--pink);">3T-C3: 阿里云百炼 API</div>
+                    <div class="mini-tool">
+                      <span class="llm">FormData multipart 上传</span><br>
+                      <code>POST dashscope.../audio/transcriptions</code><br>
+                      <span style="color: var(--text-dim)">model=fun-asr · 超时 120s</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="margin-top: 12px; font-size: 0.75rem; color: var(--text-dim);">
+                  输出: <code>text</code> + <code>segments[]</code> + <code>language</code> + <code>duration</code>
+                </div>
+              </div>
+
+              <!-- AUTO MODE -->
+              <div class="mode-card mode-orange">
+                <div class="mode-header">
+                  <span class="mode-icon">⚙️</span>
+                  <span class="mode-name">Auto 模式</span>
+                  <span class="mode-tag tag-orange">硬件检测自动选择</span>
+                </div>
+                <div class="mini-flow">
+                  <div class="mini-step" style="border-color: rgba(158,106,3,0.3);">
+                    <div class="mini-title" style="color: var(--orange);">3T-A1: 硬件检测</div>
+                    <div class="mini-tool">
+                      <code>getHardwareProfile()</code><br>
+                      <code>nvidia-smi</code> 检测 GPU<br>
+                      <span style="color: var(--text-dim)">Level A/B/C → Local</span><br>
+                      <span style="color: var(--text-dim)">Level D → Cloud</span>
+                    </div>
+                  </div>
+                  <div class="mini-arrow">→</div>
+                  <div class="mini-step">
+                    <div class="mini-title">3T-A2: 预提取音频</div>
+                    <div class="mini-tool">
+                      <span style="color: var(--text-dim)">检测到 Cloud Key →</span><br>
+                      <code>extractAudio(url)</code><br>
+                      <span style="color: var(--text-dim)">检测到无 Key → 跳过</span>
+                    </div>
+                  </div>
+                  <div class="mini-arrow">→</div>
+                  <div class="mini-step">
+                    <div class="mini-title">3T-A3: routeASR()</div>
+                    <div class="mini-tool">
+                      <code>selectProviderForAuto(hw, level)</code><br>
+                      <span style="color: var(--green)">A/B/C → LocalWhisper</span><br>
+                      <span style="color: var(--pink)">D → CloudAlibaba</span>
+                    </div>
+                  </div>
+                </div>
+                <div style="margin-top: 12px; font-size: 0.75rem; color: var(--text-dim);">
+                  后续流程与选中的模式一致（Local 或 Cloud）
+                </div>
+              </div>
+
+            </div>
+
+            <!-- ─── Failover ─── -->
+            <div class="failover-box">
+              <strong>⚠ Failover 容错</strong> — 如果主 Provider 失败，自动切换备用 Provider<br>
+              <span style="color: var(--text-dim)">
+                Cloud 失败 → Local: douyin-ingest 缓存命中，不重复下载<br>
+                Local 失败 → Cloud: AudioExtractor 缓存命中，不重复下载
+              </span>
+            </div>
+
+            <!-- ─── Step 4: LLM Correction ─── -->
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+              <div class="step-header" style="margin-bottom: 8px;">
+                <span class="step-num purple">3T-LC</span>
+                <span class="step-title">LLM 纠错（quality ≥ high 时执行）</span>
+              </div>
+              <div class="step-body">
+                <div class="tool-row">
+                  <span class="tool-label">Skill</span>
+                  <span class="tool-value">
+                    <span class="llm">runTranscriptCorrection()</span><br>
+                    <code>generateText()</code> via Vercel AI SDK
+                  </span>
+                </div>
+                <div class="tool-row">
+                  <span class="tool-label">模型</span>
+                  <span class="tool-value">
+                    <code>getModel()</code> → DeepSeek / GLM / Qwen 等<br>
+                    <span style="color: var(--text-dim)">由 LLM_PROVIDER + LLM_MODEL 环境变量控制</span>
+                  </span>
+                </div>
+                <div class="tool-row">
+                  <span class="tool-label">输入</span>
+                  <span class="tool-value">
+                    <code>rawText</code> + <code>videoDesc</code> + <code>videoAuthor</code><br>
+                    <span style="color: var(--text-dim)">视频上下文辅助纠错（如专有名词、品牌名）</span>
+                  </span>
+                </div>
+                <div class="tool-row">
+                  <span class="tool-label">输出</span>
+                  <span class="tool-value">
+                    <code>correctedText</code> + <code>corrections[]</code> + <code>correctionCount</code><br>
+                    <span style="color: var(--text-dim)">Structured Output: JSON 解析 + Zod 验证</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Right Branch: Comments ═══ -->
+      <div>
+        <div class="step-card" style="border-left: 3px solid var(--orange);">
+          <div class="step-header">
+            <span class="step-num orange">3C</span>
+            <span class="step-title">采集评论数据</span>
+          </div>
+          <div class="step-body">
+            <div class="tool-row">
+              <span class="tool-label">前端</span>
+              <span class="tool-value"><code>collectComments(awemeId)</code></span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-label">规则</span>
+              <span class="tool-value">
+                上限 100 条 · 过滤 &lt; 100 赞 · 按点赞排序<br>
+                <span style="color: var(--text-dim)">每页 20 条，最多翻页 5 次</span>
+              </span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-label">API</span>
+              <span class="tool-value"><code>POST /api/research/douyin-comments</code></span>
+            </div>
+            <div class="tool-row">
+              <span class="tool-label">工具</span>
+              <span class="tool-value">
+                <span class="service">douyin-downloader 微服务</span><br>
+                <code>GET localhost:8800/api/v1/comments/{awemeId}?count=20&cursor=0</code><br>
+                <span style="color: var(--text-dim)">超时 30s · 返回: text/nickname/diggCount/createTime</span>
+              </span>
+            </div>
+
+            <!-- Step 3C-1: Pagination Loop -->
+            <div style="margin-top: 16px;">
+              <div class="mini-flow">
+                <div class="mini-step">
+                  <div class="mini-title">3C-1: 第 1 页</div>
+                  <div class="mini-tool">
+                    <code>cursor=0, count=20</code><br>
+                    <span style="color: var(--text-dim)">获取首页评论</span>
+                  </div>
+                </div>
+                <div class="mini-arrow">→</div>
+                <div class="mini-step" style="border-color: rgba(158,106,3,0.3);">
+                  <div class="mini-title" style="color: var(--orange);">3C-2: 翻页循环</div>
+                  <div class="mini-tool">
+                    <code>while hasMore && &lt; 100</code><br>
+                    <span style="color: var(--text-dim)">最多 5 页</span><br>
+                    <span style="color: var(--text-dim)">串行请求，避免风控</span>
+                  </div>
+                </div>
+                <div class="mini-arrow">→</div>
+                <div class="mini-step">
+                  <div class="mini-title">3C-3: 过滤+排序</div>
+                  <div class="mini-tool">
+                    <code>filter(diggCount ≥ 100)</code><br>
+                    <code>sort(desc by diggCount)</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 3C-4: Audience Analysis -->
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+              <div class="step-header" style="margin-bottom: 8px;">
+                <span class="step-num purple">3C-A</span>
+                <span class="step-title">受众分析（LLM）</span>
+              </div>
+              <div class="step-body">
+                <div class="tool-row">
+                  <span class="tool-label">API</span>
+                  <span class="tool-value"><code>POST /api/analysis/audience</code></span>
+                </div>
+                <div class="tool-row">
+                  <span class="tool-label">Skill</span>
+                  <span class="tool-value">
+                    <span class="llm">runAudienceAnalysis()</span><br>
+                    <code>generateText()</code> via Vercel AI SDK
+                  </span>
+                </div>
+                <div class="tool-row">
+                  <span class="tool-label">输入</span>
+                  <span class="tool-value">
+                    评论列表 → <code>contents[]</code><br>
+                    <span style="color: var(--text-dim)">每条: nickname + text + diggCount</span>
+                  </span>
+                </div>
+                <div class="tool-row">
+                  <span class="tool-label">输出</span>
+                  <span class="tool-value">
+                    <code>needs[]</code> + <code>painPoints[]</code> + <code>emotions[]</code><br>
+                    <code>behaviors[]</code> + <code>contentGaps[]</code><br>
+                    <span style="color: var(--text-dim)">Structured Output: JSON + Zod 验证</span>
+                  </span>
+                </div>
+                <div class="tool-row">
+                  <span class="tool-label">前端</span>
+                  <span class="tool-value">
+                    从分析结果提取:<br>
+                    · Top 5 热点评论<br>
+                    · 高频关键词 (needs + painPoints + behaviors)<br>
+                    · 情绪分布 (positive/neutral/negative)
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ End Parallel ═══ -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- Part 3: Final Assembly -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="flow-section">
+  <div class="section-title">
+    <span class="section-badge badge-green">3</span>
+    <h2>汇总输出 — 展示 &amp; 持久化</h2>
+    <span class="desc">两个并行分支完成后，结果汇总到前端</span>
+  </div>
+
+  <div class="flow-container">
+    <div class="flow-row">
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-num green">4</span>
+          <span class="step-title">前端状态更新</span>
+        </div>
+        <div class="step-body">
+          <div class="tool-row">
+            <span class="tool-label">文案</span>
+            <span class="tool-value">
+              <code>setTranscripts[awemeId] = VideoTranscript</code><br>
+              <span style="color: var(--text-dim)">含 text, rawText, segments, corrections, confidence, provider</span>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">评论</span>
+            <span class="tool-value">
+              <code>setCollectedComments[awemeId] = DouyinComment[]</code><br>
+              <code>setCommentAnalysis[awemeId] = CommentAnalysisResult</code>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">进度</span>
+            <span class="tool-value">
+              <code>updateStep('transcript', 'done')</code><br>
+              <code>updateStep('comments', 'done')</code>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-h">→</div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-num green">5</span>
+          <span class="step-title">加入内容库（用户操作）</span>
+        </div>
+        <div class="step-body">
+          <div class="tool-row">
+            <span class="tool-label">触发</span>
+            <span class="tool-value">用户点击「加入内容库」按钮</span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">前端</span>
+            <span class="tool-value">
+              <code>addToWorkflow(contents)</code><br>
+              <span style="color: var(--text-dim)">附带 transcript + comments + commentAnalysis</span>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">API</span>
+            <span class="tool-value"><code>POST /api/content-library</code></span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">存储</span>
+            <span class="tool-value">
+              <span class="service">Prisma + PostgreSQL</span><br>
+              <code>ContentLibraryItem</code> upsert by URL<br>
+              <span style="color: var(--text-dim)">含: platform, title, author, metrics, transcript, comments</span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-h">→</div>
+
+      <div class="result-box" style="flex: 0 0 220px; display: flex; flex-direction: column; justify-content: center;">
+        <div class="result-icon">✅</div>
+        <div class="result-title">研究完成</div>
+        <div class="result-desc">
+          视频详情 + 口播文案 + 评论数据<br>
+          + 受众分析 → 内容库
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ -->
+<!-- Part 4: Architecture Summary -->
+<!-- ═══════════════════════════════════════════════════ -->
+<div class="flow-section">
+  <div class="section-title">
+    <span class="section-badge badge-blue">📐</span>
+    <h2>架构分层总结</h2>
+    <span class="desc">每一步用到的工具所属的架构层</span>
+  </div>
+
+  <div class="flow-container">
+    <div class="flow-row">
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-num blue">UI</span>
+          <span class="step-title">UI Layer</span>
+        </div>
+        <div class="step-body">
+          <div class="tool-row">
+            <span class="tool-label">组件</span>
+            <span class="tool-value">
+              <code>explorer/research/page.tsx</code><br>
+              <code>research-progress.tsx</code>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">Hook</span>
+            <span class="tool-value"><code>useDouyinSearch</code></span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">职责</span>
+            <span class="tool-value">用户交互 · 进度展示 · 状态管理</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-h">↓</div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-num blue">API</span>
+          <span class="step-title">Application Layer</span>
+        </div>
+        <div class="step-body">
+          <div class="tool-row">
+            <span class="tool-label">Routes</span>
+            <span class="tool-value">
+              <code>/api/research/search</code><br>
+              <code>/api/research/douyin-transcript</code><br>
+              <code>/api/research/douyin-comments</code><br>
+              <code>/api/analysis/audience</code><br>
+              <code>/api/content-library</code>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">职责</span>
+            <span class="tool-value">Zod 验证 · 认证 · 错误处理 · 响应封装</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height: 20px;"></div>
+
+  <div class="flow-container">
+    <div class="flow-row">
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-num purple">Skill</span>
+          <span class="step-title">Skill Layer</span>
+        </div>
+        <div class="step-body">
+          <div class="tool-row">
+            <span class="tool-label">Skills</span>
+            <span class="tool-value">
+              <code>content-search/index.ts</code><br>
+              <code>transcript-correction/index.ts</code><br>
+              <code>audience-analysis/index.ts</code>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">职责</span>
+            <span class="tool-value">AI 业务逻辑 · Prompt 构建 · 结构化输出</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-h">↓</div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-num green">Tool</span>
+          <span class="step-title">Tool Layer</span>
+        </div>
+        <div class="step-body">
+          <div class="tool-row">
+            <span class="tool-label">Tools</span>
+            <span class="tool-value">
+              <code>douyin-client.ts</code> → <span class="service">微服务 :8800</span><br>
+              <code>web-client.ts</code> → DuckDuckGo + Jina<br>
+              <code>di-wrapper.py</code> → <span class="cli">douyin-ingest CLI</span>
+            </span>
+          </div>
+          <div class="tool-row">
+            <span class="tool-label">职责</span>
+            <span class="tool-value">外部数据获取 · CLI 调用 · API 请求</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="arrow-h">↓</div>
+
+      <div class="step-card">
+        <div class="step-header">
+          <span class="step-num cyan">Infra</span>
+          <span class="step-title">Infrastructure</span>
+        </div>
+        <div class="step-body">
+          <div class="tool-row">
+            <span class="tool-label">Services</span>
+            <span class="tool-value">
+              <span class="service">douyin-downloader 微服务 (:8800)</span><br>
+              <span class="cli">douyin-ingest (Python CLI)</span><br>
+              <span class="llm">Vercel AI SDK → LLM Provider</span><br>
+              <span style="color: var(--pink)">阿里云百炼 API (DashScope)</span><br>
+              <span class="service">Prisma + PostgreSQL</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

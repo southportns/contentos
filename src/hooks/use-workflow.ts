@@ -22,6 +22,7 @@ export interface SearchedContent {
   title: string | null
   content: string | null
   author: string | null
+  cover?: string | null
   publishedAt: string | null
   metrics: {
     likes: number | null
@@ -29,6 +30,36 @@ export interface SearchedContent {
     shares: number | null
     favorites: number | null
     views: number | null
+  } | null
+  /** 口播文案（语音转文字） */
+  transcript?: {
+    text: string
+    language: string
+    duration: number
+    model: string
+  } | null
+  /** 采集的评论数据 */
+  collectedComments?: {
+    text: string
+    nickname: string
+    diggCount: number
+    createTime: string | null
+  }[] | null
+  /** 评论分析结果 */
+  commentAnalysis?: {
+    topComments: {
+      text: string
+      nickname: string
+      diggCount: number
+      createTime: string | null
+    }[]
+    keywords: string[]
+    sentiment: {
+      positive: number
+      neutral: number
+      negative: number
+    }
+    summary: string
   } | null
 }
 
@@ -142,6 +173,18 @@ export interface StrategyEvaluationResult {
   verdict: string
 }
 
+export interface RiskAnalysisResult {
+  risks: Array<{
+    category: 'political_sensitive' | 'social_sensitive' | 'personal_privacy' | 'misinformation' | 'hate_speech' | 'commercial_compliance' | 'platform_violation' | 'legal_risk'
+    severity: 'high' | 'medium' | 'low'
+    description: string
+    suggestion: string
+    quote?: string
+  }>
+  overallRiskLevel: 'safe' | 'low' | 'medium' | 'high'
+  summary: string
+}
+
 export interface RefineResult {
   content: string
   title: string
@@ -172,6 +215,68 @@ export interface Persona {
   description: string | null
 }
 
+export interface AdaptationResult {
+  referenceAnalysis: {
+    hookType: string
+    contentStructure: string[]
+    emotionalArc: { start: string; middle: string; end: string }
+    keyPoints: string[]
+    viralFactors: string[]
+    weaknesses: string[]
+  }
+  adaptedAngles: Array<{
+    id: string
+    title: string
+    angle: string
+    reasoning: string
+    targetEmotion: string
+    keyPoints: string[]
+    whatChanged: string
+    estimatedViralScore: number
+  }>
+  strategySuggestion: {
+    tone: string
+    structure: Array<{ section: string; purpose: string; keyArguments: string[] }>
+    hookStrategy: string
+    ctaStrategy: string
+  }
+}
+
+export interface UploadedContent {
+  title: string | null
+  content: string
+  sourceType: string // article | report | book | essay | other
+  fileName: string | null
+}
+
+export interface DistillationResult {
+  sourceAnalysis: {
+    coreTheme: string
+    keyInsights: string[]
+    contentStructure: string[]
+    emotionalArc: { start: string; middle: string; end: string }
+    memorableQuotes: string[]
+    applicableAngles: string[]
+    weaknesses: string[]
+  }
+  distilledAngles: Array<{
+    id: string
+    title: string
+    angle: string
+    reasoning: string
+    targetEmotion: string
+    keyPoints: string[]
+    whatExtracted: string
+    estimatedViralScore: number
+  }>
+  strategySuggestion: {
+    tone: string
+    structure: Array<{ section: string; purpose: string; keyArguments: string[] }>
+    hookStrategy: string
+    ctaStrategy: string
+  }
+}
+
 export interface WorkflowState {
   // Project association
   projectId: string | null
@@ -179,9 +284,16 @@ export interface WorkflowState {
   // Persona association
   persona: Persona | null
 
+  // Adaptation: reference content from Explorer
+  referenceContent: SearchedContent | null
+  adaptationResult: AdaptationResult | null
+
+  // Distillation: uploaded content for self-learning
+  uploadedContent: UploadedContent | null
+  distillationResult: DistillationResult | null
+
   // Step 1: Research
   topicProfile: TopicProfile | null
-  contents: SearchedContent[]
 
   // Step 2: Analysis
   viralResult: ViralResult | null
@@ -202,6 +314,9 @@ export interface WorkflowState {
   // Step 7: Strategy Evaluation
   strategyEvaluation: StrategyEvaluationResult | null
 
+  // Step 7.5: Risk Analysis
+  riskAnalysis: RiskAnalysisResult | null
+
   // Step 8: Refine
   refineData: RefineResult | null
 
@@ -214,8 +329,11 @@ export interface WorkflowState {
 const initialState: WorkflowState = {
   projectId: null,
   persona: null,
+  referenceContent: null,
+  adaptationResult: null,
+  uploadedContent: null,
+  distillationResult: null,
   topicProfile: null,
-  contents: [],
   viralResult: null,
   angles: [],
   selectedAngle: null,
@@ -223,6 +341,7 @@ const initialState: WorkflowState = {
   draft: null,
   evaluation: null,
   strategyEvaluation: null,
+  riskAnalysis: null,
   refineData: null,
   finalOutput: null,
 }
@@ -253,8 +372,8 @@ function saveToStorage(s: WorkflowState) {
   if (typeof window === 'undefined') return
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
-  } catch {
-    // ignore
+  } catch (e) {
+    console.error('[workflow] Failed to save to localStorage:', e)
   }
 }
 
@@ -284,8 +403,6 @@ function subscribe(listener: () => void): () => void {
 // ── Actions (stable references) ─────────────────────
 
 export const workflowActions = {
-  getContents: () => state.contents,
-
   setProjectId: (id: string | null) =>
     setState((prev) => ({ ...prev, projectId: id })),
 
@@ -301,17 +418,17 @@ export const workflowActions = {
       topicProfile: prev.topicProfile ? { ...prev.topicProfile, ...patch } : null,
     })),
 
-  setContents: (contents: SearchedContent[]) =>
-    setState((prev) => ({ ...prev, contents })),
+  setReferenceContent: (content: SearchedContent | null) =>
+    setState((prev) => ({ ...prev, referenceContent: content })),
 
-  removeContent: (url: string) =>
-    setState((prev) => ({
-      ...prev,
-      contents: prev.contents.filter((c) => c.url !== url),
-    })),
+  setAdaptationResult: (result: AdaptationResult | null) =>
+    setState((prev) => ({ ...prev, adaptationResult: result })),
 
-  clearContents: () =>
-    setState((prev) => ({ ...prev, contents: [] })),
+  setUploadedContent: (content: UploadedContent | null) =>
+    setState((prev) => ({ ...prev, uploadedContent: content })),
+
+  setDistillationResult: (result: DistillationResult | null) =>
+    setState((prev) => ({ ...prev, distillationResult: result })),
 
   setViralResult: (result: ViralResult) =>
     setState((prev) => ({ ...prev, viralResult: result })),
@@ -350,6 +467,9 @@ export const workflowActions = {
   setStrategyEvaluation: (result: StrategyEvaluationResult) =>
     setState((prev) => ({ ...prev, strategyEvaluation: result })),
 
+  setRiskAnalysis: (result: RiskAnalysisResult) =>
+    setState((prev) => ({ ...prev, riskAnalysis: result })),
+
   setRefineData: (data: RefineResult) =>
     setState((prev) => ({ ...prev, refineData: data })),
 
@@ -371,8 +491,11 @@ export const workflowActions = {
       draft: null,
       evaluation: null,
       strategyEvaluation: null,
+      riskAnalysis: null,
       refineData: null,
       finalOutput: null,
+      adaptationResult: null,
+      distillationResult: null,
     })),
 
   reset: () => {

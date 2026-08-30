@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { searchDouyin, checkDouyinHealth, type PublishTimeFilter } from '@/lib/tools/douyin-client'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 90
 
 const searchSchema = z.object({
   keyword: z.string().min(1),
@@ -47,7 +47,13 @@ export async function POST(req: NextRequest) {
           title: item.desc,
           content: item.desc,
           cover: item.cover,
-          metrics: null,
+          metrics: {
+            likes: item.digg_count ?? null,
+            comments: item.comment_count ?? null,
+            shares: item.share_count ?? null,
+            favorites: item.collect_count ?? null,
+            views: null,
+          },
         })),
         message,
       },

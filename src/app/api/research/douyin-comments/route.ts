@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getComments, extractAwemeId, checkDouyinHealth } from '@/lib/tools/douyin-client'
 
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 45
 
 const commentsSchema = z.object({
   awemeId: z.string().optional(),

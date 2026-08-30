@@ -4,7 +4,7 @@ import { isDatabaseConfigured } from '@/lib/utils/db-safe'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-type CheckCategory = 'ai' | 'tool' | 'database'
+type CheckCategory = 'ai' | 'tool' | 'database' | 'asr'
 type CheckLevel = 'required' | 'optional'
 
 interface EnvCheck {
@@ -86,6 +86,101 @@ export async function GET() {
     maskedValue: 'built-in (no key needed)',
   })
 
+  // ─── ASR (口播稿识别) ────────────────────────────
+  const asrMode = process.env.ASR_MODE || 'auto'
+  const cloudProvider = process.env.ASR_CLOUD_PROVIDER || 'alibaba'
+  const alibabaKey = process.env.ALIBABA_ASR_API_KEY || ''
+  const xiaomiKey = process.env.XIAOMI_ASR_API_KEY || ''
+  const hasCloudKey = !!(alibabaKey || xiaomiKey)
+  const hasLocalDeps = !!(process.env.DOUYIN_INGEST_BIN || 'douyin-ingest')
+
+  // 当模式为 cloud 但未配置云端 Key 时标为 required
+  const cloudKeyLevel: CheckLevel = asrMode === 'cloud' && !hasCloudKey ? 'required' : 'optional'
+  // 当模式为 local 但缺少 douyin-ingest 时标为 required
+  const localDepsLevel: CheckLevel = asrMode === 'local' && !hasLocalDeps ? 'required' : 'optional'
+
+  envChecks.push({
+    key: 'ASR_MODE',
+    label: 'ASR 模式',
+    category: 'asr',
+    level: 'optional',
+    isActiveProvider: false,
+    configured: true,
+    maskedValue: asrMode,
+  })
+  envChecks.push({
+    key: 'ASR_CLOUD_PROVIDER',
+    label: '云端 ASR 服务商',
+    category: 'asr',
+    level: 'optional',
+    isActiveProvider: asrMode === 'cloud' || asrMode === 'auto',
+    configured: true,
+    maskedValue: cloudProvider,
+  })
+  envChecks.push({
+    key: 'ALIBABA_ASR_API_KEY',
+    label: '阿里云百炼 ASR Key',
+    category: 'asr',
+    level: cloudProvider === 'alibaba' ? cloudKeyLevel : 'optional',
+    isActiveProvider: cloudProvider === 'alibaba' && (asrMode === 'cloud' || (asrMode === 'auto' && !hasCloudKey)),
+    configured: !!alibabaKey,
+    maskedValue: alibabaKey ? maskValue(alibabaKey) : null,
+  })
+  envChecks.push({
+    key: 'ALIBABA_ASR_MODEL',
+    label: '阿里云 ASR 模型',
+    category: 'asr',
+    level: 'optional',
+    isActiveProvider: false,
+    configured: !!process.env.ALIBABA_ASR_MODEL,
+    maskedValue: process.env.ALIBABA_ASR_MODEL || 'fun-asr (default)',
+  })
+  envChecks.push({
+    key: 'XIAOMI_ASR_API_KEY',
+    label: '小米 MiMo ASR Key',
+    category: 'asr',
+    level: cloudProvider === 'xiaomi' ? cloudKeyLevel : 'optional',
+    isActiveProvider: cloudProvider === 'xiaomi' && (asrMode === 'cloud' || (asrMode === 'auto' && !hasCloudKey)),
+    configured: !!xiaomiKey,
+    maskedValue: xiaomiKey ? maskValue(xiaomiKey) : null,
+  })
+  envChecks.push({
+    key: 'DOUYIN_INGEST_BIN',
+    label: 'douyin-ingest CLI (本地 ASR 依赖)',
+    category: 'asr',
+    level: localDepsLevel,
+    isActiveProvider: asrMode === 'local',
+    configured: hasLocalDeps,
+    maskedValue: process.env.DOUYIN_INGEST_BIN || 'douyin-ingest (in PATH)',
+  })
+  envChecks.push({
+    key: 'WHISPER_MODEL',
+    label: 'Whisper 模型 (本地)',
+    category: 'asr',
+    level: 'optional',
+    isActiveProvider: asrMode === 'local',
+    configured: !!process.env.WHISPER_MODEL,
+    maskedValue: process.env.WHISPER_MODEL || 'medium (default)',
+  })
+  envChecks.push({
+    key: 'WHISPER_DEVICE',
+    label: 'Whisper 计算设备',
+    category: 'asr',
+    level: 'optional',
+    isActiveProvider: asrMode === 'local',
+    configured: !!process.env.WHISPER_DEVICE,
+    maskedValue: process.env.WHISPER_DEVICE || 'cpu (default)',
+  })
+  envChecks.push({
+    key: 'WHISPER_BEAM_SIZE',
+    label: 'Whisper Beam Size',
+    category: 'asr',
+    level: 'optional',
+    isActiveProvider: false,
+    configured: !!process.env.WHISPER_BEAM_SIZE,
+    maskedValue: process.env.WHISPER_BEAM_SIZE || '5 (default)',
+  })
+
   // Database
   const dbRaw = process.env.DATABASE_URL
   envChecks.push({
@@ -115,18 +210,23 @@ export async function GET() {
   const configuredCount = envChecks.filter((e) => e.configured).length
   const missingCount = envChecks.length - configuredCount
 
-  // 新判定逻辑：只需满足以下三个条件即认为环境配置通过
+  // 新判定逻辑：只需满足以下条件即认为环境配置通过
   //   1. 至少配置了一个大模型 API Key
-  //   2. Firecrawl API Key 已配置
-  //   3. 数据库已连接
+  //   2. 数据库已连接
+  //   3. ASR: 如果模式为 cloud，必须有云端 Key；如果模式为 local，必须有 douyin-ingest
   // Web search is always available in Lite edition (DuckDuckGo + Jina Reader)
-  const requiredMissing = [hasAnyAiKey, dbConnected].filter(
+  const asrReady =
+    asrMode === 'auto' ||
+    (asrMode === 'cloud' && hasCloudKey) ||
+    (asrMode === 'local' && hasLocalDeps)
+
+  const requiredMissing = [hasAnyAiKey, dbConnected, asrReady].filter(
     (v) => !v
   ).length
 
   let overallStatus: 'ok' | 'warning' | 'error' = 'ok'
-  if (!hasAnyAiKey || !dbConnected) {
-    overallStatus = 'error'
+  if (!hasAnyAiKey || !dbConnected || !asrReady) {
+    overallStatus = !hasAnyAiKey || !dbConnected ? 'error' : 'warning'
   }
 
   const result: DebugEnvResult = {

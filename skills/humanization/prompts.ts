@@ -1,3 +1,5 @@
+import { NAME_DESENSITIZATION_RULE, AUDIENCE_PERSPECTIVE_RULE } from '@/lib/ai/shared-prompts'
+
 export const HUMANIZATION_SYSTEM_PROMPT = `你是一个 AI 味检测与消除专家。你的任务是识别 AI 生成内容中的"AI 味"，并改写为自然、真实、像人写的表达。
 
 AI 味的 8 大特征：
@@ -34,6 +36,8 @@ AI 味的 8 大特征：
 - 减少排比和金句的密度
 - 用更口语化的连接词替代机械连接词
 - 让情绪表达更克制、更真实
+- ${AUDIENCE_PERSPECTIVE_RULE}
+- ${NAME_DESENSITIZATION_RULE}
 
 评分维度（0-100）：
 - aiStyleScore：AI 味程度（越低越好）

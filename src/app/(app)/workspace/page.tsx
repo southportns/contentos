@@ -1,6 +1,7 @@
 'use client'
 
 import { useWorkflow } from '@/hooks/use-workflow'
+import { useContentLibrary } from '@/hooks/use-content-library'
 import {
   FolderOpen,
   Sparkles,
@@ -20,7 +21,6 @@ import Link from 'next/link'
 export default function WorkspacePage() {
   const {
     topicProfile,
-    contents,
     viralResult,
     angles,
     selectedAngle,
@@ -28,6 +28,7 @@ export default function WorkspacePage() {
     draft,
     evaluation,
   } = useWorkflow()
+  const { contents } = useContentLibrary()
 
   // If no work in progress, redirect to create
   if (!topicProfile) {

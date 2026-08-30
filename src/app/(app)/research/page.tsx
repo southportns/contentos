@@ -1,6 +1,7 @@
 'use client'
 
 import { useWorkflow } from '@/hooks/use-workflow'
+import { useContentLibrary } from '@/hooks/use-content-library'
 import { Sparkles, Search, FileText, ArrowRight } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,7 +10,8 @@ import { cn } from '@/lib/utils'
 import Link from 'next/link'
 
 export default function ResearchPage() {
-  const { topicProfile, contents, viralResult } = useWorkflow()
+  const { topicProfile, viralResult } = useWorkflow()
+  const { contents } = useContentLibrary()
 
   if (!topicProfile) {
     return (

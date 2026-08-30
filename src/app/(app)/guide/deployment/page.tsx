@@ -15,7 +15,7 @@ export default function DeploymentPage() {
       <div className="flex flex-col gap-3 pb-2">
         <h1 className="text-3xl font-bold">本地部署</h1>
         <p className="text-muted-foreground">
-          Content OS Lite 支持完全本地部署，以下是从零开始的部署教程。无需 Docker，无需翻墙。
+          Content OS 支持完全本地部署，以下是从零开始的部署教程。无需 Docker，无需翻墙。
         </p>
       </div>
 
@@ -44,14 +44,14 @@ export default function DeploymentPage() {
           <li className="flex items-start gap-2 text-xs text-muted-foreground">
             <CheckCircle2 className="size-3.5 shrink-0 mt-0.5 text-primary/60" />
             <span>
-              <strong className="text-foreground">AI API Key</strong> — 至少需要一个 AI 服务商的 API Key（DeepSeek / OpenAI / Anthropic / Google / GLM）
+              <strong className="text-foreground">AI API Key</strong> — 至少需要一个 AI 服务商的 API Key（DeepSeek / OpenAI / Anthropic / Google / GLM 等）
             </span>
           </li>
         </ul>
         <div className="flex items-start gap-2 rounded-md bg-green-500/5 p-3">
           <CheckCircle2 className="size-3.5 shrink-0 mt-0.5 text-green-600" />
           <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">无需 Docker</strong> — Lite 版使用 SQLite 嵌入式数据库，无需安装 Docker。无需 Firecrawl — 内置 DuckDuckGo 搜索和 Jina Reader 抓取，无需注册任何外部服务。
+            <strong className="text-foreground">零外部依赖</strong> — 使用 SQLite 嵌入式数据库，无需安装 Docker 或外部数据库。内置 DuckDuckGo 搜索和 Jina Reader 抓取，无需注册任何外部服务。口播稿识别支持云端 ASR（阿里云百炼 / 小米 MiMo），可选配置。
           </p>
         </div>
       </div>
@@ -65,7 +65,7 @@ export default function DeploymentPage() {
         <p className="text-xs text-muted-foreground">
           打开终端，执行以下命令克隆项目代码并进入项目目录：
         </p>
-        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`git clone <项目仓库地址> content-os
+        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`git clone https://github.com/southportns/contentos.git content-os
 cd content-os`}</code></pre>
       </div>
 
@@ -79,6 +79,9 @@ cd content-os`}</code></pre>
           使用 npm 安装项目依赖：
         </p>
         <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`npm install`}</code></pre>
+        <p className="text-xs text-muted-foreground">
+          安装过程中会自动编译 better-sqlite3 原生模块，请确保系统已安装编译工具（Windows 需要 Visual Studio Build Tools）。
+        </p>
       </div>
 
       {/* Step 3: Environment */}
@@ -110,7 +113,7 @@ AI_MODEL=deepseek-chat`}</code></pre>
           <p className="text-xs text-muted-foreground">
             <strong className="text-foreground">AI 服务商选择建议：</strong>
             国内用户推荐使用 DeepSeek（性价比高、速度快）；需要更高质量可使用 Anthropic Claude 或 OpenAI GPT-4o。
-            只需填写你使用的那一个服务商的 Key 即可。
+            只需填写你使用的那一个服务商的 Key 即可。也可以在应用内的「设置」页面直接配置。
           </p>
         </div>
       </div>
@@ -150,6 +153,30 @@ npm run start`}</code></pre>
         </p>
       </div>
 
+      {/* Optional: ASR Config */}
+      <div className="flex flex-col gap-3 rounded-lg border p-5">
+        <div className="flex items-center gap-2">
+          <Lightbulb className="size-4 text-primary" />
+          <h3 className="text-sm font-semibold">可选：口播稿识别配置</h3>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          如果需要使用抖音视频口播文案提取功能，需要配置 ASR（语音识别）服务。可在应用内「设置」页面配置，也可在 <code className="rounded bg-muted px-1 py-0.5">.env.local</code> 中添加：
+        </p>
+        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`# ASR 模式: auto / cloud (默认 auto)
+ASR_MODE=cloud
+
+# 云端 ASR 服务商: alibaba / xiaomi
+ASR_CLOUD_PROVIDER=xiaomi
+XIAOMI_ASR_API_KEY=你的小米 MiMo API Key
+
+# 或使用阿里云百炼
+# ASR_CLOUD_PROVIDER=alibaba
+# ALIBABA_ASR_API_KEY=你的百炼 API Key`}</code></pre>
+        <p className="text-xs text-muted-foreground">
+          不配置 ASR 不影响其他功能的正常使用。
+        </p>
+      </div>
+
       {/* Troubleshooting */}
       <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-5">
         <div className="flex items-center gap-2">
@@ -166,7 +193,7 @@ npm run start`}</code></pre>
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium text-foreground">AI 生成报错？</p>
             <p className="text-xs text-muted-foreground">
-              检查 <code className="rounded bg-muted px-1 py-0.5">.env.local</code> 中 AI_PROVIDER 和 AI_MODEL 是否匹配你填写的 API Key。例如使用 DeepSeek 时，确保 <code className="rounded bg-muted px-1 py-0.5">AI_PROVIDER=deepseek</code> 和 <code className="rounded bg-muted px-1 py-0.5">AI_MODEL=deepseek-chat</code>。
+              检查 <code className="rounded bg-muted px-1 py-0.5">.env.local</code> 中 AI_PROVIDER 和 AI_MODEL 是否匹配你填写的 API Key。例如使用 DeepSeek 时，确保 <code className="rounded bg-muted px-1 py-0.5">AI_PROVIDER=deepseek</code> 和 <code className="rounded bg-muted px-1 py-0.5">AI_MODEL=deepseek-chat</code>。也可以在应用内「设置」页面修改。
             </p>
           </div>
           <div className="flex flex-col gap-1">
@@ -178,7 +205,13 @@ npm run start`}</code></pre>
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium text-foreground">网页搜索不工作？</p>
             <p className="text-xs text-muted-foreground">
-              Lite 版使用 DuckDuckGo 搜索和 Jina Reader 抓取，无需配置 API Key。如果搜索结果为空，可能是网络问题——DuckDuckGo 和 Jina Reader 均为境外服务，如遇网络限制请检查网络连接。
+              内置 DuckDuckGo 搜索和 Jina Reader 抓取，无需配置 API Key。如果搜索结果为空，可能是网络问题——DuckDuckGo 和 Jina Reader 均为境外服务，如遇网络限制请检查网络连接。
+            </p>
+          </div>
+          <div className="flex flex-col gap-1">
+            <p className="text-xs font-medium text-foreground">better-sqlite3 编译失败？</p>
+            <p className="text-xs text-muted-foreground">
+              Windows 系统需要安装 Visual Studio Build Tools（包含 C++ 桌面开发工具）。可通过 <code className="rounded bg-muted px-1 py-0.5">npm install --global windows-build-tools</code> 或在 Visual Studio Installer 中勾选「C++ 桌面开发」工作负载。
             </p>
           </div>
         </div>

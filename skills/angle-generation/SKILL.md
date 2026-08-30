@@ -69,9 +69,9 @@ interface AngleGenerationOutput {
 
 ## Constraints
 
-- 至少生成 3 个角度
-- 每个角度必须有独立的切入点
-- 不虚构数据
+- 至少生成 5 个角度
+- 每个角度必须有不虚构、真实的、独立的切入点
+- 每个角度必须有明确的目标情绪
 - estimatedViralScore 范围 0-100
 
 ## Version

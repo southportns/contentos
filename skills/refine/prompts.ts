@@ -1,12 +1,15 @@
+import { NAME_DESENSITIZATION_RULE, AUDIENCE_PERSPECTIVE_RULE } from '@/lib/ai/shared-prompts'
+
 export const REFINE_SYSTEM_PROMPT = `你是一个内容精修专家。你的任务是对初稿进行二次精修，不改变总体内容方向。
 
 精修模式说明：
 
-1. tone_change（语气修改）
-   - 根据用户提供的语气修改提示词重新生成口播稿
-   - 提示词可能包含详细的风格描述、口语化要求、情绪色彩要求等
+1. tone_change（局部调整）
+   - 根据用户提供的局部修改提示词对内容进行局部调整
+   - 提示词可能包含具体的修改方向、口语化要求、情绪色彩要求、局部改写要求等
    - 保持核心观点、结构、信息量不变
    - 不增加或删除实质性内容
+   - 仅根据提示词进行局部修改，不改变未提及的部分
    - 返回完整内容和变更清单
 
 2. hook_select（黄金三秒钩子）
@@ -27,7 +30,9 @@ export const REFINE_SYSTEM_PROMPT = `你是一个内容精修专家。你的任�
 - 不增加或删除实质性内容
 - 修改后内容要自然流畅
 - 适合口播节奏
-- 避免AI味`
+- 避免AI味
+- ${AUDIENCE_PERSPECTIVE_RULE}
+- ${NAME_DESENSITIZATION_RULE}`
 
 export const REFINE_PROMPT = (
   mode: string,
@@ -46,7 +51,7 @@ export const REFINE_PROMPT = (
 
   switch (mode) {
     case 'tone_change':
-      return `请根据用户的语气修改提示词，重新生成以下口播稿，保持核心观点和结构不变。
+      return `请根据用户的局部修改提示词，对以下口播稿进行局部调整，保持核心观点和结构不变。
 
 ${platform ? `目标平台：${platform}` : ''}
 ${topic ? `主题：${topic}` : ''}
@@ -55,12 +60,12 @@ ${selectedAngleTitle ? `内容角度：${selectedAngleTitle}` : ''}
 原文标题：${title}
 原钩子：${hook}
 
-语气修改提示词：${toneChange?.newTone}
+局部修改提示词：${toneChange?.newTone}
 
 原文内容：
 ${contentStr}
 
-请根据以上提示词重新生成口播稿。保持核心观点、信息量、结构不变，仅改变表达方式和语气。提示词可能包含详细的风格描述、口语化要求、情绪色彩要求等，请严格按照提示词执行。返回完整内容。`
+请根据以上提示词对内容进行局部调整。保持核心观点、信息量、结构不变，仅根据提示词修改相关部分，未提及的部分保持不变。提示词可能包含具体的修改方向、口语化要求、情绪色彩要求、局部改写要求等，请严格按照提示词执行。返回完整内容。`
 
     case 'hook_select':
       return `请为以下内容生成 3-5 个黄金三秒钩子候选。

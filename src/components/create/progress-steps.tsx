@@ -24,7 +24,7 @@ const arrowClipLast = 'polygon(0 0, 100% 0, 100% 100%, 0 100%, 10px 50%)'
 
 export function ProgressSteps({ steps, onStepClick }: ProgressStepsProps) {
   return (
-    <div className="flex h-[30px] items-center overflow-x-auto">
+    <div className="flex h-[30px] items-center">
       {steps.map((step, i) => {
         const isLast = i === steps.length - 1
         const isFirst = i === 0
@@ -43,7 +43,7 @@ export function ProgressSteps({ steps, onStepClick }: ProgressStepsProps) {
             onClick={() => clickable && onStepClick?.(step.id)}
             style={{ clipPath }}
             className={cn(
-              'flex h-[30px] items-center gap-1 text-xs font-medium transition-all whitespace-nowrap',
+              'flex h-[30px] flex-1 items-center justify-center gap-1 text-xs font-medium transition-all',
               // Padding: left has extra to account for notch, right has extra for point
               isLast
                 ? 'pl-4 pr-3'
@@ -62,11 +62,11 @@ export function ProgressSteps({ steps, onStepClick }: ProgressStepsProps) {
                 <Check className="size-3.5" />
               ) : step.status === 'loading' ? (
                 <Loader2 className="size-3.5 animate-spin" />
-              ) : (
+              ) : step.status === 'active' ? (
                 <span className="text-[10px] font-bold leading-none">{step.id}</span>
-              )}
+              ) : null}
             </span>
-            {step.label}
+            <span className="truncate">{step.label}</span>
           </button>
         )
       })}

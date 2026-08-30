@@ -8,11 +8,10 @@ export const ANGLE_GENERATION_SYSTEM_PROMPT = `你是一个内容策略专家。
    - reasoning：为什么这个角度有效
    - targetEmotion：目标引发的情绪
    - estimatedViralScore：预估爆款分（0-100）
-   - difficulty：创作难度（low/medium/high）
    - keyPoints：关键要点（3-5 个）
    - audienceAppeal：对受众的吸引力说明
 3. 角度之间要有差异化，覆盖不同情绪维度
-4. 基于数据推断，不虚构
+4. 基于数据和互联网热点进行分析总结，不进行自我虚构
 5. ID 用简洁的英文标识（如 angle-1, angle-2）`
 
 export const ANGLE_GENERATION_PROMPT = (

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { FolderPlus, FileText, Pencil, Trash2 } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { getProjects } from '@/lib/services/server-actions'
 import { isDatabaseConfigured } from '@/lib/utils/db-safe'
@@ -111,15 +112,41 @@ export default async function ProjectsPage() {
             </span>
 
             {/* 主题概览 */}
-            <div className="flex-1 min-w-0">
-              <span className="block truncate text-sm text-foreground" title={project.description ? project.description.replace(/^主题：/, '') : project.name}>
-                {(() => {
-                  const text = project.description
-                    ? project.description.replace(/^主题：/, '')
-                    : project.name
-                  return text.length > 30 ? text.slice(0, 30) + '…' : text
-                })()}
-              </span>
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              {(() => {
+                const topic = project.topics[0]
+                if (!topic) {
+                  return (
+                    <span className="text-sm text-muted-foreground italic">
+                      尚未设定主题
+                    </span>
+                  )
+                }
+                // 自由创作：显示用户输入的主题（topic.topic）
+                // 文件提炼/对标改编：显示选定角度的标题（angle.title）
+                const approvedAngle = topic.angles.find((a) => a.status === 'APPROVED') || topic.angles[0]
+                const displayText = approvedAngle ? approvedAngle.title : topic.topic
+                return (
+                  <>
+                    <span
+                      className="block truncate text-sm text-foreground"
+                      title={displayText}
+                    >
+                      {displayText.length > 40 ? displayText.slice(0, 40) + '…' : displayText}
+                    </span>
+                    {topic.platform && (
+                      <Badge variant="secondary" className="shrink-0 text-xs">
+                        {topic.platform}
+                      </Badge>
+                    )}
+                    {topic.audience && (
+                      <Badge variant="outline" className="shrink-0 text-xs">
+                        {topic.audience}
+                      </Badge>
+                    )}
+                  </>
+                )
+              })()}
             </div>
 
             {/* 操作 */}

@@ -22,10 +22,18 @@ export const projectRepository = {
 
   async findByUserIdWithTopics(
     userId: string,
-  ): Promise<Prisma.ProjectGetPayload<{ include: { topics: true } }>[]> {
+  ): Promise<Prisma.ProjectGetPayload<{
+    include: { topics: { include: { angles: { orderBy: { createdAt: 'desc' } } } } }
+  }>[]> {
     return prisma.project.findMany({
       where: { userId },
-      include: { topics: true },
+      include: {
+        topics: {
+          include: {
+            angles: { orderBy: { createdAt: 'desc' } },
+          },
+        },
+      },
       orderBy: { updatedAt: 'desc' },
     })
   },

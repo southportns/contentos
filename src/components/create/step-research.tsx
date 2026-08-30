@@ -106,7 +106,7 @@ export function StepResearch({
   return (
     <Card>
       <StepHeader step={1} title="主题研究" active={false} done />
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-3">
         {/* Profile summary */}
         <div className="flex flex-col gap-3">
           {/* Category */}
@@ -181,7 +181,7 @@ export function StepResearch({
               <HelpCircle className="size-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">核心问题</span>
             </div>
-            <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+            <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground max-h-40 overflow-y-auto pr-1">
               {(editing ? editCoreQuestions : topicProfile.coreQuestions).map((q) => (
                 <li key={q} className="flex items-start gap-1">
                   <span className="mt-0.5">•</span>
@@ -230,7 +230,7 @@ export function StepResearch({
               <Lightbulb className="size-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground">潜在角度</span>
             </div>
-            <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+            <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground max-h-40 overflow-y-auto pr-1">
               {(editing ? editPotentialAngles : topicProfile.potentialAngles).map((a) => (
                 <li key={a} className="flex items-start gap-1">
                   <span className="mt-0.5">•</span>

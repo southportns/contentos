@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
   Loader2, AlertCircle, PenLine, Sparkles, Wand2, Target,
   ChevronDown, ChevronRight, Check, Save, X, Edit3, RotateCcw,
+  ArrowUp,
 } from 'lucide-react'
 // Note: PenLine is still used in the content preview header icon
 import { Badge } from '@/components/ui/badge'
@@ -44,14 +45,17 @@ interface StepRefineProps {
   selectedAngleTitle?: string
 }
 
-const TONE_PRESETS = [
-  '温柔治愈',
-  '犀利直接',
-  '幽默风趣',
-  '理性克制',
-  '感性共鸣',
-  '活力激昂',
-  '娓娓道来',
+/**
+ * 局部调整快捷提示词预设
+ */
+const LOCAL_EDIT_PRESETS = [
+  '开头再吸引人一点',
+  '结尾加点行动号召',
+  '把第二段改得更口语化',
+  '精简掉冗余表达',
+  '加点情绪色彩',
+  '节奏感更强一些',
+  '把数据部分说得更通俗',
 ]
 
 /**
@@ -78,7 +82,7 @@ function safeString(val: unknown): string {
 }
 
 const MODE_TABS: Array<{ id: RefineMode; label: string; icon: typeof Wand2 }> = [
-  { id: 'tone_change', label: '语气修改', icon: Sparkles },
+  { id: 'tone_change', label: '局部调整', icon: Sparkles },
   { id: 'hook_select', label: '黄金三秒', icon: Target },
   { id: 'title_select', label: '标题选定', icon: Wand2 },
 ]
@@ -106,20 +110,120 @@ export function StepRefine({
   const [manualContent, setManualContent] = useState<string | null>(null)
   const [manualTitle, setManualTitle] = useState<string | null>(null)
 
+  // ── Auto-run states: 独立管理黄金三秒和标题选定的自动生成 ──
+  // 由于 onRefine 回调会把结果存到全局 store 并互相覆盖，
+  // 自动运行时在组件内部独立管理候选项，避免冲突。
+  const [autoHookCandidates, setAutoHookCandidates] = useState<string[]>([])
+  const [autoTitleCandidates, setAutoTitleCandidates] = useState<string[]>([])
+  const [autoHookLoading, setAutoHookLoading] = useState(false)
+  const [autoTitleLoading, setAutoTitleLoading] = useState(false)
+  const [autoHookError, setAutoHookError] = useState<string | null>(null)
+  const [autoTitleError, setAutoTitleError] = useState<string | null>(null)
+  // 标记是否已自动运行过（防止 StrictMode 双调用重复请求）
+  const autoRunStarted = useRef(false)
+
+  // 折叠状态：应用选中的标题/钩子后折叠收起
+  const [hookCollapsed, setHookCollapsed] = useState(false)
+  const [titleCollapsed, setTitleCollapsed] = useState(false)
+
   // Derived values: 优先使用手动编辑后的内容，其次 refineData，最后 draft
   const appliedContent = manualContent ?? refineData?.content ?? draft.content
   const appliedTitle = manualTitle ?? refineData?.title ?? draft.title
   const appliedHook = refineData?.hook ?? draft.hook
 
   // 防御性处理：确保候选项为字符串数组
+  // 优先使用自动生成的候选项，其次使用 refineData 中的候选项
   const hookCandidates = useMemo(
-    () => (refineData?.hookCandidates ?? []).map(safeString).filter((s) => s.length > 0),
-    [refineData],
+    () => {
+      const fromAuto = autoHookCandidates.map(safeString).filter((s) => s.length > 0)
+      if (fromAuto.length > 0) return fromAuto
+      return (refineData?.hookCandidates ?? []).map(safeString).filter((s) => s.length > 0)
+    },
+    [refineData, autoHookCandidates],
   )
   const titleCandidates = useMemo(
-    () => (refineData?.titleCandidates ?? []).map(safeString).filter((s) => s.length > 0),
-    [refineData],
+    () => {
+      const fromAuto = autoTitleCandidates.map(safeString).filter((s) => s.length > 0)
+      if (fromAuto.length > 0) return fromAuto
+      return (refineData?.titleCandidates ?? []).map(safeString).filter((s) => s.length > 0)
+    },
+    [refineData, autoTitleCandidates],
   )
+
+  // ── Auto-run: 进入精修后自动生成钩子和标题候选 ──
+  // 独立 fetch 调用，不通过 onRefine 回调，避免互相覆盖
+  const autoGenerateHooks = useCallback(async () => {
+    setAutoHookLoading(true)
+    setAutoHookError(null)
+    try {
+      const res = await fetch('/api/generation/refine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: appliedContent,
+          title: appliedTitle,
+          hook: appliedHook,
+          wordCount: appliedContent.length,
+          mode: 'hook_select',
+          platform,
+          topic,
+          selectedAngleTitle,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || '生成钩子失败')
+      const candidates = (data.data?.hookCandidates ?? []).map(safeString).filter((s: string) => s.length > 0)
+      setAutoHookCandidates(candidates)
+    } catch (err) {
+      setAutoHookError(err instanceof Error ? err.message : '未知错误')
+    } finally {
+      setAutoHookLoading(false)
+    }
+  }, [appliedContent, appliedTitle, appliedHook, platform, topic, selectedAngleTitle])
+
+  const autoGenerateTitles = useCallback(async () => {
+    setAutoTitleLoading(true)
+    setAutoTitleError(null)
+    try {
+      const res = await fetch('/api/generation/refine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: appliedContent,
+          title: appliedTitle,
+          hook: appliedHook,
+          wordCount: appliedContent.length,
+          mode: 'title_select',
+          platform,
+          topic,
+          selectedAngleTitle,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || '生成标题失败')
+      const candidates = (data.data?.titleCandidates ?? []).map(safeString).filter((s: string) => s.length > 0)
+      setAutoTitleCandidates(candidates)
+    } catch (err) {
+      setAutoTitleError(err instanceof Error ? err.message : '未知错误')
+    } finally {
+      setAutoTitleLoading(false)
+    }
+  }, [appliedContent, appliedTitle, appliedHook, platform, topic, selectedAngleTitle])
+
+  // 自动运行：组件挂载时且没有已存在的候选项时触发
+  useEffect(() => {
+    if (autoRunStarted.current) return
+    // 如果已经有候选项（从 refineData 恢复），不需要自动生成
+    const hasExistingHooks = (refineData?.hookCandidates ?? []).length > 0
+    const hasExistingTitles = (refineData?.titleCandidates ?? []).length > 0
+    if (hasExistingHooks && hasExistingTitles) return
+    autoRunStarted.current = true
+    // 并行触发两个请求
+    if (!hasExistingHooks) autoGenerateHooks()
+    if (!hasExistingTitles) autoGenerateTitles()
+  }, [autoGenerateHooks, autoGenerateTitles, refineData?.hookCandidates, refineData?.titleCandidates])
+
+  const autoLoading = autoHookLoading || autoTitleLoading
 
   // 局部修改模式：直接在当前内容里编辑和保存
   const handleStartEdit = useCallback(() => {
@@ -154,17 +258,10 @@ export function StepRefine({
   }, [appliedContent, appliedTitle, appliedHook, newTone, onRefine, platform, topic, selectedAngleTitle])
 
   const handleGenerateHooks = useCallback(async () => {
-    await onRefine({
-      content: appliedContent,
-      title: appliedTitle,
-      hook: appliedHook,
-      wordCount: appliedContent.length,
-      mode: 'hook_select',
-      platform,
-      topic,
-      selectedAngleTitle,
-    })
-  }, [appliedContent, appliedTitle, appliedHook, onRefine, platform, topic, selectedAngleTitle])
+    // 手动重新生成时，同步更新自动状态
+    setAutoHookCandidates([])
+    await autoGenerateHooks()
+  }, [autoGenerateHooks])
 
   const handleApplyHook = useCallback(async () => {
     const selectedHook = hookCandidates[selectedHookIdx]
@@ -180,20 +277,15 @@ export function StepRefine({
       topic,
       selectedAngleTitle,
     })
+    // 应用成功后折叠
+    setHookCollapsed(true)
   }, [hookCandidates, selectedHookIdx, appliedContent, appliedTitle, appliedHook, onRefine, platform, topic, selectedAngleTitle])
 
   const handleGenerateTitles = useCallback(async () => {
-    await onRefine({
-      content: appliedContent,
-      title: appliedTitle,
-      hook: appliedHook,
-      wordCount: appliedContent.length,
-      mode: 'title_select',
-      platform,
-      topic,
-      selectedAngleTitle,
-    })
-  }, [appliedContent, appliedTitle, appliedHook, onRefine, platform, topic, selectedAngleTitle])
+    // 手动重新生成时，同步更新自动状态
+    setAutoTitleCandidates([])
+    await autoGenerateTitles()
+  }, [autoGenerateTitles])
 
   const handleApplyTitle = useCallback(async () => {
     const selectedTitle = titleCandidates[selectedTitleIdx]
@@ -209,6 +301,8 @@ export function StepRefine({
       topic,
       selectedAngleTitle,
     })
+    // 应用成功后折叠
+    setTitleCollapsed(true)
   }, [titleCandidates, selectedTitleIdx, appliedContent, appliedTitle, appliedHook, onRefine, platform, topic, selectedAngleTitle])
 
   const handleApplyRefine = useCallback(() => {
@@ -227,7 +321,7 @@ export function StepRefine({
   return (
     <Card>
       <StepHeader step={5} title="初稿二次精修" active={true} done={false} />
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-3">
         {/* Mode tabs */}
         <div className="flex flex-wrap gap-2">
           {MODE_TABS.map((tab) => {
@@ -249,6 +343,204 @@ export function StepRefine({
             )
           })}
         </div>
+
+        {/* Auto-generated results: 标题选定 + 黄金三秒 */}
+        {(autoLoading || hookCandidates.length > 0 || titleCandidates.length > 0 || autoHookError || autoTitleError) && (
+          <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+            <div className="flex items-center gap-2">
+              <ArrowUp className="size-4 text-primary" />
+              <span className="text-sm font-medium">AI 智能推荐</span>
+              {autoLoading && (
+                <Badge variant="secondary" className="text-xs">
+                  <Loader2 className="mr-1 size-3 animate-spin" />
+                  生成中...
+                </Badge>
+              )}
+            </div>
+
+            {/* 标题候选 */}
+            <div className="flex flex-col gap-2">
+              {titleCollapsed ? (
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background p-2.5">
+                  <div className="flex items-center gap-2">
+                    <Wand2 className="size-3.5 text-primary" />
+                    <span className="text-xs font-medium">已应用标题：</span>
+                    <span className="text-sm font-medium">{appliedTitle}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setTitleCollapsed(false)}
+                  >
+                    <ChevronDown className="size-3.5" />
+                    展开
+                  </Button>
+                </div>
+              ) : autoTitleLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Wand2 className="size-3.5 text-primary" />
+                  <Loader2 className="size-3 animate-spin" />
+                  正在生成标题候选...
+                </div>
+              ) : autoTitleError ? (
+                <div className="flex items-center gap-2 text-xs text-destructive">
+                  <AlertCircle className="size-3" />
+                  {autoTitleError}
+                  <Button variant="ghost" size="sm" className="h-5 px-2 text-xs" onClick={autoGenerateTitles}>
+                    重试
+                  </Button>
+                </div>
+              ) : titleCandidates.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Wand2 className="size-3.5 text-primary" />
+                      <span className="text-xs font-medium">标题候选</span>
+                    </div>
+                    {titleCollapsed === false && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-2 text-xs"
+                        onClick={() => setTitleCollapsed(true)}
+                      >
+                        <ChevronDown className="size-3" />
+                        收起
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {titleCandidates.map((title, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedTitleIdx(i)}
+                        className={cn(
+                          'flex items-center gap-2 rounded-lg border p-2.5 text-left text-sm transition-all',
+                          selectedTitleIdx === i
+                            ? 'border-primary bg-primary/10 ring-1 ring-primary/20'
+                            : 'border-border bg-background hover:bg-muted',
+                        )}
+                      >
+                        <div className={cn(
+                          'flex size-4 items-center justify-center rounded-full border text-[10px] font-bold',
+                          selectedTitleIdx === i
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border',
+                        )}>
+                          {selectedTitleIdx === i ? <Check className="size-2.5" /> : i + 1}
+                        </div>
+                        <span className="font-medium">{title}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-end">
+                    <Button
+                      onClick={handleApplyTitle}
+                      disabled={loading}
+                      size="sm"
+                      className="h-7"
+                    >
+                      {loading ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                      应用选中标题
+                    </Button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {/* 钩子候选 */}
+            <div className="flex flex-col gap-2">
+              {hookCollapsed ? (
+                <div className="flex items-center justify-between rounded-lg border border-border bg-background p-2.5">
+                  <div className="flex items-center gap-2">
+                    <Target className="size-3.5 text-primary" />
+                    <span className="text-xs font-medium">已应用钩子：</span>
+                    <span className="text-sm font-medium">{appliedHook}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setHookCollapsed(false)}
+                  >
+                    <ChevronDown className="size-3.5" />
+                    展开
+                  </Button>
+                </div>
+              ) : autoHookLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Target className="size-3.5 text-primary" />
+                  <Loader2 className="size-3 animate-spin" />
+                  正在生成钩子候选...
+                </div>
+              ) : autoHookError ? (
+                <div className="flex items-center gap-2 text-xs text-destructive">
+                  <AlertCircle className="size-3" />
+                  {autoHookError}
+                  <Button variant="ghost" size="sm" className="h-5 px-2 text-xs" onClick={autoGenerateHooks}>
+                    重试
+                  </Button>
+                </div>
+              ) : hookCandidates.length > 0 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Target className="size-3.5 text-primary" />
+                      <span className="text-xs font-medium">黄金三秒钩子候选</span>
+                    </div>
+                    {hookCollapsed === false && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-2 text-xs"
+                        onClick={() => setHookCollapsed(true)}
+                      >
+                        <ChevronDown className="size-3" />
+                        收起
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {hookCandidates.map((hook, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setSelectedHookIdx(i)}
+                        className={cn(
+                          'flex items-center gap-2 rounded-lg border p-2.5 text-left text-sm transition-all',
+                          selectedHookIdx === i
+                            ? 'border-primary bg-primary/10 ring-1 ring-primary/20'
+                            : 'border-border bg-background hover:bg-muted',
+                        )}
+                      >
+                        <div className={cn(
+                          'flex size-4 items-center justify-center rounded-full border text-[10px] font-bold',
+                          selectedHookIdx === i
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border',
+                        )}>
+                          {selectedHookIdx === i ? <Check className="size-2.5" /> : i + 1}
+                        </div>
+                        <span>{hook}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-end">
+                    <Button
+                      onClick={handleApplyHook}
+                      disabled={loading}
+                      size="sm"
+                      className="h-7"
+                    >
+                      {loading ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                      应用选中钩子
+                    </Button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        )}
 
         {/* Content preview / editor */}
         <div className="flex items-center justify-between">
@@ -311,14 +603,14 @@ export function StepRefine({
         {/* Mode-specific UI */}
         {activeMode === 'tone_change' && (
           <div className="flex flex-col gap-3 rounded-lg border p-4">
-            <div className="text-xs font-medium">语气修改</div>
+            <div className="text-xs font-medium">局部调整</div>
             <p className="text-xs text-muted-foreground">
-              输入语气修改提示词，AI 将按提示词重新生成内容，不改变总体内容方向
+              输入局部修改提示词，AI 将按提示词对内容进行局部调整，不改变总体内容方向
             </p>
             <div className="flex flex-col gap-1">
-              <Label className="text-xs">快捷预设（点击填入）</Label>
+              <Label className="text-xs">快捷提示词（点击填入）</Label>
               <div className="flex flex-wrap gap-2">
-                {TONE_PRESETS.map((preset) => (
+                {LOCAL_EDIT_PRESETS.map((preset) => (
                   <button
                     key={preset}
                     onClick={() => setNewTone(preset)}
@@ -335,11 +627,11 @@ export function StepRefine({
               </div>
             </div>
             <div className="flex flex-col gap-1">
-              <Label className="text-xs">语气修改提示词</Label>
+              <Label className="text-xs">局部修改提示词</Label>
               <Textarea
                 value={newTone}
                 onChange={(e) => setNewTone(e.target.value)}
-                placeholder="输入详细的语气修改提示词，例如：把语气改成温柔治愈风，多用口语化表达，像朋友聊天一样，偶尔加些感叹和吐槽"
+                placeholder="输入局部修改提示词，例如：开头再吸引人一点，加点悬念；结尾加一句行动号召；把第二段改得更口语化"
                 className="min-h-[80px] text-sm"
               />
             </div>
@@ -350,7 +642,7 @@ export function StepRefine({
                 size="sm"
               >
                 {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                重新生成
+                局部调整
               </Button>
             </div>
           </div>
@@ -360,66 +652,19 @@ export function StepRefine({
           <div className="flex flex-col gap-3 rounded-lg border p-4">
             <div className="text-xs font-medium">黄金三秒钩子</div>
             <p className="text-xs text-muted-foreground">
-              确定前3秒的钩子内容，抓住用户注意力
+              钩子候选已在上方自动生成，可在上方选择并应用。如需重新生成，点击下方按钮。
             </p>
-            {hookCandidates.length === 0 ? (
-              <div className="flex justify-end">
-                <Button
-                  onClick={handleGenerateHooks}
-                  disabled={loading}
-                  size="sm"
-                >
-                  {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Target className="size-3.5" />}
-                  生成钩子候选
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-col gap-2">
-                  {hookCandidates.map((hook, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSelectedHookIdx(i)}
-                      className={cn(
-                        'flex items-center gap-2 rounded-lg border p-3 text-left text-sm transition-all',
-                        selectedHookIdx === i
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                          : 'border-border hover:bg-muted',
-                      )}
-                    >
-                      <div className={cn(
-                        'flex size-5 items-center justify-center rounded-full border text-xs font-bold',
-                        selectedHookIdx === i
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border',
-                      )}>
-                        {selectedHookIdx === i ? <Check className="size-3" /> : i + 1}
-                      </div>
-                      <span>{hook}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between">
-                  <Button
-                    onClick={handleGenerateHooks}
-                    disabled={loading}
-                    variant="ghost"
-                    size="sm"
-                  >
-                    {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
-                    重新生成
-                  </Button>
-                  <Button
-                    onClick={handleApplyHook}
-                    disabled={loading}
-                    size="sm"
-                  >
-                    {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                    应用选中钩子
-                  </Button>
-                </div>
-              </>
-            )}
+            <div className="flex justify-end">
+              <Button
+                onClick={handleGenerateHooks}
+                disabled={loading || autoHookLoading}
+                variant="ghost"
+                size="sm"
+              >
+                {loading || autoHookLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+                重新生成钩子
+              </Button>
+            </div>
           </div>
         )}
 
@@ -427,66 +672,19 @@ export function StepRefine({
           <div className="flex flex-col gap-3 rounded-lg border p-4">
             <div className="text-xs font-medium">短视频标题选定</div>
             <p className="text-xs text-muted-foreground">
-              选择最合适的短视频标题
+              标题候选已在上方自动生成，可在上方选择并应用。如需重新生成，点击下方按钮。
             </p>
-            {titleCandidates.length === 0 ? (
-              <div className="flex justify-end">
-                <Button
-                  onClick={handleGenerateTitles}
-                  disabled={loading}
-                  size="sm"
-                >
-                  {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Wand2 className="size-3.5" />}
-                  生成标题候选
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-col gap-2">
-                  {titleCandidates.map((title, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSelectedTitleIdx(i)}
-                      className={cn(
-                        'flex items-center gap-2 rounded-lg border p-3 text-left text-sm transition-all',
-                        selectedTitleIdx === i
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                          : 'border-border hover:bg-muted',
-                      )}
-                    >
-                      <div className={cn(
-                        'flex size-5 items-center justify-center rounded-full border text-xs font-bold',
-                        selectedTitleIdx === i
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border',
-                      )}>
-                        {selectedTitleIdx === i ? <Check className="size-3" /> : i + 1}
-                      </div>
-                      <span className="font-medium">{title}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between">
-                  <Button
-                    onClick={handleGenerateTitles}
-                    disabled={loading}
-                    variant="ghost"
-                    size="sm"
-                  >
-                    {loading ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
-                    重新生成
-                  </Button>
-                  <Button
-                    onClick={handleApplyTitle}
-                    disabled={loading}
-                    size="sm"
-                  >
-                    {loading ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-                    应用选中标题
-                  </Button>
-                </div>
-              </>
-            )}
+            <div className="flex justify-end">
+              <Button
+                onClick={handleGenerateTitles}
+                disabled={loading || autoTitleLoading}
+                variant="ghost"
+                size="sm"
+              >
+                {loading || autoTitleLoading ? <Loader2 className="size-3.5 animate-spin" /> : <RotateCcw className="size-3.5" />}
+                重新生成标题
+              </Button>
+            </div>
           </div>
         )}
 

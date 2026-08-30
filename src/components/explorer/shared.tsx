@@ -162,6 +162,9 @@ export function TranscriptView({
 }) {
   const [showSegments, setShowSegments] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [showCorrections, setShowCorrections] = useState(false)
+  const [showRawText, setShowRawText] = useState(false)
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(transcript.text)
@@ -171,12 +174,22 @@ export function TranscriptView({
 
   const durationStr = formatDuration(transcript.duration)
 
+  // 文案超过 3 行时折叠
+  const isLong = transcript.text.length > 150
+
+  const hasCorrections = (transcript.correctionCount ?? 0) > 0
+
   return (
     <div className="mt-2 rounded-lg border border-muted bg-muted/30 p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs font-medium flex items-center gap-1">
           <FileText className="size-3.5" />
           口播文案
+          {hasCorrections && (
+            <Badge variant="secondary" className="text-xs ml-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              已纠错 {transcript.correctionCount} 处
+            </Badge>
+          )}
         </span>
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="text-xs">
@@ -202,9 +215,66 @@ export function TranscriptView({
       </div>
 
       {/* 全文文案 */}
-      <p className="text-sm whitespace-pre-wrap leading-relaxed">
+      <p className={`text-sm whitespace-pre-wrap leading-relaxed ${isLong && !expanded ? 'line-clamp-3' : ''}`}>
         {transcript.text}
       </p>
+
+      {isLong && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-xs text-primary hover:underline mt-1 self-start"
+        >
+          {expanded ? '收起' : '展开全部'}
+        </button>
+      )}
+
+      {/* 纠错详情 */}
+      {hasCorrections && (
+        <div className="mt-2">
+          <button
+            onClick={() => setShowCorrections(!showCorrections)}
+            className="text-xs text-primary hover:underline"
+          >
+            {showCorrections
+              ? '收起纠错详情'
+              : `查看纠错详情 (${transcript.correctionCount} 处)`}
+          </button>
+          {showCorrections && transcript.corrections && (
+            <div className="mt-1 flex flex-col gap-1.5 max-h-40 overflow-y-auto">
+              {transcript.corrections.map((c, i) => (
+                <div
+                  key={i}
+                  className="flex flex-col gap-0.5 rounded border border-amber-500/20 bg-amber-500/5 px-2 py-1"
+                >
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground line-through">{c.original}</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">→</span>
+                    <span className="text-foreground font-medium">{c.corrected}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{c.reason}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 原始转写对比 */}
+      {hasCorrections && transcript.rawText && (
+        <div className="mt-2">
+          <button
+            onClick={() => setShowRawText(!showRawText)}
+            className="text-xs text-muted-foreground hover:underline"
+          >
+            {showRawText ? '隐藏原始转写' : '查看纠错前原文'}
+          </button>
+          {showRawText && (
+            <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed p-2 rounded bg-muted/50">
+              {transcript.rawText}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* 分段时间戳 */}
       {transcript.segments.length > 0 && (
@@ -235,8 +305,28 @@ export function TranscriptView({
         </div>
       )}
 
-      <div className="mt-2 text-xs text-muted-foreground">
-        模型: {transcript.model}
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>模型: {transcript.model}</span>
+        {transcript.provider && (
+          <span className="text-muted-foreground/70">
+            · {transcript.providerMode === 'cloud' ? '☁️' : '🖥️'} {transcript.provider}
+          </span>
+        )}
+        {transcript.confidence != null && (
+          <span
+            className={
+              transcript.qualityLevel === 'EXCELLENT' || transcript.qualityLevel === 'HIGH'
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : transcript.qualityLevel === 'GOOD'
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : transcript.qualityLevel === 'FAIR'
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-red-600 dark:text-red-400'
+            }
+          >
+            · 置信度 {transcript.confidence}{transcript.qualityLevel ? ` (${transcript.qualityLevel})` : ''}
+          </span>
+        )}
       </div>
     </div>
   )

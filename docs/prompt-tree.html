@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content OS — 文案生成影响因素全景图</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-2: #161b22;
+    --bg-3: #1c2330;
+    --border: #2d3748;
+    --border-light: #3b4452;
+    --text: #e6edf3;
+    --text-dim: #ffffff;
+    --text-mute: #ffffff;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --orange: #db6d28;
+    --red: #f85149;
+    --purple: #a371f7;
+    --pink: #f778ba;
+    --cyan: #39d0d8;
+    --card: rgba(22, 27, 34, 0.85);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Noto Serif SC', serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: auto;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(88, 166, 255, 0.08), transparent),
+      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(163, 113, 247, 0.06), transparent);
+    background-attachment: fixed;
+  }
+
+  /* ── Header ── */
+  .header {
+    text-align: center;
+    padding: 48px 24px 32px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(88, 166, 255, 0.03), transparent);
+  }
+  .header h1 {
+    font-size: 28px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .header .subtitle {
+    margin-top: 8px;
+    font-size: 14px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── Legend ── */
+  .legend {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-2);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── Tree Container ── */
+  .tree-container {
+    padding: 40px 24px 80px;
+    min-width: 1400px;
+  }
+
+  /* ── Tree Layout ── */
+  .tree {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  /* Root node */
+  .root-node {
+    background: linear-gradient(135deg, rgba(88, 166, 255, 0.15), rgba(163, 113, 247, 0.15));
+    border: 2px solid var(--accent);
+    border-radius: 12px;
+    padding: 20px 36px;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(88, 166, 255, 0.2);
+    position: relative;
+    z-index: 10;
+  }
+  .root-node .label {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .root-node .desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Vertical connector */
+  .v-connector {
+    width: 2px;
+    height: 32px;
+    background: var(--border-light);
+  }
+
+  /* Level row */
+  .level-row {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    align-items: stretch;
+    position: relative;
+  }
+
+  /* Horizontal branch bar */
+  .h-bar {
+    height: 2px;
+    background: var(--border-light);
+    position: relative;
+  }
+
+  /* Skill node */
+  .skill-node {
+    background: var(--card);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 14px 16px;
+    min-width: 200px;
+    max-width: 240px;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+  .skill-node:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px rgba(88, 166, 255, 0.1);
+    transform: translateY(-2px);
+  }
+
+  /* Top connector stub (from parent bar to node) */
+  .stub-top {
+    position: absolute;
+    top: -32px;
+    left: 50%;
+    width: 2px;
+    height: 32px;
+    background: var(--border-light);
+  }
+
+  /* Node header */
+  .node-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .node-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .node-order {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-mute);
+  }
+  .node-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .node-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+  .node-file {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-mute);
+    padding-top: 6px;
+    border-top: 1px dashed var(--border);
+  }
+
+  /* Factor list */
+  .factor-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .factor-list li {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    padding-left: 14px;
+    position: relative;
+  }
+  .factor-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 7px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+  }
+  .factor-list li.cross::before {
+    background: var(--yellow);
+  }
+
+  /* Color themes per node */
+  .theme-blue   { border-left: 3px solid var(--accent); }
+  .theme-blue  .node-tag { background: rgba(88,166,255,0.12); color: var(--accent); }
+  .theme-green  { border-left: 3px solid var(--green); }
+  .theme-green .node-tag { background: rgba(63,185,80,0.12); color: var(--green); }
+  .theme-purple { border-left: 3px solid var(--purple); }
+  .theme-purple .node-tag { background: rgba(163,113,247,0.12); color: var(--purple); }
+  .theme-yellow { border-left: 3px solid var(--yellow); }
+  .theme-yellow .node-tag { background: rgba(210,153,34,0.12); color: var(--yellow); }
+  .theme-orange { border-left: 3px solid var(--orange); }
+  .theme-orange .node-tag { background: rgba(219,109,40,0.12); color: var(--orange); }
+  .theme-red    { border-left: 3px solid var(--red); }
+  .theme-red   .node-tag { background: rgba(248,81,73,0.12); color: var(--red); }
+  .theme-cyan   { border-left: 3px solid var(--cyan); }
+  .theme-cyan  .node-tag { background: rgba(57,208,216,0.12); color: var(--cyan); }
+  .theme-pink   { border-left: 3px solid var(--pink); }
+  .theme-pink  .node-tag { background: rgba(247,120,186,0.12); color: var(--pink); }
+
+  /* Branch label */
+  .branch-label {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg);
+    padding: 2px 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  /* Branch container */
+  .branch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    padding-top: 20px;
+  }
+
+  /* Cross-constraints section */
+  .cross-section {
+    margin-top: 60px;
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .cross-section h2 {
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--yellow);
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cross-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px;
+  }
+  .cross-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--yellow);
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+  .cross-card .name {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--yellow);
+    margin-bottom: 6px;
+  }
+  .cross-card .skills {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .cross-card .skills span {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(210, 153, 34, 0.1);
+    color: var(--yellow);
+  }
+
+  /* Gap notice */
+  .gap-notice {
+    margin-top: 40px;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    background: rgba(248, 81, 73, 0.06);
+    border: 1px solid rgba(248, 81, 73, 0.2);
+    border-radius: 10px;
+    padding: 16px 24px;
+    text-align: center;
+  }
+  .gap-notice .icon { font-size: 20px; }
+  .gap-notice p {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+  .gap-notice strong { color: var(--red); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Content OS · 文案生成影响因素全景图</h1>
+  <div class="subtitle">All Prompts & Constraints → Final Content Output</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><span class="legend-dot" style="background:var(--accent)"></span> 流程主线</div>
+  <div class="legend-item"><span class="legend-dot" style="background:var(--purple)"></span> 改写/精修</div>
+  <div class="legend-item"><span class="legend-dot" style="background:var(--green)"></span> 分支入口</div>
+  <div class="legend-item"><span class="legend-dot" style="background:var(--yellow)"></span> 评估/分析</div>
+  <div class="legend-item"><span class="legend-dot" style="background:var(--cyan)"></span> 对标改编</div>
+  <div class="legend-item"><span class="legend-dot" style="background:var(--pink)"></span> 文件提炼</div>
+  <div class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span> 风控分析</div>
+  <div class="legend-item"><span class="legend-dot" style="background:var(--red)"></span> 交叉约束</div>
+</div>
+
+<div class="tree-container">
+<div class="tree">
+
+  <!-- Root -->
+  <div class="root-node">
+    <div class="label">最终文案输出</div>
+    <div class="desc">Final Content Draft</div>
+  </div>
+
+  <div class="v-connector"></div>
+
+  <!-- ════════ Level 1: Two main branches ════════ -->
+  <div style="position:relative;width:100%;display:flex;justify-content:center;">
+    <!-- horizontal bar connecting 3 branches -->
+    <div style="position:relative;display:flex;gap:48px;justify-content:center;">
+      <!-- Branch A: Free Creation -->
+      <div class="branch">
+        <div class="branch-label">自由创作流程</div>
+        <div class="v-connector"></div>
+        <div class="skill-node theme-blue">
+          <div class="node-header">
+            <span class="node-tag">SKILL 01</span>
+            <span class="node-title">topic-research</span>
+          </div>
+          <p class="node-desc">主题研究 — 分析用户主题，生成结构化主题画像</p>
+          <ul class="factor-list">
+            <li>识别核心分类</li>
+            <li>提取 ≥5 个关键词</li>
+            <li>提出 ≥3 个核心问题（用户痛点）</li>
+            <li>生成 ≥5 个研究搜索词</li>
+            <li>提出潜在切入角度</li>
+            <li>不虚构数据</li>
+            <li>覆盖主题不同维度</li>
+            <li>搜索词适合搜索引擎</li>
+          </ul>
+          <div class="node-file">skills/topic-research/prompts.ts</div>
+        </div>
+      </div>
+
+      <!-- Branch B: Adaptation -->
+      <div class="branch">
+        <div class="branch-label">对标改编流程</div>
+        <div class="v-connector"></div>
+        <div class="skill-node theme-cyan">
+          <div class="node-header">
+            <span class="node-tag">SKILL 07</span>
+            <span class="node-title">content-adaptation</span>
+          </div>
+          <p class="node-desc">对标改编 — 拆解爆款内容，提炼核心结构，生成差异化改编角度</p>
+          <ul class="factor-list">
+            <li>拆解钩子类型/内容结构/情绪曲线</li>
+            <li>识别爆款因子 + 可改进空间</li>
+            <li>生成 3-5 个改编角度（须有明确差异）</li>
+            <li>结合用户人设和自身想法</li>
+            <li>说明"改变了什么"和"为什么更好"</li>
+            <li>提供改编策略（语调/结构/钩子/CTA）</li>
+            <li>禁止洗稿式改编</li>
+            <li>禁止脱离对标凭空生成</li>
+          </ul>
+          <div class="node-file">skills/content-adaptation/prompts.ts</div>
+        </div>
+      </div>
+
+      <!-- Branch C: Distillation -->
+      <div class="branch">
+        <div class="branch-label">文件提炼流程</div>
+        <div class="v-connector"></div>
+        <div class="skill-node theme-pink">
+          <div class="node-header">
+            <span class="node-tag">SKILL 08</span>
+            <span class="node-title">content-distillation</span>
+          </div>
+          <p class="node-desc">文件提炼 — 深度阅读上传内容，提炼核心素材，生成口播稿创作角度</p>
+          <ul class="factor-list">
+            <li>提炼核心主题/关键洞察/情绪脉络</li>
+            <li>提取原文金句（必须来自原文）</li>
+            <li>识别口播化创作角度</li>
+            <li>找出口播化弱点（过于学术等）</li>
+            <li>生成 3-5 个差异化创作角度</li>
+            <li>提供策略建议（语调/结构/钩子/CTA）</li>
+            <li>禁止简单复制或洗稿</li>
+            <li>禁止编造原文不存在的金句</li>
+          </ul>
+          <div class="node-file">skills/content-distillation/prompts.ts</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="v-connector"></div>
+
+  <!-- ════════ Level 2: Angle Generation (shared by Free Creation) ════════ -->
+  <div class="skill-node theme-blue" style="min-width:260px;">
+    <div class="node-header">
+      <span class="node-tag">SKILL 02</span>
+      <span class="node-title">angle-generation</span>
+    </div>
+    <p class="node-desc">角度生成 — 基于主题画像/爆款分析/受众洞察，生成差异化切入角度<br><em style="color:var(--text-mute)">※ 改编/提炼流程选定角度后跳过此步</em></p>
+    <ul class="factor-list">
+      <li>每个角度独立切入，不重复</li>
+      <li>含 title / angle / reasoning / targetEmotion</li>
+      <li>含 estimatedViralScore / difficulty / keyPoints</li>
+      <li>角度间覆盖不同情绪维度</li>
+      <li>基于数据推断，不虚构</li>
+    </ul>
+    <div class="node-file">skills/angle-generation/prompts.ts</div>
+  </div>
+
+  <div class="v-connector"></div>
+
+  <!-- ════════ Level 3: Content Strategy ════════ -->
+  <div class="skill-node theme-blue" style="min-width:280px;">
+    <div class="node-header">
+      <span class="node-tag">SKILL 03</span>
+      <span class="node-title">content-strategy</span>
+    </div>
+    <p class="node-desc">内容策略 — 基于选定角度，生成完整写作策略框架</p>
+    <ul class="factor-list">
+      <li>生成标题（吸引人但不标题党）</li>
+      <li>生成开篇钩子（1-2 句抓住注意力）</li>
+      <li>生成结构大纲（section / purpose / keyArguments / estimatedWords）</li>
+      <li>生成核心论点（3-5 个）</li>
+      <li>生成情感弧线（开头→中间→结尾）</li>
+      <li>生成行动号召 CTA</li>
+      <li>生成引用素材建议（不虚构）</li>
+      <li>生成建议语调</li>
+      <li>预计总字数</li>
+      <li class="cross">人设匹配：语调/钩子风格/结构须符合人设</li>
+    </ul>
+    <div class="node-file">skills/content-strategy/prompts.ts</div>
+  </div>
+
+  <div class="v-connector"></div>
+
+  <!-- ════════ Level 4: Writing (CORE) ════════ -->
+  <div class="skill-node theme-blue" style="min-width:320px;border-width:2px;box-shadow:0 0 25px rgba(88,166,255,0.08);">
+    <div class="node-header">
+      <span class="node-tag">SKILL 04 · 核心</span>
+      <span class="node-title">writing</span>
+    </div>
+    <p class="node-desc"><strong style="color:var(--accent)">直接生成最终文案初稿</strong> — 所有约束直接影响输出内容</p>
+    <ul class="factor-list">
+      <li>严格遵循策略结构大纲</li>
+      <li>保持策略设定的语调</li>
+      <li>实现情感弧线（开头/中间/结尾）</li>
+      <li>每段展开 keyArguments</li>
+      <li>自然融入 callToAction</li>
+      <li>不虚构数据和引用</li>
+      <li>适合目标平台内容风格</li>
+      <li>标题吸引人但不标题党</li>
+      <li class="cross">人设匹配：语气/用词/表达习惯符合人设</li>
+      <li class="cross">观众视角："大家"而非"你"（仅对话感内容）</li>
+      <li class="cross">人名脱敏：真实人名→"姓+某"（如张某）</li>
+    </ul>
+    <div class="node-file">skills/writing/prompts.ts · output: markdown ## section</div>
+  </div>
+
+  <div class="v-connector"></div>
+
+  <!-- ════════ Level 5: Parallel — Humanization / Evaluation / Strategy-Eval ════════ -->
+  <div style="position:relative;display:flex;gap:24px;justify-content:center;flex-wrap:wrap;">
+    <!-- Humanization -->
+    <div class="skill-node theme-purple" style="min-width:240px;">
+      <div class="stub-top"></div>
+      <div class="node-header">
+        <span class="node-tag">SKILL 05</span>
+        <span class="node-title">humanization</span>
+      </div>
+      <p class="node-desc">去 AI 味 — 检测并改写 AI 生成痕迹，使内容像真人写作</p>
+      <ul class="factor-list">
+        <li>8 类 AI 味检测：模板化/空洞升华/过度排比</li>
+        <li>过度总结/AI高频词/机械连接词</li>
+        <li>情绪堆砌/金句堆砌</li>
+        <li>保持核心观点和结构不变</li>
+        <li>不增加或删除实质性内容</li>
+        <li>替换为自然口语化表达</li>
+        <li>减少排比和金句密度</li>
+        <li>情绪表达更克制真实</li>
+        <li class="cross">观众视角："大家"而非"你"</li>
+      </ul>
+      <div class="node-file">skills/humanization/prompts.ts</div>
+    </div>
+
+    <!-- Evaluation -->
+    <div class="skill-node theme-yellow" style="min-width:240px;">
+      <div class="stub-top"></div>
+      <div class="node-header">
+        <span class="node-tag">SKILL 06</span>
+        <span class="node-title">evaluation</span>
+      </div>
+      <p class="node-desc">内容评估 — 六维评分 + 改进建议（不改写文案，影响修改方向）</p>
+      <ul class="factor-list">
+        <li>六维：情感冲击/逻辑清晰/新颖度</li>
+        <li>可读性/实用性/平台适配</li>
+        <li>列出优点（2-3 个）</li>
+        <li>列出差点（2-3 个）</li>
+        <li>具体改进建议（含优先级）</li>
+        <li>情感弧线达成分析</li>
+        <li>评分客观严格，不虚高</li>
+        <li>不修改原文内容</li>
+      </ul>
+      <div class="node-file">skills/evaluation/prompts.ts</div>
+    </div>
+
+    <!-- Strategy Evaluation -->
+    <div class="skill-node theme-yellow" style="min-width:280px;">
+      <div class="stub-top"></div>
+      <div class="node-header">
+        <span class="node-tag">SKILL 10</span>
+        <span class="node-title">strategy-evaluation</span>
+      </div>
+      <p class="node-desc">策略评分 — 平台策略适配度 + 潜在传播能力评估</p>
+      <ul class="factor-list">
+        <li>抖音权重：Hook 25% / Retention 25%</li>
+        <li>Emotion 20% / Interaction 15%</li>
+        <li>Shareability 10% / Novelty 5%</li>
+        <li>Strategy Consistency 一致性检查</li>
+        <li>Content Promise 钩子承诺≠内容→扣分</li>
+        <li>Information Density 识别空话套话</li>
+        <li>AI Style Risk 评估 AI 痕迹</li>
+        <li>Authenticity 禁止编造个人经历</li>
+        <li>Shareability 分享动机分析</li>
+        <li>Overall = 加权×一致性修正×风险修正</li>
+      </ul>
+      <div class="node-file">skills/strategy-evaluation/prompts.ts</div>
+    </div>
+  </div>
+
+  <div class="v-connector"></div>
+
+  <!-- ════════ Level 6: Refine ════════ -->
+  <div class="skill-node theme-purple" style="min-width:300px;">
+    <div class="node-header">
+      <span class="node-tag">SKILL 09 · 二次精修</span>
+      <span class="node-title">refine</span>
+    </div>
+    <p class="node-desc">二次精修 — 对初稿/去AI味后的内容做最终调整</p>
+    <ul class="factor-list">
+      <li><strong>tone_change</strong>：按语气提示词重新生成口播稿</li>
+      <li>　保持核心观点和结构不变</li>
+      <li>　仅改变表达方式和语气</li>
+      <li><strong>hook_select</strong>：生成 3-5 个黄金三秒钩子</li>
+      <li>　15字以内，类型：悬念/冲突/共鸣/反常识/利益</li>
+      <li><strong>title_select</strong>：生成 3-5 个短视频标题</li>
+      <li>　10-25字，兼顾吸引力与内容一致性</li>
+      <li class="cross">观众视角："大家"而非"你"</li>
+      <li>避免 AI 味，适合口播节奏</li>
+    </ul>
+    <div class="node-file">skills/refine/prompts.ts</div>
+  </div>
+
+  <div class="v-connector"></div>
+
+  <!-- ════════ Level 7: Risk Analysis ════════ -->
+  <div class="skill-node theme-orange" style="min-width:300px;">
+    <div class="node-header">
+      <span class="node-tag">SKILL 11 · 风控</span>
+      <span class="node-title">risk-analysis</span>
+    </div>
+    <p class="node-desc">文章风险分析 — 依据法律法规 + 抖音规范，逐条识别风险</p>
+    <ul class="factor-list">
+      <li>依据 8 部法律法规（网安法/个人信息保护法等）</li>
+      <li>依据 10 条抖音社区规范</li>
+      <li>8 类风险：政治/社会/隐私/虚假/仇恨/商业/平台/法律</li>
+      <li>3 级严重度：high / medium / low</li>
+      <li>4 级整体风险：safe / low / medium / high</li>
+      <li>每条含类别+严重度+描述+建议+原文引用</li>
+      <li>不夸大风险，不遗漏真实风险</li>
+      <li>对新手友好，说明违规原因</li>
+    </ul>
+    <div class="node-file">skills/risk-analysis/prompts.ts</div>
+  </div>
+
+</div><!-- /tree -->
+
+<!-- ════════ Cross Constraints ════════ -->
+<div class="cross-section">
+  <h2>⚠ 交叉约束（在多个 Skill 中重复出现的约束）</h2>
+  <div class="cross-grid">
+    <div class="cross-card">
+      <div class="name">不虚构数据和引用</div>
+      <div class="skills">
+        <span>writing</span><span>content-strategy</span><span>evaluation</span><span>strategy-evaluation</span><span>angle-generation</span><span>content-distillation</span>
+      </div>
+    </div>
+    <div class="cross-card">
+      <div class="name">观众视角"大家"而非"你"</div>
+      <div class="skills">
+        <span>writing</span><span>humanization</span><span>refine</span>
+      </div>
+    </div>
+    <div class="cross-card">
+      <div class="name">人设匹配（Persona）</div>
+      <div class="skills">
+        <span>writing</span><span>content-strategy</span><span>content-adaptation</span><span>content-distillation</span>
+      </div>
+    </div>
+    <div class="cross-card">
+      <div class="name">人名脱敏（张某/李某）</div>
+      <div class="skills">
+        <span style="color:var(--red);background:rgba(248,81,73,0.1)">writing（仅此一处）</span>
+      </div>
+    </div>
+    <div class="cross-card">
+      <div class="name">避免 AI 味</div>
+      <div class="skills">
+        <span>humanization</span><span>refine</span>
+      </div>
+    </div>
+    <div class="cross-card">
+      <div class="name">适合口播节奏</div>
+      <div class="skills">
+        <span>humanization</span><span>refine</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Gap notice -->
+<div class="gap-notice">
+  <div class="icon">🔴</div>
+  <p>
+    <strong>约束覆盖缺口：</strong>人名脱敏仅在 writing skill 中定义，但 humanization 和 refine 会重新生成/改写文案，可能引入新人名。<br>
+    建议将人名脱敏约束同步到 humanization 和 refine 的 system prompt 中。
+  </p>
+</div>
+
+</div><!-- /tree-container -->
+
+</body>
+</html>

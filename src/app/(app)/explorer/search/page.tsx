@@ -25,17 +25,18 @@ export default function SearchPage() {
   const douyin = useDouyinSearch()
   const [douyinQuery, setDouyinQuery] = useState('')
   const [timeFilter, setTimeFilter] = useState<PublishTimeFilter>('none')
+  const [searchCount, setSearchCount] = useState(20)
 
   const handleDouyinSearch = useCallback(() => {
     if (!douyinQuery.trim()) return
-    douyin.search(douyinQuery.trim(), 20, timeFilter)
-  }, [douyin, douyinQuery, timeFilter])
+    douyin.search(douyinQuery.trim(), searchCount, timeFilter)
+  }, [douyin, douyinQuery, timeFilter, searchCount])
 
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 p-4">
         {/* Search bar */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 shrink-0">
           <div className="flex gap-2">
             <Input
               placeholder="输入关键词搜索抖音视频..."
@@ -59,25 +60,46 @@ export default function SearchPage() {
               搜索
             </Button>
           </div>
-          {/* Time filter */}
-          <div className="flex items-center gap-1.5">
-            <Clock className="size-3.5 text-muted-foreground" />
-            {TIME_FILTERS.map((tf) => (
-              <Button
-                key={tf.value}
-                variant={timeFilter === tf.value ? 'default' : 'outline'}
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  setTimeFilter(tf.value)
-                  if (douyinQuery.trim()) {
-                    douyin.search(douyinQuery.trim(), 20, tf.value)
-                  }
-                }}
-              >
-                {tf.label}
-              </Button>
-            ))}
+          {/* Time filter + count selector */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <Clock className="size-3.5 text-muted-foreground" />
+              {TIME_FILTERS.map((tf) => (
+                <Button
+                  key={tf.value}
+                  variant={timeFilter === tf.value ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => {
+                    setTimeFilter(tf.value)
+                    if (douyinQuery.trim()) {
+                      douyin.search(douyinQuery.trim(), searchCount, tf.value)
+                    }
+                  }}
+                >
+                  {tf.label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">数量</span>
+              {[10, 20, 30, 50].map((n) => (
+                <Button
+                  key={n}
+                  variant={searchCount === n ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => {
+                    setSearchCount(n)
+                    if (douyinQuery.trim()) {
+                      douyin.search(douyinQuery.trim(), n, timeFilter)
+                    }
+                  }}
+                >
+                  {n}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -115,8 +137,8 @@ export default function SearchPage() {
             </p>
           </div>
         ) : (
-          <ScrollArea className="h-[calc(100vh-24rem)]">
-            <div className="flex flex-col gap-2 pr-4">
+          <ScrollArea className="h-[calc(100vh-16rem)]">
+            <div className="flex flex-col gap-2 px-1 py-1">
               {douyin.results.map((content, i) => (
                 <DouyinContentCard
                   key={i}
@@ -141,17 +163,17 @@ function DouyinContentCard({
   content: DouyinContent
   douyin: ReturnType<typeof useDouyinSearch>
 }) {
-  const [expanded, setExpanded] = useState(false)
   const metrics = content.metrics
   const hasMetrics = metrics && (metrics.likes || metrics.comments || metrics.shares || metrics.favorites)
   const awemeId = content.awemeId
   const comments = awemeId ? douyin.collectedComments[awemeId] : undefined
+  const commentStat = awemeId ? douyin.commentStatus[awemeId] : undefined
   const analysis = awemeId
     ? douyin.commentAnalysis[awemeId]
     : undefined
 
   return (
-    <Card className="overflow-hidden">
+    <Card>
       <CardContent className="flex gap-3 p-4">
         {/* Cover image */}
         {content.cover && (
@@ -160,7 +182,7 @@ function DouyinContentCard({
             <img
               src={content.cover}
               alt={content.title || ''}
-              className="size-20 rounded-lg object-cover"
+              className="w-20 rounded-lg object-cover aspect-[9/16]"
               loading="lazy"
             />
           </div>
@@ -169,9 +191,13 @@ function DouyinContentCard({
         {/* Content */}
         <div className="flex-1 min-w-0 flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
-              抖音
-            </Badge>
+            {content.platform === 'douyin' || !content.platform ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 32 32" className="shrink-0"><title>tik-tok</title><g fill="currentColor"><path d="M24.562,7.613c-1.508-.983-2.597-2.557-2.936-4.391-.073-.396-.114-.804-.114-1.221h-4.814l-.008,19.292c-.081,2.16-1.859,3.894-4.039,3.894-.677,0-1.315-.169-1.877-.465-1.288-.678-2.169-2.028-2.169-3.582,0-2.231,1.815-4.047,4.046-4.047,.417,0,.816,.069,1.194,.187v-4.914c-.391-.053-.788-.087-1.194-.087-4.886,0-8.86,3.975-8.86,8.86,0,2.998,1.498,5.65,3.783,7.254,1.439,1.01,3.19,1.606,5.078,1.606,4.886,0,8.86-3.975,8.86-8.86V11.357c1.888,1.355,4.201,2.154,6.697,2.154v-4.814c-1.345,0-2.597-.4-3.647-1.085Z" /></g></svg>
+            ) : (
+              <Badge variant="secondary" className="text-xs">
+                {content.platform}
+              </Badge>
+            )}
             {content.author && (
               <span className="text-xs text-muted-foreground">
                 {content.author}
@@ -179,18 +205,9 @@ function DouyinContentCard({
             )}
           </div>
 
-          <p className={`text-sm ${expanded ? '' : 'line-clamp-2'}`}>
+          <p className="text-sm">
             {content.title || content.content || '无描述'}
           </p>
-
-          {!expanded && content.title && content.content && content.title !== content.content && (
-            <button
-              onClick={() => setExpanded(true)}
-              className="text-xs text-primary hover:underline self-start"
-            >
-              展开
-            </button>
-          )}
 
           {hasMetrics && (
             <div className="flex gap-3 text-xs text-muted-foreground">
@@ -235,7 +252,11 @@ function DouyinContentCard({
                 )}
                 {comments && comments.length > 0
                   ? `评论 ${comments.length} 条`
-                  : '采集评论'}
+                  : commentStat === 'no-qualified'
+                    ? '无符合条件评论'
+                    : commentStat === 'error'
+                      ? '评论采集失败'
+                      : '采集评论'}
               </Button>
             )}
             {content.url && (
@@ -251,9 +272,16 @@ function DouyinContentCard({
           </div>
 
           {/* Comment error */}
-          {douyin.commentsError && comments === undefined && (
+          {commentStat === 'error' && douyin.commentsError && (
             <div className="rounded border border-destructive/20 bg-destructive/5 p-2 text-xs text-destructive">
               {douyin.commentsError}
+            </div>
+          )}
+
+          {/* No qualified comments */}
+          {commentStat === 'no-qualified' && (
+            <div className="rounded border border-amber-500/20 bg-amber-500/5 p-2 text-xs text-amber-600 dark:text-amber-400">
+              本视频没有点赞 ≥ 100 的评论，跳过评论分析。
             </div>
           )}
 

@@ -38,6 +38,7 @@ interface ContentSearchOutput {
       views: number | null
     } | null
   }>
+  message?: string
 }
 
 export function useTopicResearch() {
@@ -100,8 +101,13 @@ export function useTopicResearch() {
           throw new Error(data.error || '搜索失败')
         }
 
-        setContents((data.data as ContentSearchOutput).contents)
-        return (data.data as ContentSearchOutput).contents
+        const result = data.data as ContentSearchOutput
+        setContents(result.contents)
+        // 如果搜索返回了状态消息（如网络错误），展示给用户
+        if (result.message && result.contents.length === 0) {
+          setError(result.message)
+        }
+        return result.contents
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
         setError(msg)

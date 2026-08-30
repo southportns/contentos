@@ -11,11 +11,13 @@ import { useContentStrategy } from '@/hooks/use-content-strategy'
 import { useWriting } from '@/hooks/use-writing'
 import { useEvaluation } from '@/hooks/use-evaluation'
 import { useStrategyEvaluation } from '@/hooks/use-strategy-evaluation'
+import { useRiskAnalysis } from '@/hooks/use-risk-analysis'
 import type {
   ContentStrategy,
   WritingDraft,
   EvaluationResult,
   StrategyEvaluationResult,
+  RiskAnalysisResult,
 } from '@/hooks/use-workflow'
 
 export default function GeneratePage() {
@@ -26,11 +28,15 @@ export default function GeneratePage() {
   const writingHook = useWriting()
   const evalHook = useEvaluation()
   const strategyEvalHook = useStrategyEvaluation()
+  const riskAnalysisHook = useRiskAnalysis()
 
   const [duration, setDuration] = useState(120)
 
-  // Duration (seconds) → word count (Chinese spoken: ~4.5 chars/sec)
-  const wordCount = Math.round(duration * 4.5)
+  // Duration (seconds) → word count
+  // Chinese spoken: ~4.5 chars/sec base rate, +20% to account for
+  // filler words (气口、语气词) that get cut during video editing
+  const WORDS_PER_SECOND = 4.5 * 1.2 // = 5.4
+  const wordCount = Math.round(duration * WORDS_PER_SECOND)
 
   // Guard: if no selected angle, redirect to angles
   useEffect(() => {
@@ -82,58 +88,68 @@ export default function GeneratePage() {
     const draftData = writingResult as unknown as WritingDraft
     workflowActions.setDraft(draftData)
 
-    // Step C: Evaluation
-    const evalResult = await evalHook.evaluate({
-      content: draftData.content,
-      title: draftData.title,
-      strategy: {
-        title: strategyData.title,
-        keyArguments: strategyData.keyArguments,
-        emotionalArc: strategyData.emotionalArc,
-        callToAction: strategyData.callToAction,
-      },
-      selectedAngle: {
-        title: ws.selectedAngle.title,
-        targetEmotion: ws.selectedAngle.targetEmotion,
-        keyPoints: ws.selectedAngle.keyPoints,
-      },
-      platform: ws.topicProfile?.platform || undefined,
-    })
-    if (evalResult) {
-      const evalData = evalResult as unknown as EvaluationResult
-      workflowActions.setEvaluation(evalData)
-    }
-
-    // Step D: Strategy Evaluation (platform-specific)
+    // Step C + D + E: Evaluation, Strategy Evaluation, and Risk Analysis in parallel
+    // All three only depend on draft + strategy, so they can run concurrently
+    // Using allSettled so one failure doesn't block the others
     const platform = ws.topicProfile?.platform
-    if (platform) {
-      const strategyEvalResult = await strategyEvalHook.evaluate({
-        platform,
-        topic: ws.topicProfile.topic,
-        angle: {
+    const [evalSettled, strategyEvalSettled, riskSettled] = await Promise.allSettled([
+      evalHook.evaluate({
+        content: draftData.content,
+        title: draftData.title,
+        strategy: {
+          title: strategyData.title,
+          keyArguments: strategyData.keyArguments,
+          emotionalArc: strategyData.emotionalArc,
+          callToAction: strategyData.callToAction,
+        },
+        selectedAngle: {
           title: ws.selectedAngle.title,
-          angle: ws.selectedAngle.angle,
           targetEmotion: ws.selectedAngle.targetEmotion,
           keyPoints: ws.selectedAngle.keyPoints,
         },
-        strategy: {
-          title: strategyData.title,
-          hook: strategyData.hook,
-          structure: strategyData.structure,
-          emotionalArc: strategyData.emotionalArc,
-          callToAction: strategyData.callToAction,
-          tone: strategyData.tone,
-        },
-        draft: {
-          title: draftData.title,
-          content: draftData.content,
-          wordCount: draftData.wordCount,
-        },
-      })
-      if (strategyEvalResult) {
-        const seData = strategyEvalResult as unknown as StrategyEvaluationResult
-        workflowActions.setStrategyEvaluation(seData)
-      }
+        platform: ws.topicProfile?.platform || undefined,
+      }),
+      platform
+        ? strategyEvalHook.evaluate({
+            platform,
+            topic: ws.topicProfile.topic,
+            angle: {
+              title: ws.selectedAngle.title,
+              angle: ws.selectedAngle.angle,
+              targetEmotion: ws.selectedAngle.targetEmotion,
+              keyPoints: ws.selectedAngle.keyPoints,
+            },
+            strategy: {
+              title: strategyData.title,
+              hook: strategyData.hook,
+              structure: strategyData.structure,
+              emotionalArc: strategyData.emotionalArc,
+              callToAction: strategyData.callToAction,
+              tone: strategyData.tone,
+            },
+            draft: {
+              title: draftData.title,
+              content: draftData.content,
+              wordCount: draftData.wordCount,
+            },
+          })
+        : Promise.resolve(null),
+      riskAnalysisHook.analyze({
+        content: draftData.content,
+        title: draftData.title,
+        platform: ws.topicProfile?.platform || undefined,
+      }),
+    ])
+
+    // Each step is independent — a failure in one doesn't affect the others
+    if (evalSettled.status === 'fulfilled' && evalSettled.value) {
+      workflowActions.setEvaluation(evalSettled.value as unknown as EvaluationResult)
+    }
+    if (strategyEvalSettled.status === 'fulfilled' && strategyEvalSettled.value) {
+      workflowActions.setStrategyEvaluation(strategyEvalSettled.value as unknown as StrategyEvaluationResult)
+    }
+    if (riskSettled.status === 'fulfilled' && riskSettled.value) {
+      workflowActions.setRiskAnalysis(riskSettled.value as unknown as RiskAnalysisResult)
     }
   }, [
     ws.topicProfile,
@@ -144,6 +160,7 @@ export default function GeneratePage() {
     writingHook,
     evalHook,
     strategyEvalHook,
+    riskAnalysisHook,
   ])
 
   const handleUpdateDraft = useCallback((patch: Partial<WritingDraft>) => {
@@ -158,13 +175,15 @@ export default function GeneratePage() {
     strategyHook.loading ||
     writingHook.loading ||
     evalHook.loading ||
-    strategyEvalHook.loading
+    strategyEvalHook.loading ||
+    riskAnalysisHook.loading
 
   const anyError =
     strategyHook.error ||
     writingHook.error ||
     evalHook.error ||
-    strategyEvalHook.error
+    strategyEvalHook.error ||
+    riskAnalysisHook.error
 
   const loadingLabel = strategyHook.loading
     ? '生成策略中...'
@@ -174,7 +193,9 @@ export default function GeneratePage() {
         ? '评估中...'
         : strategyEvalHook.loading
           ? '策略评分中...'
-          : ''
+          : riskAnalysisHook.loading
+            ? '风控分析中...'
+            : ''
 
   return (
     <div className="flex flex-col gap-4">
@@ -184,6 +205,7 @@ export default function GeneratePage() {
         draft={ws.draft}
         evaluation={ws.evaluation}
         strategyEvaluation={ws.strategyEvaluation}
+        riskAnalysis={ws.riskAnalysis}
         onGenerate={handleGenerate}
         generating={generating}
         duration={duration}

@@ -53,6 +53,7 @@ export default function FinalPage() {
           } : ws.draft}
           evaluation={ws.evaluation}
           strategyEvaluation={ws.strategyEvaluation}
+          riskAnalysis={ws.riskAnalysis}
           platform={ws.topicProfile?.platform || ''}
           refineData={ws.refineData}
         />

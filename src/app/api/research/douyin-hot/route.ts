@@ -1,20 +1,13 @@
 import { NextResponse } from 'next/server'
-import { getHotSearch, checkDouyinHealth } from '@/lib/tools/douyin-client'
+import { getHotSearch } from '@/lib/tools/douyin-client'
 
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 45
 
 export async function GET() {
   try {
-    // 先检查微服务是否可用
-    const healthy = await checkDouyinHealth()
-    if (!healthy) {
-      return NextResponse.json({
-        success: false,
-        error: '抖音数据服务未启动。请先启动微服务（端口 8800）。',
-      }, { status: 503 })
-    }
-
+    // 直接请求热搜数据（微服务已做 5 分钟缓存，响应很快）
+    // 不再单独做 health check，省一次 HTTP 往返
     const items = await getHotSearch()
 
     return NextResponse.json({

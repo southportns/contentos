@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getVideoDetail, extractAwemeId, checkDouyinHealth } from '@/lib/tools/douyin-client'
 
 export const runtime = 'nodejs'
-export const maxDuration = 30
+export const maxDuration = 45
 
 const detailSchema = z.object({
   url: z.string().optional(),

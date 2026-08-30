@@ -149,7 +149,7 @@ export function StepFinal({
   return (
     <Card>
       <StepHeader step={6} title="终稿输出" active={true} done={!!finalOutput} />
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="flex flex-col gap-3">
         {/* Actions bar */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

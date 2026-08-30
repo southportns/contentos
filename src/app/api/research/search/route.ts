@@ -9,7 +9,9 @@ export const maxDuration = 120
 
 const searchInputSchema = z.object({
   queries: z.array(z.string()).min(1),
-  topicId: z.string(),
+  // topicId is optional — when absent (e.g. explorer/research page),
+  // search results are returned without DB persistence
+  topicId: z.string().optional(),
   limit: z.number().int().positive().max(30).default(10),
   publishTime: z
     .enum(['none', '1d', '7d', '14d', '30d'])
@@ -23,11 +25,21 @@ export async function POST(req: NextRequest) {
 
     const result = await runContentSearch(input)
 
-    // Persist to database
-    if (isDatabaseConfigured()) {
+    // Persist to database — only when a valid topicId is provided
+    // (explorer/research pages omit topicId entirely, so no DB lookup occurs)
+    if (isDatabaseConfigured() && input.topicId) {
       await safeDb(async () => {
+        // Verify the topic exists before saving to avoid FK violations
+        const topic = await contentService.getTopic(input.topicId!)
+        if (!topic) {
+          console.warn(
+            `[content-search-save] Topic ${input.topicId} not found, skipping DB save`,
+          )
+          return null
+        }
+
         await contentService.saveResearchResult({
-          topicId: input.topicId,
+          topicId: input.topicId!,
           queries: input.queries,
           contents: result.contents.map((c) => ({
             platform: c.platform,

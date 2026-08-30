@@ -13,6 +13,7 @@ import type {
   ContentAngle,
   TopicProfile,
   RefineResult,
+  RiskAnalysisResult,
 } from '@/hooks/use-workflow'
 
 interface SaveProjectButtonProps {
@@ -22,6 +23,7 @@ interface SaveProjectButtonProps {
   draft: WritingDraft | null
   evaluation: EvaluationResult | null
   strategyEvaluation: StrategyEvaluationResult | null
+  riskAnalysis?: RiskAnalysisResult | null
   platform: string
   refineData?: RefineResult | null
   projectId?: string | null
@@ -34,6 +36,7 @@ export function SaveProjectButton({
   draft,
   evaluation,
   strategyEvaluation,
+  riskAnalysis,
   platform,
   refineData,
   projectId,
@@ -124,6 +127,13 @@ export function SaveProjectButton({
               }
             : undefined,
           refineChanges: refineData?.changes,
+          riskAnalysis: riskAnalysis
+            ? {
+                risks: riskAnalysis.risks,
+                overallRiskLevel: riskAnalysis.overallRiskLevel,
+                summary: riskAnalysis.summary,
+              }
+            : undefined,
         }),
       })
 
@@ -151,6 +161,7 @@ export function SaveProjectButton({
     draft,
     evaluation,
     strategyEvaluation,
+    riskAnalysis,
     platform,
     refineData,
     effectiveProjectId,

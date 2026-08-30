@@ -84,9 +84,9 @@ interface ContentStrategyOutput {
 ## Constraints
 
 - 结构至少 3 个段落
-- 不虚构引用数据
+- 不虚构引用数据，基于上下文和互联网热点内容进行构建
 - 基于 selectedAngle 生成
-- 如果提供了 persona，策略必须符合人设的语调、风格和限制条件
+- 如果提供了 persona，策略必须符合人设的的所有限制条件
 
 ## Version
 
