@@ -1,3 +1,5 @@
+<img width="393" height="406" alt="logo1" src="https://github.com/user-attachments/assets/705376bc-ec76-4fe7-b59c-ca94ef8c0594" />
+
 # Content OS
 
 > AI 内容研究、爆款分析、内容决策与写作系统
