@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { GearNodes } from '@/components/icons/gear-nodes'
 import {
   PenLine, Sparkles, Target, ClipboardCheck, Wand2,
   ArrowRight, FileText, Lightbulb, Gauge, Rocket,
@@ -11,7 +12,7 @@ import {
 
 const CREATION_MODES = [
   {
-    icon: Sparkles,
+    icon: GearNodes,
     title: '自由创作',
     description: '输入一个主题，AI 自动研究、分析、生成角度并写作。适合从零开始的内容创作。',
   },

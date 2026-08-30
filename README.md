@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="public/logo.png" alt="Content OS" width="240" />
+</p>
+
 # Content OS
 
-> AI 内容研究、爆款分析、内容决策与写作系统
+> AI 内容研究、爆款分析、内容决策与口播稿写作系统
 
 Content OS 是一个从主题研究到终稿输出的全流程 AI 内容创作系统。不直接生成文章，而是先研究主题、分析爆款、提炼观点，再进入写作。每一步都有 AI 辅助，但用户始终拥有最终决策权。
 
@@ -59,7 +63,7 @@ Content OS 是一个从主题研究到终稿输出的全流程 AI 内容创作�
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/southportns/contentos.git content-os
+git clone https://github.com/southportns/contextos.git content-os
 cd content-os
 
 # 2. 安装依赖
@@ -67,7 +71,7 @@ npm install
 
 # 3. 配置环境变量
 cp .env.example .env.local
-# 编辑 .env.local 填入你的 AI API Key
+# 编辑 .env.local 填入你的大模型 API Key
 
 # 4. 初始化数据库
 npx prisma migrate dev --name init
@@ -84,7 +88,7 @@ npm run dev
 
 ```bash
 npm run build
-npm run start
+npm run dev
 ```
 
 ## 环境变量
@@ -94,10 +98,8 @@ npm run start
 | `DATABASE_URL` | SQLite 数据库路径，默认 `file:./dev.db` | 是 |
 | `AI_PROVIDER` | AI 服务商：deepseek / openai / anthropic / google / glm 等 | 是 |
 | `AI_MODEL` | 模型名称，如 `deepseek-chat` | 是 |
-| `DEEPSEEK_API_KEY` | DeepSeek API Key | 至少一个 |
-| `OPENAI_API_KEY` | OpenAI API Key | 至少一个 |
-| `ANTHROPIC_API_KEY` | Anthropic API Key | 至少一个 |
-| `ASR_MODE` | ASR 模式: auto / cloud | 否 |
+| `大模型 API Key` | 任意一家大模型服务商的 API Key（DeepSeek / OpenAI / Anthropic / Google / 智谱 GLM / 通义千问 / Kimi 等） | 至少一个 |
+| `ASR_MODE` | ASR 模式: cloud（当前版本仅支持云端） | 否 |
 | `ASR_CLOUD_PROVIDER` | 云端 ASR: alibaba / xiaomi | 否 |
 | `XIAOMI_ASR_API_KEY` | 小米 MiMo API Key | 使用 ASR 时 |
 | `ALIBABA_ASR_API_KEY` | 阿里云百炼 API Key | 使用 ASR 时 |

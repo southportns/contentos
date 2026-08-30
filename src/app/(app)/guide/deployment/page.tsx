@@ -6,6 +6,7 @@ import {
   PackageOpen,
   Lightbulb,
   CheckCircle2,
+  Bot,
 } from 'lucide-react'
 
 export default function DeploymentPage() {
@@ -13,9 +14,9 @@ export default function DeploymentPage() {
     <div className="flex flex-col gap-6">
       {/* Hero */}
       <div className="flex flex-col gap-3 pb-2">
-        <h1 className="text-3xl font-bold">本地部署</h1>
+        <h1 className="text-3xl font-bold">部署方法</h1>
         <p className="text-muted-foreground">
-          Content OS 支持完全本地部署，以下是从零开始的部署教程。无需 Docker，无需翻墙。
+          Content OS 使用 SQLite 嵌入式数据库和云端 AI 服务，部署简单。以下是从零开始的部署指南。
         </p>
       </div>
 
@@ -44,29 +45,30 @@ export default function DeploymentPage() {
           <li className="flex items-start gap-2 text-xs text-muted-foreground">
             <CheckCircle2 className="size-3.5 shrink-0 mt-0.5 text-primary/60" />
             <span>
-              <strong className="text-foreground">AI API Key</strong> — 至少需要一个 AI 服务商的 API Key（DeepSeek / OpenAI / Anthropic / Google / GLM 等）
+              <strong className="text-foreground">大模型 API Key</strong> — 任意一家大模型服务商的 API Key 即可（DeepSeek / OpenAI / Anthropic / Google / 智谱 GLM / 通义千问 / Kimi / 腾讯混元 / 小米 MiMo / MiniMax / 字节豆包等）
             </span>
           </li>
         </ul>
-        <div className="flex items-start gap-2 rounded-md bg-green-500/5 p-3">
-          <CheckCircle2 className="size-3.5 shrink-0 mt-0.5 text-green-600" />
-          <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">零外部依赖</strong> — 使用 SQLite 嵌入式数据库，无需安装 Docker 或外部数据库。内置 DuckDuckGo 搜索和 Jina Reader 抓取，无需注册任何外部服务。口播稿识别支持云端 ASR（阿里云百炼 / 小米 MiMo），可选配置。
-          </p>
-        </div>
       </div>
 
-      {/* Step 1: Clone */}
+      {/* Step 1: Clone via Agent */}
       <div className="flex flex-col gap-3 rounded-lg border p-5">
         <div className="flex items-center gap-2">
-          <Terminal className="size-4 text-primary" />
-          <h3 className="text-sm font-semibold">第一步：克隆项目</h3>
+          <Bot className="size-4 text-primary" />
+          <h3 className="text-sm font-semibold">第一步：使用 Agent 工具克隆项目</h3>
         </div>
         <p className="text-xs text-muted-foreground">
-          打开终端，执行以下命令克隆项目代码并进入项目目录：
+          如果你不熟悉 Git 命令，可以使用 AI Agent 工具来帮你完成部署。将以下命令发送给任意 Agent 工具（如 Trae、Qoder、Codex、Claude Code、WorkBuddy 等）：
         </p>
-        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`git clone https://github.com/southportns/contentos.git content-os
+        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`git clone https://github.com/southportns/contextos.git content-os
 cd content-os`}</code></pre>
+        <div className="flex items-start gap-2 rounded-md bg-primary/5 p-3">
+          <Lightbulb className="size-3.5 shrink-0 mt-0.5 text-primary" />
+          <p className="text-xs text-muted-foreground">
+            <strong className="text-foreground">提示：</strong>
+            告诉 Agent 这是一个基于 Next.js + SQLite + Prisma 的项目，让它执行克隆、安装依赖、配置环境变量、初始化数据库和启动应用。Agent 会自动完成后续步骤。
+          </p>
+        </div>
       </div>
 
       {/* Step 2: Install Dependencies */}
@@ -76,7 +78,7 @@ cd content-os`}</code></pre>
           <h3 className="text-sm font-semibold">第二步：安装依赖</h3>
         </div>
         <p className="text-xs text-muted-foreground">
-          使用 npm 安装项目依赖：
+          在项目目录中执行以下命令安装依赖：
         </p>
         <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`npm install`}</code></pre>
         <p className="text-xs text-muted-foreground">
@@ -100,20 +102,18 @@ cd content-os`}</code></pre>
         <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`# 数据库（SQLite，无需外部服务）
 DATABASE_URL="file:./dev.db"
 
-# AI 服务商（至少填一个）
-DEEPSEEK_API_KEY=你的 DeepSeek API Key
-OPENAI_API_KEY=你的 OpenAI API Key
-ANTHROPIC_API_KEY=你的 Anthropic API Key
+# 任意一家大模型的 API Key 即可
+# 支持的厂商：OpenAI / DeepSeek / Anthropic / Google / 智谱GLM / 通义千问 / Kimi / 腾讯混元 / 小米MiMo / MiniMax / 字节豆包
+# 只需填写你使用的那个厂商的 Key
 
-# AI 模型配置
+# AI 模型配置（以你选择的厂商为准）
 AI_PROVIDER=deepseek
 AI_MODEL=deepseek-chat`}</code></pre>
         <div className="flex items-start gap-2 rounded-md bg-primary/5 p-3">
           <Lightbulb className="size-3.5 shrink-0 mt-0.5 text-primary" />
           <p className="text-xs text-muted-foreground">
-            <strong className="text-foreground">AI 服务商选择建议：</strong>
-            国内用户推荐使用 DeepSeek（性价比高、速度快）；需要更高质量可使用 Anthropic Claude 或 OpenAI GPT-4o。
-            只需填写你使用的那一个服务商的 Key 即可。也可以在应用内的「设置」页面直接配置。
+            <strong className="text-foreground">提示：</strong>
+            也可以在应用启动后，进入「设置」页面直接配置 AI 模型，无需手动编辑文件。
           </p>
         </div>
       </div>
@@ -131,6 +131,33 @@ AI_MODEL=deepseek-chat`}</code></pre>
         <p className="text-xs text-muted-foreground">
           如果迁移成功，你会看到类似 <code className="rounded bg-muted px-1 py-0.5">&ldquo;Applied migration&rdquo;</code> 的输出。同时 Prisma Client 会自动生成。
         </p>
+
+        {/* SQLite Path Note */}
+        <div className="flex flex-col gap-2 rounded-md bg-amber-500/5 p-3">
+          <div className="flex items-start gap-2">
+            <Database className="size-3.5 shrink-0 mt-0.5 text-amber-600" />
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-foreground">
+                关于 SQLite 数据库文件路径
+              </p>
+              <p className="text-xs text-muted-foreground">
+                默认配置 <code className="rounded bg-muted px-1 py-0.5">DATABASE_URL="file:./dev.db"</code> 会将数据库文件放在项目根目录下。这在开发模式下完全可用。
+              </p>
+              <p className="text-xs text-muted-foreground">
+                <strong className="text-foreground">为什么有时会建议放在项目目录外？</strong>
+                主要原因是 Next.js 的文件监听（file watcher）在开发模式下可能触发 SQLite WAL 文件的锁冲突，以及生产环境打包时数据库文件不应被包含在构建产物中。但在当前版本中，我们已经通过 <code className="rounded bg-muted px-1 py-0.5">.gitignore</code> 排除了 <code className="rounded bg-muted px-1 py-0.5">*.db</code> 文件，并且 <code className="rounded bg-muted px-1 py-0.5">next.config.ts</code> 的 standalone 输出模式不会包含数据库文件，所以放在项目目录下是安全的。
+              </p>
+              <p className="text-xs text-muted-foreground">
+                如果你希望将数据库放在项目目录外（例如避免文件监听干扰），可以修改 <code className="rounded bg-muted px-1 py-0.5">.env.local</code> 中的路径为绝对路径：
+              </p>
+              <pre className="overflow-x-auto rounded bg-muted p-2 text-xs"><code>{`# 使用绝对路径，将数据库放在项目目录外
+DATABASE_URL="file:/path/to/your/data/contentos.db"`}</code></pre>
+              <p className="text-xs text-muted-foreground">
+                修改路径后需要重新执行 <code className="rounded bg-muted px-1 py-0.5">npx prisma migrate dev</code> 来创建新的数据库文件。
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Step 5: Start */}
@@ -160,9 +187,9 @@ npm run start`}</code></pre>
           <h3 className="text-sm font-semibold">可选：口播稿识别配置</h3>
         </div>
         <p className="text-xs text-muted-foreground">
-          如果需要使用抖音视频口播文案提取功能，需要配置 ASR（语音识别）服务。可在应用内「设置」页面配置，也可在 <code className="rounded bg-muted px-1 py-0.5">.env.local</code> 中添加：
+          如果需要使用抖音视频口播文案提取功能，需要配置 ASR（语音识别）服务。当前版本仅支持云端模式，可选阿里云百炼或小米 MiMo。可在应用内「设置」页面配置，也可在 <code className="rounded bg-muted px-1 py-0.5">.env.local</code> 中添加：
         </p>
-        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`# ASR 模式: auto / cloud (默认 auto)
+        <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs"><code>{`# ASR 模式（当前版本固定为 cloud）
 ASR_MODE=cloud
 
 # 云端 ASR 服务商: alibaba / xiaomi
@@ -193,7 +220,7 @@ XIAOMI_ASR_API_KEY=你的小米 MiMo API Key
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium text-foreground">AI 生成报错？</p>
             <p className="text-xs text-muted-foreground">
-              检查 <code className="rounded bg-muted px-1 py-0.5">.env.local</code> 中 AI_PROVIDER 和 AI_MODEL 是否匹配你填写的 API Key。例如使用 DeepSeek 时，确保 <code className="rounded bg-muted px-1 py-0.5">AI_PROVIDER=deepseek</code> 和 <code className="rounded bg-muted px-1 py-0.5">AI_MODEL=deepseek-chat</code>。也可以在应用内「设置」页面修改。
+              检查 <code className="rounded bg-muted px-1 py-0.5">.env.local</code> 中 AI_PROVIDER 和 AI_MODEL 是否匹配你填写的 API Key。也可以在应用内「设置」页面修改。
             </p>
           </div>
           <div className="flex flex-col gap-1">
@@ -211,7 +238,7 @@ XIAOMI_ASR_API_KEY=你的小米 MiMo API Key
           <div className="flex flex-col gap-1">
             <p className="text-xs font-medium text-foreground">better-sqlite3 编译失败？</p>
             <p className="text-xs text-muted-foreground">
-              Windows 系统需要安装 Visual Studio Build Tools（包含 C++ 桌面开发工具）。可通过 <code className="rounded bg-muted px-1 py-0.5">npm install --global windows-build-tools</code> 或在 Visual Studio Installer 中勾选「C++ 桌面开发」工作负载。
+              Windows 系统需要安装 Visual Studio Build Tools（包含 C++ 桌面开发工具）。可在 Visual Studio Installer 中勾选「C++ 桌面开发」工作负载。
             </p>
           </div>
         </div>

@@ -119,9 +119,8 @@ export async function GET() {
     ? getVal(ASR_ENV_KEYS.alibabaBaseUrl) || 'https://dashscope.aliyuncs.com/api/v1'
     : getVal(ASR_ENV_KEYS.xiaomiBaseUrl) || 'https://api.xiaomimimo.com/v1'
 
-  // Determine default mode based on available key
-  const hasCloudKey = !!(alibabaKey || xiaomiKey)
-  const defaultMode = getVal(ASR_ENV_KEYS.mode) || (hasCloudKey ? 'cloud' : 'local')
+  // Current version only supports cloud mode
+  const defaultMode = 'cloud'
 
   return NextResponse.json({
     success: true,
