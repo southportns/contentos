@@ -19,9 +19,9 @@ export default function GuideLayout({
   const pathname = usePathname()
 
   return (
-    <div className="mx-auto max-w-3xl">
-      {/* 二级导航 */}
-      <nav className="flex items-center gap-1 border-b px-6 pt-4">
+    <div className="mx-auto flex h-[calc(100svh-3.5rem)] max-w-3xl flex-col">
+      {/* 二级导航 — 固定在顶部，不随滚动 */}
+      <nav className="flex shrink-0 items-center gap-1 border-b px-6 pt-4">
         {subNavItems.map((item) => {
           const isActive =
             item.href === '/guide'
@@ -46,7 +46,7 @@ export default function GuideLayout({
         })}
       </nav>
 
-      <div className="p-6">{children}</div>
+      <div className="flex-1 overflow-y-auto p-6">{children}</div>
     </div>
   )
 }
