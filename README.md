@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="393" height="406" alt="Content OS Logo" src="https://github.com/user-attachments/assets/705376bc-ec76-4fe7-b59c-ca94ef8c0594" />
+  <img width="150" height="155" alt="Content OS Logo" src="https://github.com/user-attachments/assets/705376bc-ec76-4fe7-b59c-ca94ef8c0594" />
 </p>
 
 # Content OS
