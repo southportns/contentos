@@ -36,7 +36,6 @@ import {
   AudioWaveformIcon,
   CloudIcon,
   HardDriveIcon,
-  ZapIcon,
 } from 'lucide-react'
 
 const PROVIDER_LABELS: Record<ModelProvider, string> = {
@@ -115,7 +114,7 @@ export default function SettingsPage() {
   } = useASRSettings()
 
   // ASR local form state
-  const [asrMode, setAsrMode] = useState<ASRMode>('auto')
+  const [asrMode, setAsrMode] = useState<ASRMode>('cloud')
   const [asrModel, setAsrModel] = useState('medium')
   const [asrDevice, setAsrDevice] = useState('cpu')
   const [asrBeamSize, setAsrBeamSize] = useState('5')
@@ -129,7 +128,8 @@ export default function SettingsPage() {
   // Sync ASR config from server
   useEffect(() => {
     if (asrConfig) {
-      setAsrMode(asrConfig.mode)
+      // 强制使用 cloud 模式（当前版本仅支持云端 ASR）
+      setAsrMode('cloud')
       setAsrModel(asrConfig.local.whisperModel)
       setAsrDevice(asrConfig.local.whisperDevice)
       setAsrBeamSize(asrConfig.local.whisperBeamSize)
@@ -465,40 +465,20 @@ export default function SettingsPage() {
             口播稿识别配置
           </CardTitle>
           <CardDescription>
-            配置语音识别（ASR）服务商。云端模式可选阿里云百炼或小米 MiMo ASR。本地模式将在后续版本中支持。
+            配置语音识别（ASR）服务商。当前版本仅支持云端模式，可选阿里云百炼或小米 MiMo ASR。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          {/* ASR Mode Selection */}
+          {/* ASR Mode — fixed to cloud, no selection needed */}
           <div className="flex flex-col gap-2">
             <Label>识别模式</Label>
-            <Select
-              value={asrMode}
-              onValueChange={(v) => v && setAsrMode(v as ASRMode)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="选择识别模式..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">
-                  <span className="flex items-center gap-2">
-                    <ZapIcon className="size-3.5" />
-                    自动选择
-                    <span className="text-xs text-muted-foreground">— 根据本机配置自动判断</span>
-                  </span>
-                </SelectItem>
-                <SelectItem value="cloud">
-                  <span className="flex items-center gap-2">
-                    <CloudIcon className="size-3.5" />
-                    云端高质量
-                    <span className="text-xs text-muted-foreground">— 推荐，无需 GPU</span>
-                  </span>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+              <CloudIcon className="size-4 text-primary" />
+              <span className="text-sm font-medium">云端模式</span>
+              <span className="text-xs text-muted-foreground">— 当前版本仅支持云端 ASR</span>
+            </div>
             <p className="text-xs text-muted-foreground">
-              {asrMode === 'auto' && '系统将检测硬件 GPU/VRAM，自动选择最佳方案。'}
-              {asrMode === 'cloud' && '音频将发送至第三方云服务进行识别，需要配置 API Key。'}
+              音频将发送至第三方云服务进行识别，需要配置 API Key。
             </p>
           </div>
 
@@ -580,7 +560,7 @@ export default function SettingsPage() {
           )}
 
           {/* Cloud ASR Config — single provider selection */}
-          {(asrMode === 'auto' || asrMode === 'cloud') && (
+          {(asrMode === 'cloud') && (
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <CloudIcon className="size-4 text-muted-foreground" />
