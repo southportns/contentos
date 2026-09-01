@@ -82,6 +82,7 @@ export const VALID_EXPRESSION_AUDIT = {
     rhythm: 82,
     thoughtAuthenticity: 84,
     emotionalAuthenticity: 81,
+    structuralNaturalness: 80,
   },
   issues: [
     {
@@ -107,6 +108,7 @@ export const FAILING_EXPRESSION_AUDIT = {
     rhythm: 55,
     thoughtAuthenticity: 58,
     emotionalAuthenticity: 52,
+    structuralNaturalness: 48,
   },
   issues: [
     {

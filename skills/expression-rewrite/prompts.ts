@@ -28,6 +28,7 @@ Rewrite 策略（根据 issue type 选择）：
 - thoughtless_transition → 增加自然思维推进或改用隐性衔接
 - fake_specificity → 删除伪具体细节，恢复可信的泛化表达
 - repetitive_pattern → 替换重复的模式为多样化表达
+- predictable_structure → 打破公式化推进，重新组织段落顺序或结构
 
 ${AUDIENCE_PERSPECTIVE_RULE}
 ${NAME_DESENSITIZATION_RULE}`

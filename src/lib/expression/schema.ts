@@ -120,6 +120,7 @@ export const auditIssueTypeSchema = z.enum([
   'thoughtless_transition',
   'fake_specificity',
   'repetitive_pattern',
+  'predictable_structure',
 ])
 
 export const auditSeveritySchema = z.enum(['low', 'medium', 'high'])
@@ -146,6 +147,7 @@ export const expressionAuditDimensionsSchema = z.object({
   rhythm: z.number().min(0).max(100),
   thoughtAuthenticity: z.number().min(0).max(100),
   emotionalAuthenticity: z.number().min(0).max(100),
+  structuralNaturalness: z.number().min(0).max(100),
 })
 
 export const expressionAuditSchema = z.object({

@@ -35,6 +35,7 @@ const inputSchema = z.object({
       description: z.string().nullable(),
     })
     .optional(),
+  audience: z.string().optional(),
   emotionArc: z
     .object({
       start: z.string(),

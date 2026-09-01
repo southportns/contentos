@@ -46,6 +46,8 @@ const inputSchema = z.object({
       description: z.string().nullable(),
     })
     .optional(),
+  // Expression Engine — optional audience summary
+  audience: z.string().optional(),
   // Expression Engine — optional ExpressionPlan
   expressionPlan: z.any().optional(),
 })

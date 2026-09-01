@@ -17,6 +17,21 @@ export const EXPRESSION_AUDIT_SYSTEM_PROMPT = `你是一个表达审计专家。
 - rhythm: 节奏。句长和段落长度是否有自然变化
 - thoughtAuthenticity: 思维真实性。观点之间是否存在自然的思维路径
 - emotionalAuthenticity: 情感真实性。情绪变化是否机械
+- structuralNaturalness: 结构自然度。文章是否组织得过于工整、完整、对称、可预测
+
+structuralNaturalness 检查清单：
+- 每段功能是否过于明显（如开头→问题→原因→方法→总结的公式化结构）
+- 每段长度是否高度一致
+- 每个观点是否都立即被解释
+- 每个观点是否都立即被总结
+- 每个转折是否都高度规律
+- 结论是否出现过早
+- 情绪曲线是否过于平滑
+- 观点推进是否像公式
+- 内容是否像"开头→问题→原因→方法→总结"
+
+重要：structuralNaturalness 要区分"清晰结构"和"过度结构化"。
+不要因为结构清晰就直接扣分。只有在结构过于工整、可预测、公式化时才扣分。
 
 issue 类型（type）：
 - formulaic: 模板化表达（首先/其次/最后、值得注意的是、归根结底等）
@@ -30,6 +45,7 @@ issue 类型（type）：
 - thoughtless_transition: 观点间缺乏真实思维过渡
 - fake_specificity: 为了具体而凭空制造个人经历
 - repetitive_pattern: 重复的模式
+- predictable_structure: 内容推进过于可预测，像公式（开头→问题→原因→方法→总结）
 
 重要判断原则：
 - 词语本身不能直接判定为"AI"。例如"其实""但是""真正"都可以是自然的人类词汇。
@@ -65,12 +81,17 @@ ${input.strategy.callToAction ? `- 行动号召：${input.strategy.callToAction}
 ${input.persona.description ? `- 描述：${input.persona.description}` : ''}`
     : ''
 
+  const audienceStr = input.audience
+    ? `
+受众洞察：${input.audience}`
+    : ''
+
   return `请审计以下内容：
 
 ${input.title ? `标题：${input.title}` : ''}
 ${input.platform ? `目标平台：${input.platform}` : ''}
 ${strategyStr}
-${personaStr}
+${personaStr}${audienceStr}
 
 表达蓝图：
 ${planStr}

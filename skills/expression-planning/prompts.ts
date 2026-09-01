@@ -74,6 +74,11 @@ export const EXPRESSION_PLANNING_PROMPT = (
 ${input.persona.description ? `- 描述：${input.persona.description}` : ''}`
     : ''
 
+  const audienceStr = input.audience
+    ? `
+受众洞察：${input.audience}`
+    : ''
+
   return `主题：${input.topic}
 
 选定角度：${input.selectedAngle.title} — ${input.selectedAngle.angle}
@@ -90,7 +95,7 @@ ${input.strategy.callToAction ? `- 行动号召：${input.strategy.callToAction}
 
 ${input.platform ? `目标平台：${input.platform}` : ''}
 ${input.contentType ? `内容类型：${input.contentType}` : ''}
-${personaStr}
+${personaStr}${audienceStr}
 
 请根据以上信息，生成一个 ExpressionPlan JSON。要求：
 1. 设计 4-7 个 thoughtPath 步骤，选择最适合的 mode
@@ -98,5 +103,7 @@ ${personaStr}
 3. 根据平台和内容类型设置合适的 rhythm 和 expression 参数
 4. constraints.truthConstraints 必须包含"禁止伪造作者真实经历"的约束
 5. constraints.mustPreserve 必须包含内容策略的核心观点
-6. constraints.avoidPatterns 列出需要避免的模板化表达模式`
+6. constraints.avoidPatterns 列出需要避免的模板化表达模式
+7. 如果有受众洞察，根据受众特征调整表达距离、语言复杂度和举例方式
+8. 人设是隐式上下文，不要在文案中显式提及"作为一个..."`
 }

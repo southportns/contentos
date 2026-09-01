@@ -30,6 +30,7 @@ interface ExpressionPlanningInput {
   platform?: string
   contentType?: string
   persona?: { name: string; description: string | null }
+  audience?: string
   emotionArc?: { start: string; middle: string; end: string }
 }
 ```

@@ -120,6 +120,7 @@ export type AuditIssueType =
   | 'thoughtless_transition'
   | 'fake_specificity'
   | 'repetitive_pattern'
+  | 'predictable_structure'
 
 export type AuditSeverity = 'low' | 'medium' | 'high'
 
@@ -145,6 +146,7 @@ export interface ExpressionAuditDimensions {
   rhythm: number
   thoughtAuthenticity: number
   emotionalAuthenticity: number
+  structuralNaturalness: number // 0-100: is the article too neatly organized?
 }
 
 export interface ExpressionAudit {
@@ -242,12 +244,13 @@ export interface ExpressionRewriteInput {
 // ─── Scoring Weights ──────────────────────────────────────
 
 export const DEFAULT_EXPRESSION_WEIGHTS = {
-  naturalness: 0.25,
-  voiceConsistency: 0.15,
-  specificity: 0.15,
-  rhythm: 0.15,
-  thoughtAuthenticity: 0.15,
-  emotionalAuthenticity: 0.15,
+  naturalness: 0.2,
+  voiceConsistency: 0.12,
+  specificity: 0.12,
+  rhythm: 0.12,
+  thoughtAuthenticity: 0.12,
+  emotionalAuthenticity: 0.12,
+  structuralNaturalness: 0.2,
 } as const
 
 // ─── Config ────────────────────────────────────────────────

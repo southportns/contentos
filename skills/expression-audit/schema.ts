@@ -23,6 +23,7 @@ export const expressionAuditInputSchema = z.object({
       description: z.string().nullable(),
     })
     .optional(),
+  audience: z.string().optional(),
 })
 
 export type ExpressionAuditInput = z.infer<typeof expressionAuditInputSchema>

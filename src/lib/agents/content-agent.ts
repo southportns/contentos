@@ -24,6 +24,18 @@ import type {
 import type { ExpressionPlan, ExpressionAudit } from '@/lib/expression/types'
 import { MAX_EXPRESSION_REWRITE_ROUNDS } from '@/lib/expression/types'
 
+// ─── Persona type (reused from workflow) ──────────────────
+
+/**
+ * Persona definition for Expression Engine.
+ * Reuses the same shape as the UI Persona — no second persona system.
+ */
+interface Persona {
+  id: string
+  name: string
+  description: string | null
+}
+
 // ─── Agent State ─────────────────────────────────────────
 
 const StateAnnotation = Annotation.Root({
@@ -55,12 +67,22 @@ const StateAnnotation = Annotation.Root({
   angles: Annotation<Angle[]>,
   selectedAngleId: Annotation<string | undefined>,
   strategy: Annotation<ContentStrategy | undefined>,
+  // Persona — latent context for Expression Engine
+  persona: Annotation<Persona | undefined>,
+  // Platform (e.g. 'douyin', 'xiaohongshu')
+  platform: Annotation<string | undefined>,
+  // Content type (e.g. 'spoken', 'article')
+  contentType: Annotation<string | undefined>,
   // Expression Engine fields
   expressionPlan: Annotation<ExpressionPlan | undefined>,
   expressionAudit: Annotation<ExpressionAudit | undefined>,
   expressionRewrittenDraft: Annotation<Draft | undefined>,
   draft: Annotation<Draft | undefined>,
   humanizedDraft: Annotation<Draft | undefined>,
+  // Flag: if true, run Legacy Humanization after Expression Engine.
+  // Default false — Expression Engine handles naturalness.
+  // Set true for legacy API compatibility or explicit user request.
+  useLegacyHumanization: Annotation<boolean | undefined>,
   evaluation: Annotation<Evaluation | undefined>,
   status: Annotation<string>,
   errors: Annotation<Array<{ step: string; message: string; timestamp: string }>>,
@@ -439,6 +461,23 @@ async function expressionPlanningNode(
   }
 
   try {
+    // Build audience summary string if insights exist
+    const audienceSummary = state.insights
+      ? [
+          state.insights.painPoints.length > 0
+            ? `痛点: ${state.insights.painPoints.join('、')}`
+            : null,
+          state.insights.emotions.length > 0
+            ? `情绪: ${state.insights.emotions.join('、')}`
+            : null,
+          state.insights.desires.length > 0
+            ? `需求: ${state.insights.desires.join('、')}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join('; ')
+      : undefined
+
     const expressionPlan = await runExpressionPlanning({
       topic: state.topic.topic,
       selectedAngle: {
@@ -454,8 +493,15 @@ async function expressionPlanningNode(
         tone: '',
         keyArguments: [],
       },
-      platform: state.topic.category,
-      contentType: undefined,
+      platform: state.platform || state.topic.category,
+      contentType: state.contentType,
+      persona: state.persona
+        ? {
+            name: state.persona.name,
+            description: state.persona.description,
+          }
+        : undefined,
+      audience: audienceSummary,
     })
 
     return {
@@ -492,6 +538,23 @@ async function writingNode(
   }
 
   try {
+    // Build audience summary string if insights exist
+    const audienceSummary = state.insights
+      ? [
+          state.insights.painPoints.length > 0
+            ? `痛点: ${state.insights.painPoints.join('、')}`
+            : null,
+          state.insights.emotions.length > 0
+            ? `情绪: ${state.insights.emotions.join('、')}`
+            : null,
+          state.insights.desires.length > 0
+            ? `需求: ${state.insights.desires.join('、')}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join('; ')
+      : undefined
+
     const result = await runWriting({
       topic: state.topic.topic,
       strategy: {
@@ -515,6 +578,14 @@ async function writingNode(
         targetEmotion: selectedAngle.emotion || '',
         keyPoints: [],
       },
+      platform: state.platform || state.topic.category,
+      persona: state.persona
+        ? {
+            name: state.persona.name,
+            description: state.persona.description,
+          }
+        : undefined,
+      audience: audienceSummary,
       // Expression Engine: inject ExpressionPlan into Writing
       expressionPlan: state.expressionPlan,
     })
@@ -550,10 +621,10 @@ async function expressionAuditNode(
   state: typeof StateAnnotation.State,
 ): Promise<Partial<ContentAgentState>> {
   if (!state.draft) {
-    // Degrade: skip audit, go to humanization
+    // Degrade: skip audit, go directly to evaluation
     return {
       expressionAudit: undefined,
-      status: 'HUMANIZATION',
+      status: 'EVALUATING',
     }
   }
 
@@ -569,18 +640,26 @@ async function expressionAuditNode(
             callToAction: state.strategy.ctaStrategy || '',
           }
         : undefined,
-      platform: state.topic.category,
+      platform: state.platform || state.topic.category,
+      persona: state.persona
+        ? {
+            name: state.persona.name,
+            description: state.persona.description,
+          }
+        : undefined,
     })
 
+    // If audit passes (or no rewrite needed), skip to evaluation.
+    // Legacy Humanization is NOT in the default path.
     return {
       expressionAudit: audit,
-      status: audit.pass ? 'HUMANIZATION' : 'EXPRESSION_REWRITE',
+      status: audit.pass ? 'EVALUATING' : 'EXPRESSION_REWRITE',
     }
   } catch (error) {
-    // Degrade: skip audit and rewrite, go to humanization
+    // Degrade: skip audit and rewrite, go directly to evaluation
     return {
       expressionAudit: undefined,
-      status: 'HUMANIZATION',
+      status: 'EVALUATING',
       ...appendError(
         state,
         'expression_audit',
@@ -597,14 +676,21 @@ async function expressionRewriteNode(
 ): Promise<Partial<ContentAgentState>> {
   if (!state.draft || !state.expressionAudit) {
     return {
-      status: 'HUMANIZATION',
+      status: 'EVALUATING',
     }
   }
 
   // P0.1: max 1 rewrite round
   if (MAX_EXPRESSION_REWRITE_ROUNDS < 1) {
     return {
-      status: 'HUMANIZATION',
+      status: 'EVALUATING',
+    }
+  }
+
+  // If audit has no issues, skip rewrite
+  if (state.expressionAudit.issues.length === 0) {
+    return {
+      status: 'EVALUATING',
     }
   }
 
@@ -621,7 +707,7 @@ async function expressionRewriteNode(
             callToAction: state.strategy.ctaStrategy || '',
           }
         : undefined,
-      platform: state.topic.category,
+      platform: state.platform || state.topic.category,
     })
 
     const rewrittenDraft: Draft = {
@@ -630,15 +716,16 @@ async function expressionRewriteNode(
       title: rewriteResult.revisedTitle || state.draft.title,
     }
 
+    // After rewrite, go to evaluation (NOT humanization)
     return {
       draft: rewrittenDraft,
       expressionRewrittenDraft: rewrittenDraft,
-      status: 'HUMANIZATION',
+      status: 'EVALUATING',
     }
   } catch (error) {
-    // Degrade: keep original draft, proceed to humanization
+    // Degrade: keep original draft, proceed to evaluation
     return {
-      status: 'HUMANIZATION',
+      status: 'EVALUATING',
       ...appendError(
         state,
         'expression_rewrite',
@@ -653,6 +740,14 @@ async function expressionRewriteNode(
 async function humanizationNode(
   state: typeof StateAnnotation.State,
 ): Promise<Partial<ContentAgentState>> {
+  // Legacy Humanization: only runs when explicitly requested via useLegacyHumanization flag.
+  // Default Expression Engine path skips this node entirely.
+  if (!state.useLegacyHumanization) {
+    return {
+      status: 'EVALUATING',
+    }
+  }
+
   if (!state.draft) {
     return {
       status: 'ERROR',
@@ -812,13 +907,18 @@ export function createContentAgent() {
     })
     .addConditionalEdges('expression_audit', (state) => {
       if (state.status === 'ERROR') return END
-      // If audit not passed, go to rewrite; otherwise skip to humanization
+      // If audit not passed, go to rewrite; otherwise skip to evaluation
       if (state.status === 'EXPRESSION_REWRITE') return 'expression_rewrite'
-      return 'humanization'
+      // Default: skip humanization, go to evaluation
+      // Legacy humanization only runs if useLegacyHumanization is true
+      if (state.useLegacyHumanization) return 'humanization'
+      return 'evaluation'
     })
     .addConditionalEdges('expression_rewrite', (state) => {
       if (state.status === 'ERROR') return END
-      return 'humanization'
+      // After rewrite, skip humanization by default, go to evaluation
+      if (state.useLegacyHumanization) return 'humanization'
+      return 'evaluation'
     })
     .addConditionalEdges('humanization', (state) => {
       if (state.status === 'ERROR') return END

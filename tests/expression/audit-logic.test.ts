@@ -20,7 +20,8 @@ describe('Expression Weights Configuration', () => {
       DEFAULT_EXPRESSION_WEIGHTS.specificity +
       DEFAULT_EXPRESSION_WEIGHTS.rhythm +
       DEFAULT_EXPRESSION_WEIGHTS.thoughtAuthenticity +
-      DEFAULT_EXPRESSION_WEIGHTS.emotionalAuthenticity
+      DEFAULT_EXPRESSION_WEIGHTS.emotionalAuthenticity +
+      DEFAULT_EXPRESSION_WEIGHTS.structuralNaturalness
 
     expect(sum).toBeCloseTo(1.0, 2)
   })
@@ -28,6 +29,12 @@ describe('Expression Weights Configuration', () => {
   it('should weight naturalness highest', () => {
     expect(DEFAULT_EXPRESSION_WEIGHTS.naturalness).toBeGreaterThan(
       DEFAULT_EXPRESSION_WEIGHTS.voiceConsistency,
+    )
+  })
+
+  it('should weight structuralNaturalness equally to naturalness', () => {
+    expect(DEFAULT_EXPRESSION_WEIGHTS.structuralNaturalness).toBe(
+      DEFAULT_EXPRESSION_WEIGHTS.naturalness,
     )
   })
 })

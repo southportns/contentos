@@ -57,6 +57,7 @@ export const WRITING_PROMPT = (
     description: string | null
   },
   expressionPlan?: ExpressionPlan,
+  audience?: string,
 ): string => {
   const structureStr = strategy.structure
     .map(
@@ -73,6 +74,11 @@ export const WRITING_PROMPT = (
 创作人设：
 - 名称：${persona.name}
 ${persona.description ? `- 描述：${persona.description}` : ''}`
+    : ''
+
+  const audienceStr = audience
+    ? `
+受众洞察：${audience}`
     : ''
 
   const expressionPlanStr = expressionPlan
@@ -95,12 +101,12 @@ ${persona.description ? `- 描述：${persona.description}` : ''}`
 
 结构大纲：
 ${structureStr}
-${personaStr}
+${personaStr}${audienceStr}
 ${expressionPlanStr}
 ${platform ? `目标平台：${platform}` : ''}
 ${wordCount ? `目标字数：${wordCount}` : `预计总字数：${strategy.estimatedWordCount}`}
 
-${persona ? '请严格按照创作人设的设定来写作，确保语气、用词风格、表达习惯都符合人设要求。' : ''}${expressionPlan ? '请严格遵守上方表达蓝图中的思维路径、情绪轨迹和表达节奏。' : ''}请基于以上策略，写出完整的内容初稿。`
+${persona ? '请按照创作人设的设定来写作，人设是隐式上下文——不要在文案中显式提及"作为一个..."，而是让语气、用词和表达习惯自然体现人设。' : ''}${expressionPlan ? '表达蓝图是你的隐式表达约束——不要显式输出思维路径标签，不要机械地按照 observation→association→contradiction→realization 逐项执行，而是让这些思考方式自然融入写作。不得为了满足 thoughtPath 强行增加场景，不得虚构第一人称经历，不得为了"真人感"制造错别字或机械添加"嗯""哈哈""就是"等口头禅。' : ''}请基于以上策略，写出完整的内容初稿。`
 }
 
 function formatExpressionPlanForWriter(plan: ExpressionPlan): string {
@@ -119,13 +125,13 @@ function formatExpressionPlanForWriter(plan: ExpressionPlan): string {
   ].join('\n')
 
   return `
-表达蓝图（ExpressionPlan）：
+表达蓝图（ExpressionPlan）——隐式表达约束，不是 checklist：
 - 作者角色: ${plan.speaker.role || 'N/A'}
 - 与读者关系: ${plan.speaker.relationshipToAudience || 'N/A'}
 - 权威感: ${plan.speaker.authority || 'N/A'}
 - 情感距离: ${plan.speaker.emotionalDistance || 'N/A'}
 
-思维路径:
+思维路径（参考思路方向，不是要逐项显式输出）:
 ${thoughtPathStr}
 
 情绪曲线:

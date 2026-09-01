@@ -157,6 +157,13 @@ export interface ContentState {
   selectedAngleId?: string
   strategy?: ContentStrategy
 
+  // Persona — latent context for Expression Engine
+  persona?: { id: string; name: string; description: string | null }
+  // Platform (e.g. 'douyin', 'xiaohongshu')
+  platform?: string
+  // Content type (e.g. 'spoken', 'article')
+  contentType?: string
+
   // Expression Engine fields
   expressionPlan?: import('@/lib/expression/types').ExpressionPlan
   expressionAudit?: import('@/lib/expression/types').ExpressionAudit
@@ -164,6 +171,10 @@ export interface ContentState {
 
   draft?: Draft
   evaluation?: Evaluation
+
+  // Flag: if true, run Legacy Humanization after Expression Engine.
+  // Default false — Expression Engine handles naturalness.
+  useLegacyHumanization?: boolean
 
   status: WorkflowStatus
   errors: AgentError[]

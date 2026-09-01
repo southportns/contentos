@@ -24,12 +24,13 @@ JSON 对象格式（ExpressionAudit）：
     "specificity": 0-100,
     "rhythm": 0-100,
     "thoughtAuthenticity": 0-100,
-    "emotionalAuthenticity": 0-100
+    "emotionalAuthenticity": 0-100,
+    "structuralNaturalness": 0-100
   },
   "issues": [
     {
       "id": "issue-1",
-      "type": "formulaic" | "generic" | "abstract" | "uniform_rhythm" | "over_structured" | "over_explained" | "emotion_flat" | "voice_drift" | "thoughtless_transition" | "fake_specificity" | "repetitive_pattern",
+      "type": "formulaic" | "generic" | "abstract" | "uniform_rhythm" | "over_structured" | "over_explained" | "emotion_flat" | "voice_drift" | "thoughtless_transition" | "fake_specificity" | "repetitive_pattern" | "predictable_structure",
       "severity": "low" | "medium" | "high",
       "location": {
         "paragraphIndex": 0,
@@ -53,7 +54,9 @@ function calculateOverallScore(
       dimensions.rhythm * DEFAULT_EXPRESSION_WEIGHTS.rhythm +
       dimensions.thoughtAuthenticity * DEFAULT_EXPRESSION_WEIGHTS.thoughtAuthenticity +
       dimensions.emotionalAuthenticity *
-        DEFAULT_EXPRESSION_WEIGHTS.emotionalAuthenticity,
+        DEFAULT_EXPRESSION_WEIGHTS.emotionalAuthenticity +
+      dimensions.structuralNaturalness *
+        DEFAULT_EXPRESSION_WEIGHTS.structuralNaturalness,
   )
 }
 
