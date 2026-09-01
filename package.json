@@ -11,6 +11,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "electron:dev": "concurrently -k \"npm:dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development npx tsx electron/main.ts\"",
     "electron:compile": "tsup electron/main.ts electron/preload.ts --format cjs --platform node --target node18 --out-dir dist-electron --external electron --external better-sqlite3 --external @prisma/client --external @prisma/adapter-better-sqlite3 --external next --sourcemap --clean",
     "electron:rebuild": "npx tsx scripts/rebuild-native.ts",
@@ -68,6 +70,7 @@
     "tsup": "^8.5.1",
     "tsx": "^4.23.12",
     "typescript": "^5",
+    "vitest": "^3.2.7",
     "wait-on": "^8.0.0"
   },
   "allowScripts": {

@@ -3,6 +3,7 @@ import { getModel } from '@/lib/ai/models'
 import { writingInputSchema, writingOutputSchema } from './schema'
 import { WRITING_SYSTEM_PROMPT, WRITING_PROMPT } from './prompts'
 import type { WritingInput, WritingOutput } from './schema'
+import type { ExpressionPlan } from '@/lib/expression/types'
 
 function parseSections(content: string): Array<{ section: string; content: string }> {
   const sections: Array<{ section: string; content: string }> = []
@@ -50,6 +51,7 @@ export async function runWriting(
       validated.tone,
       validated.wordCount,
       validated.persona,
+      validated.expressionPlan as ExpressionPlan | undefined,
     ),
   })
 

@@ -1,4 +1,5 @@
 import type { WritingInput } from './schema'
+import type { ExpressionPlan } from '@/lib/expression/types'
 import { NAME_DESENSITIZATION_RULE, AUDIENCE_PERSPECTIVE_RULE } from '@/lib/ai/shared-prompts'
 
 export const WRITING_SYSTEM_PROMPT = `你是一个优秀的内容写手。你的任务是基于内容策略，写出完整的内容初稿。
@@ -55,6 +56,7 @@ export const WRITING_PROMPT = (
     name: string
     description: string | null
   },
+  expressionPlan?: ExpressionPlan,
 ): string => {
   const structureStr = strategy.structure
     .map(
@@ -71,6 +73,10 @@ export const WRITING_PROMPT = (
 创作人设：
 - 名称：${persona.name}
 ${persona.description ? `- 描述：${persona.description}` : ''}`
+    : ''
+
+  const expressionPlanStr = expressionPlan
+    ? formatExpressionPlanForWriter(expressionPlan)
     : ''
 
   return `主题：${topic}
@@ -90,9 +96,68 @@ ${persona.description ? `- 描述：${persona.description}` : ''}`
 结构大纲：
 ${structureStr}
 ${personaStr}
-
+${expressionPlanStr}
 ${platform ? `目标平台：${platform}` : ''}
 ${wordCount ? `目标字数：${wordCount}` : `预计总字数：${strategy.estimatedWordCount}`}
 
-${persona ? '请严格按照创作人设的设定来写作，确保语气、用词风格、表达习惯都符合人设要求。' : ''}请基于以上策略，写出完整的内容初稿。`
+${persona ? '请严格按照创作人设的设定来写作，确保语气、用词风格、表达习惯都符合人设要求。' : ''}${expressionPlan ? '请严格遵守上方表达蓝图中的思维路径、情绪轨迹和表达节奏。' : ''}请基于以上策略，写出完整的内容初稿。`
+}
+
+function formatExpressionPlanForWriter(plan: ExpressionPlan): string {
+  const thoughtPathStr = plan.thoughtPath
+    .map((t) => `  ${t.step}. ${t.mode}: ${t.purpose}`)
+    .join('\n')
+
+  const emotionStr = plan.emotionCurve
+    .map((e) => `  ${e.stage}: ${e.emotion} (${e.intensity})`)
+    .join('\n')
+
+  const constraintsStr = [
+    ...plan.constraints.mustPreserve.map((c) => `  - 保留: ${c}`),
+    ...plan.constraints.avoidPatterns.map((c) => `  - 避免: ${c}`),
+    ...plan.constraints.truthConstraints.map((c) => `  - 真实约束: ${c}`),
+  ].join('\n')
+
+  return `
+表达蓝图（ExpressionPlan）：
+- 作者角色: ${plan.speaker.role || 'N/A'}
+- 与读者关系: ${plan.speaker.relationshipToAudience || 'N/A'}
+- 权威感: ${plan.speaker.authority || 'N/A'}
+- 情感距离: ${plan.speaker.emotionalDistance || 'N/A'}
+
+思维路径:
+${thoughtPathStr}
+
+情绪曲线:
+${emotionStr}
+
+节奏参数:
+- 句长变化: ${plan.rhythm.sentenceVariance}
+- 段落长度变化: ${plan.rhythm.paragraphVariance}
+- 短句偏好: ${plan.rhythm.shortSentencePreference}
+- 停顿频率: ${plan.rhythm.pauseFrequency}
+
+表达特征:
+- 口语密度: ${plan.expression.oralness}
+- 具体性: ${plan.expression.specificity}
+- 反思深度: ${plan.expression.reflection}
+- 允许不完美: ${plan.expression.imperfectionTolerance}
+
+开头: ${plan.opening.mode} — ${plan.opening.instruction}
+结尾: ${plan.conclusion.mode} — ${plan.conclusion.instruction}
+
+约束:
+${constraintsStr}
+
+重要写作规则：
+- 不要刻意"装成人"。你要做的是按照指定作者的思维和表达习惯进行表达。
+- 内容策略决定必须表达什么。
+- 表达计划决定作者如何想到并说出这些内容。
+- 不要让每个段落都像一个完整的论证单元。
+- 不要把所有观点都解释到最后。
+- 不要凭空创造第一人称经历。
+- 不要为了口语化机械添加语气词。
+- 不要为了制造变化而机械打乱句子长度。
+- 优先保持真实、具体、自然和作者一致性。
+`
 }

@@ -156,6 +156,12 @@ export interface ContentState {
 
   selectedAngleId?: string
   strategy?: ContentStrategy
+
+  // Expression Engine fields
+  expressionPlan?: import('@/lib/expression/types').ExpressionPlan
+  expressionAudit?: import('@/lib/expression/types').ExpressionAudit
+  expressionRewrittenDraft?: Draft
+
   draft?: Draft
   evaluation?: Evaluation
 

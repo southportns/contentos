@@ -1,0 +1,118 @@
+# Thought Pattern Library
+# 最小可用 pattern registry，供 expression-planning skill 使用。
+# 每个 pattern 只包含表达结构示例，不是要求模型机械复制。
+
+patterns:
+  - id: observation
+    name: 观察
+    description: 从一个具体现象、场景或细节开始，建立与读者的共同经验。
+    when_to_use:
+      - 需要建立共同经验时
+      - 内容从一个具体现象切入时
+    avoid_when:
+      - 观点已经非常明确不需要铺垫时
+    examples:
+      - "有时候晚上回到家，房门一关，突然就发现今天一整天都没跟谁真正说过话。"
+
+  - id: memory_trigger
+    name: 记忆触发
+    description: 当前观点被一个具体记忆或观察触发。
+    when_to_use:
+      - 观点由个人记忆引出
+      - 需要体现真实思考起点
+    avoid_when:
+      - 没有真实记忆支撑时（禁止伪造）
+    constraints:
+      requires_real_source: true
+    examples:
+      - "小时候每次考试考砸了，我妈第一句话不是骂我，而是问我饿不饿。"
+
+  - id: association
+    name: 联想
+    description: 从一个事物自然联想到另一个相关的事物或场景。
+    when_to_use:
+      - 需要展现思维跳跃
+      - 两个事物之间的关联不是显而易见的
+    avoid_when:
+      - 关联过于牵强
+    examples:
+      - "看到这条新闻的时候，我第一个想到的居然不是当事人，而是我那个已经三年没联系的朋友。"
+
+  - id: question
+    name: 提问
+    description: 以一个真实疑问开始，而非修辞性提问。
+    when_to_use:
+      - 作者确实在思考这个问题
+      - 需要引导读者一起思考
+    avoid_when:
+      - 答案已经确定，提问只是修辞
+    examples:
+      - "为什么长大以后，被爱这件事变得越来越难了？"
+
+  - id: contradiction
+    name: 矛盾
+    description: 发现两个看似矛盾的事实或感受，引发思考。
+    when_to_use:
+      - 需要打破单一视角
+      - 存在真实的认知冲突
+    avoid_when:
+      - 没有真实矛盾，只是制造悬念
+    examples:
+      - "明明比以前更自由了，却比以前更不快乐。"
+
+  - id: realization
+    name: 顿悟
+    description: 在观察和思考后，形成一个新的理解。
+    when_to_use:
+      - 观点需要自然浮现
+      - 需要体现思考过程而非直接给出结论
+    avoid_when:
+      - 顿悟过于刻意
+    examples:
+      - "后来我才慢慢意识到，不是没人爱我了，是我自己把门关上了。"
+
+  - id: reflection
+    name: 回顾反思
+    description: 事后回看，对过去的经历或判断产生新的理解。
+    when_to_use:
+      - 需要展现认知深化
+      - 结尾需要留有余味
+    avoid_when:
+      - 每段都使用反思
+    examples:
+      - "现在回头看，那些以为过不去的日子，其实也就是日子而已。"
+
+  - id: self_correction
+    name: 自我修正
+    description: 说完一个判断后，作者主动缩小或修正自己的判断。
+    when_to_use:
+      - 当观点容易显得绝对化
+      - 当内容需要体现真实思考过程
+    avoid_when:
+      - 每两个段落都使用
+    constraints:
+      max_per_1000_chars: 2
+    examples:
+      - "我以前一直这么觉得。现在想想，好像也不完全是。"
+
+  - id: digression
+    name: 偏离
+    description: 暂时偏离主线，说一些看似无关的内容，然后自然拉回。
+    when_to_use:
+      - 需要展现思维的发散性
+      - 偏离内容本身有价值
+    avoid_when:
+      - 偏离后无法自然拉回
+    examples:
+      - "说到这里我突然想到一件别的事。不过算了，跟这个关系不大，我们说回正题。"
+
+  - id: return
+    name: 回归
+    description: 在偏离或展开后，自然回到主线思考。
+    when_to_use:
+      - 在 digression 之后
+      - 在充分展开后需要收束
+    avoid_when:
+      - 回归过于生硬
+    examples:
+      - "说远了。我想说的是，不管怎样，那扇门一直都在。"

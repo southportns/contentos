@@ -8,6 +8,9 @@ import { runContentStrategy } from '@/skills/content-strategy'
 import { runWriting } from '@/skills/writing'
 import { runHumanization } from '@/skills/humanization'
 import { runEvaluation } from '@/skills/evaluation'
+import { runExpressionPlanning } from '@/skills/expression-planning'
+import { runExpressionAudit } from '@/skills/expression-audit'
+import { runExpressionRewrite } from '@/skills/expression-rewrite'
 import type {
   TopicProfile,
   Angle,
@@ -18,6 +21,8 @@ import type {
   Evaluation,
   AgentError,
 } from './types'
+import type { ExpressionPlan, ExpressionAudit } from '@/lib/expression/types'
+import { MAX_EXPRESSION_REWRITE_ROUNDS } from '@/lib/expression/types'
 
 // ─── Agent State ─────────────────────────────────────────
 
@@ -50,6 +55,10 @@ const StateAnnotation = Annotation.Root({
   angles: Annotation<Angle[]>,
   selectedAngleId: Annotation<string | undefined>,
   strategy: Annotation<ContentStrategy | undefined>,
+  // Expression Engine fields
+  expressionPlan: Annotation<ExpressionPlan | undefined>,
+  expressionAudit: Annotation<ExpressionAudit | undefined>,
+  expressionRewrittenDraft: Annotation<Draft | undefined>,
   draft: Annotation<Draft | undefined>,
   humanizedDraft: Annotation<Draft | undefined>,
   evaluation: Annotation<Evaluation | undefined>,
@@ -399,7 +408,7 @@ async function contentStrategyNode(
 
     return {
       strategy,
-      status: 'WRITING',
+      status: 'EXPRESSION_PLANNING',
     }
   } catch (error) {
     return {
@@ -407,6 +416,60 @@ async function contentStrategyNode(
       ...appendError(
         state,
         'content_strategy',
+        error instanceof Error ? error.message : 'Unknown error',
+      ),
+    }
+  }
+}
+
+// ── Node: Expression Planning ─────────────────────────
+
+async function expressionPlanningNode(
+  state: typeof StateAnnotation.State,
+): Promise<Partial<ContentAgentState>> {
+  const selectedAngle = state.angles.find(
+    (a) => a.id === state.selectedAngleId,
+  )
+  if (!selectedAngle || !state.strategy) {
+    // Degrade: skip expression planning, go directly to writing
+    return {
+      expressionPlan: undefined,
+      status: 'WRITING',
+    }
+  }
+
+  try {
+    const expressionPlan = await runExpressionPlanning({
+      topic: state.topic.topic,
+      selectedAngle: {
+        title: selectedAngle.title,
+        angle: selectedAngle.coreThesis,
+        targetEmotion: selectedAngle.emotion || '',
+        keyPoints: [],
+      },
+      strategy: {
+        title: state.strategy.coreThesis,
+        hook: state.strategy.hookStrategy || '',
+        callToAction: state.strategy.ctaStrategy || '',
+        tone: '',
+        keyArguments: [],
+      },
+      platform: state.topic.category,
+      contentType: undefined,
+    })
+
+    return {
+      expressionPlan,
+      status: 'WRITING',
+    }
+  } catch (error) {
+    // Degrade: skip expression planning, continue with writing
+    return {
+      expressionPlan: undefined,
+      status: 'WRITING',
+      ...appendError(
+        state,
+        'expression_planning',
         error instanceof Error ? error.message : 'Unknown error',
       ),
     }
@@ -452,6 +515,8 @@ async function writingNode(
         targetEmotion: selectedAngle.emotion || '',
         keyPoints: [],
       },
+      // Expression Engine: inject ExpressionPlan into Writing
+      expressionPlan: state.expressionPlan,
     })
 
     const draft: Draft = {
@@ -465,7 +530,7 @@ async function writingNode(
 
     return {
       draft,
-      status: 'HUMANIZATION',
+      status: 'EXPRESSION_AUDIT',
     }
   } catch (error) {
     return {
@@ -473,6 +538,110 @@ async function writingNode(
       ...appendError(
         state,
         'writing',
+        error instanceof Error ? error.message : 'Unknown error',
+      ),
+    }
+  }
+}
+
+// ── Node: Expression Audit ─────────────────────────────
+
+async function expressionAuditNode(
+  state: typeof StateAnnotation.State,
+): Promise<Partial<ContentAgentState>> {
+  if (!state.draft) {
+    // Degrade: skip audit, go to humanization
+    return {
+      expressionAudit: undefined,
+      status: 'HUMANIZATION',
+    }
+  }
+
+  try {
+    const audit = await runExpressionAudit({
+      draft: state.draft.content,
+      title: state.draft.title,
+      expressionPlan: state.expressionPlan,
+      strategy: state.strategy
+        ? {
+            title: state.strategy.coreThesis,
+            keyArguments: [],
+            callToAction: state.strategy.ctaStrategy || '',
+          }
+        : undefined,
+      platform: state.topic.category,
+    })
+
+    return {
+      expressionAudit: audit,
+      status: audit.pass ? 'HUMANIZATION' : 'EXPRESSION_REWRITE',
+    }
+  } catch (error) {
+    // Degrade: skip audit and rewrite, go to humanization
+    return {
+      expressionAudit: undefined,
+      status: 'HUMANIZATION',
+      ...appendError(
+        state,
+        'expression_audit',
+        error instanceof Error ? error.message : 'Unknown error',
+      ),
+    }
+  }
+}
+
+// ── Node: Expression Rewrite ──────────────────────────
+
+async function expressionRewriteNode(
+  state: typeof StateAnnotation.State,
+): Promise<Partial<ContentAgentState>> {
+  if (!state.draft || !state.expressionAudit) {
+    return {
+      status: 'HUMANIZATION',
+    }
+  }
+
+  // P0.1: max 1 rewrite round
+  if (MAX_EXPRESSION_REWRITE_ROUNDS < 1) {
+    return {
+      status: 'HUMANIZATION',
+    }
+  }
+
+  try {
+    const rewriteResult = await runExpressionRewrite({
+      draft: state.draft.content,
+      title: state.draft.title,
+      audit: state.expressionAudit,
+      expressionPlan: state.expressionPlan,
+      strategy: state.strategy
+        ? {
+            title: state.strategy.coreThesis,
+            keyArguments: [],
+            callToAction: state.strategy.ctaStrategy || '',
+          }
+        : undefined,
+      platform: state.topic.category,
+    })
+
+    const rewrittenDraft: Draft = {
+      ...state.draft,
+      content: rewriteResult.revisedContent,
+      title: rewriteResult.revisedTitle || state.draft.title,
+    }
+
+    return {
+      draft: rewrittenDraft,
+      expressionRewrittenDraft: rewrittenDraft,
+      status: 'HUMANIZATION',
+    }
+  } catch (error) {
+    // Degrade: keep original draft, proceed to humanization
+    return {
+      status: 'HUMANIZATION',
+      ...appendError(
+        state,
+        'expression_rewrite',
         error instanceof Error ? error.message : 'Unknown error',
       ),
     }
@@ -598,7 +767,10 @@ export function createContentAgent() {
     .addNode('audience_insight', audienceInsightNode)
     .addNode('angle_generation', angleGenerationNode)
     .addNode('content_strategy', contentStrategyNode)
+    .addNode('expression_planning', expressionPlanningNode)
     .addNode('writing', writingNode)
+    .addNode('expression_audit', expressionAuditNode)
+    .addNode('expression_rewrite', expressionRewriteNode)
     .addNode('humanization', humanizationNode)
     .addNode('evaluation', evaluationNode)
 
@@ -628,9 +800,23 @@ export function createContentAgent() {
     })
     .addConditionalEdges('content_strategy', (state) => {
       if (state.status === 'ERROR') return END
+      return 'expression_planning'
+    })
+    .addConditionalEdges('expression_planning', (state) => {
+      if (state.status === 'ERROR') return END
       return 'writing'
     })
     .addConditionalEdges('writing', (state) => {
+      if (state.status === 'ERROR') return END
+      return 'expression_audit'
+    })
+    .addConditionalEdges('expression_audit', (state) => {
+      if (state.status === 'ERROR') return END
+      // If audit not passed, go to rewrite; otherwise skip to humanization
+      if (state.status === 'EXPRESSION_REWRITE') return 'expression_rewrite'
+      return 'humanization'
+    })
+    .addConditionalEdges('expression_rewrite', (state) => {
       if (state.status === 'ERROR') return END
       return 'humanization'
     })

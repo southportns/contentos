@@ -38,6 +38,8 @@ export const writingInputSchema = z.object({
       description: z.string().nullable(),
     })
     .optional(),
+  // Expression Engine — optional ExpressionPlan for expression-guided writing
+  expressionPlan: z.any().optional(),
 })
 
 export const writingOutputSchema = z.object({
