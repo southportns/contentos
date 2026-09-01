@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/logo.png" alt="Content OS" width="240" />
+  <img width="150" height="155" alt="Content OS Logo" src="https://github.com/user-attachments/assets/705376bc-ec76-4fe7-b59c-ca94ef8c0594" />
 </p>
 
 # Content OS
@@ -56,7 +56,7 @@ Content OS 是一个从主题研究到终稿输出的全流程 AI 内容创作�
 
 - **Node.js 18+** (推荐 LTS 版本)
 - **Git**
-- **AI API Key** — 至少一个 AI 服务商的 Key
+- **大模型 API Key** — 任意一家大模型服务商的 Key
 - **(可选) Visual Studio Build Tools** — Windows 用户编译 better-sqlite3 需要
 
 ### 安装步骤
