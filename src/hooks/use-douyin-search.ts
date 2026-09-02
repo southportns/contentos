@@ -53,6 +53,26 @@ interface CommentAnalysisResult {
 
 type PublishTimeFilter = 'none' | '1d' | '7d' | '14d' | '30d'
 
+// ─── Search Options ───────────────────────────────────
+
+/** 搜索选项：支持多标签 + 筛选 */
+interface SearchOptions {
+  /** 发布时间筛选 */
+  publishTime?: PublishTimeFilter
+  /** 最低点赞数筛选，null/undefined 表示不筛选 */
+  minLikes?: number | null
+}
+
+/** 多标签搜索参数 */
+interface MultiTagSearchParams {
+  /** 搜索标签列表（如 ["竺天天", "天总", "天总语录"]） */
+  keywords: string[]
+  /** 每个标签搜索的数量 */
+  count?: number
+  /** 筛选选项 */
+  options?: SearchOptions
+}
+
 // ─── Research Progress Types ───────────────────────────
 
 export type ResearchStepStatus = 'pending' | 'active' | 'done' | 'error'
@@ -81,7 +101,7 @@ interface TranscriptCorrection {
 interface VideoTranscript {
   awemeId: string
   text: string
-  /** 原始转写文本（纠错前），仅当有纠错时存在 */
+  /** 原始转写文本（纠错前），仅当有纠错或跳过纠错时存在 */
   rawText?: string
   language: string
   duration: number
@@ -101,15 +121,21 @@ interface VideoTranscript {
   qualityLevel?: 'EXCELLENT' | 'HIGH' | 'GOOD' | 'FAIR' | 'LOW'
   /** 处理总耗时（毫秒） */
   processingTimeMs?: number
+  /** 是否已纠错（false = 仅 ASR 原始文本，true = 已执行 LLM 纠错） */
+  corrected?: boolean
+  /** 视频描述（纠错上下文） */
+  videoDesc?: string
+  /** 视频作者（纠错上下文） */
+  videoAuthor?: string
 }
 
 // ─── Constants ────────────────────────────────────────
 
 /** 评论采集上限 */
 const MAX_COMMENTS = 100
-/** 每页评论数 */
-const COMMENTS_PAGE_SIZE = 20
-/** 最大翻页数（100 条 / 20 条每页 = 5 页） */
+/** 每页评论数（增大到 50 减少翻页次数，从 5 页 → 2 页） */
+const COMMENTS_PAGE_SIZE = 50
+/** 最大翻页数（100 条 / 50 条每页 = 2 页） */
 const MAX_COMMENT_PAGES = Math.ceil(MAX_COMMENTS / COMMENTS_PAGE_SIZE)
 /** 最低点赞数过滤阈值 */
 const MIN_LIKES_THRESHOLD = 100
@@ -173,18 +199,44 @@ export function useDouyinSearch() {
 
   const search = useCallback(
     async (
-      keyword: string,
-      count = 20,
-      publishTime: PublishTimeFilter = 'none',
+      keywordOrParams: string | MultiTagSearchParams,
+      countOrOptions?: number | PublishTimeFilter | SearchOptions,
+      legacyPublishTime?: PublishTimeFilter,
     ) => {
       setLoading(true)
       setError(null)
       setSearchNotice(null)
       try {
+        // ── 参数归一化：兼容旧版 search(keyword, count, publishTime) 和新版 search(params) ──
+        let keywords: string[]
+        let searchCount: number
+        let publishTime: PublishTimeFilter
+        let minLikes: number | null = null
+
+        if (typeof keywordOrParams === 'string') {
+          // 旧版单关键词模式
+          keywords = [keywordOrParams]
+          searchCount = typeof countOrOptions === 'number' ? countOrOptions : 20
+          publishTime = typeof countOrOptions === 'string'
+            ? countOrOptions
+            : (legacyPublishTime ?? 'none')
+        } else {
+          // 新版多标签模式
+          keywords = keywordOrParams.keywords
+          searchCount = keywordOrParams.count ?? 20
+          publishTime = keywordOrParams.options?.publishTime ?? 'none'
+          minLikes = keywordOrParams.options?.minLikes ?? null
+        }
+
         const res = await fetch('/api/research/douyin-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keyword, count, publishTime }),
+          body: JSON.stringify({
+            keywords,
+            count: searchCount,
+            publishTime,
+            minLikes,
+          }),
         })
         const json = await res.json()
         if (!json.success) {
@@ -284,10 +336,12 @@ export function useDouyinSearch() {
         let pageCount = 1
 
         // 持续翻页采集，直到达到上限或没有更多
+        // 提前退出：如果已收集到足够多高赞评论（≥20 条 ≥100 赞），不再翻页
         while (
           hasMore &&
           pageCount < MAX_COMMENT_PAGES &&
-          allComments.length < MAX_COMMENTS
+          allComments.length < MAX_COMMENTS &&
+          allComments.filter((c) => c.diggCount >= MIN_LIKES_THRESHOLD).length < 20
         ) {
           const moreRes = await fetch('/api/research/douyin-comments', {
             method: 'POST',
@@ -443,15 +497,16 @@ export function useDouyinSearch() {
   )
 
   /**
-   * 提取抖音视频口播文案
+   * 提取抖音视频口播文案（仅 ASR，不自动纠错）
    *
    * 通过 douyin-ingest CLI 工具下载视频音频并使用 faster-whisper 转写为文字。
    * 不保留视频文件，只提取音频并转写。
+   * LLM 纠错不自动执行，用户检查后如有需要可调用 correctTranscript 手动触发。
    *
    * 进度模拟：ASR 是长时间操作，基于时间模拟进度以提供用户反馈。
    * - 0-8s: 5% → 45%（音频下载+上传阶段）
-   * - 8-20s: 45% → 75%（ASR 识别阶段）
-   * - 20s+: 75% → 95%（LLM 纠错阶段，缓慢增长）
+   * - 8-20s: 45% → 90%（ASR 识别阶段）
+   * - 20s+: 90% → 95%（获取视频上下文，缓慢增长）
    * - API 返回: 100%
    */
   const extractTranscript = useCallback(async (
@@ -471,17 +526,17 @@ export function useDouyinSearch() {
         // 下载+上传阶段: 5% → 45%
         pct = 5 + (elapsed / 8) * 40
       } else if (elapsed <= 20) {
-        // ASR 识别阶段: 45% → 75%
-        pct = 45 + ((elapsed - 8) / 12) * 30
+        // ASR 识别阶段: 45% → 90%
+        pct = 45 + ((elapsed - 8) / 12) * 45
       } else {
-        // LLM 纠错阶段: 75% → 95%（每秒 +0.5%）
-        pct = Math.min(95, 75 + (elapsed - 20) * 0.5)
+        // 获取上下文阶段: 90% → 95%
+        pct = Math.min(95, 90 + (elapsed - 20) * 0.3)
       }
       const detail = elapsed <= 8
         ? '下载音频 + 上传云端...'
         : elapsed <= 20
           ? 'ASR 语音识别中...'
-          : 'AI 文案纠错中...'
+          : '获取视频上下文...'
       updateStep('transcript', 'active', detail, Math.round(pct))
     }, 1000)
 
@@ -491,11 +546,13 @@ export function useDouyinSearch() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
           urlOrId.includes('http')
-            ? { url: urlOrId }
-            : { awemeId: urlOrId },
+            ? { url: urlOrId, skipCorrection: true }
+            : { awemeId: urlOrId, skipCorrection: true },
         ),
       })
+      console.log('[use-douyin-search] transcript response status:', res.status, res.ok)
       const json = await res.json()
+      console.log('[use-douyin-search] transcript json success:', json.success, 'text length:', json.data?.text?.length, 'awemeId:', json.data?.awemeId)
       if (!json.success) {
         throw new Error(json.error || 'Failed to extract transcript')
       }
@@ -517,13 +574,186 @@ export function useDouyinSearch() {
   }, [updateStep])
 
   /**
-   * 检查输入是否为抖音视频链接
+   * 手动触发文案纠错（LLM 纠正 ASR 原始文本）
+   *
+   * v3 优化：使用 SSE 流式输出，前端实时展示纠错进度。
+   * 纠错完成后更新 transcripts 状态，保留纠错前后对比。
+   */
+  const [correctionLoading, setCorrectionLoading] = useState(false)
+  const [correctionError, setCorrectionError] = useState<string | null>(null)
+  const [correctionProgress, setCorrectionProgress] = useState(0)
+  const [correctionStreamText, setCorrectionStreamText] = useState<string>('')
+
+  const correctTranscript = useCallback(async (
+    awemeId: string,
+    rawText: string,
+    videoDesc?: string,
+    videoAuthor?: string,
+    model?: string,
+  ) => {
+    setCorrectionLoading(true)
+    setCorrectionError(null)
+    setCorrectionProgress(0)
+    setCorrectionStreamText('')
+
+    // 计时器模拟进度（流式 delta 到达后由实际文本长度驱动）
+    let elapsed = 0
+    const timer = setInterval(() => {
+      elapsed += 1
+      // 0-3s: 5% → 30%（LLM 思考阶段）
+      // 3-10s: 30% → 80%（生成阶段）
+      // 10s+: 80% → 95%（缓慢增长）
+      let pct: number
+      if (elapsed <= 3) {
+        pct = 5 + (elapsed / 3) * 25
+      } else if (elapsed <= 10) {
+        pct = 30 + ((elapsed - 3) / 7) * 50
+      } else {
+        pct = Math.min(95, 80 + (elapsed - 10) * 1.5)
+      }
+      setCorrectionProgress(Math.round(pct))
+    }, 1000)
+
+    try {
+      const res = await fetch('/api/research/douyin-correct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawText,
+          videoDesc,
+          videoAuthor,
+          model,
+          stream: true,
+        }),
+      })
+
+      // 检查是否是 SSE 流
+      const contentType = res.headers.get('content-type') || ''
+      if (!contentType.includes('text/event-stream')) {
+        // 回退：非流式响应
+        const json = await res.json()
+        if (!json.success) {
+          throw new Error(json.error || 'Failed to correct transcript')
+        }
+        const corrected = json.data as VideoTranscript
+        setTranscripts((prev) => {
+          const existing = prev[awemeId]
+          return {
+            ...prev,
+            [awemeId]: {
+              ...(existing || {}),
+              ...corrected,
+              segments: existing?.segments?.map((seg, i) => ({
+                ...seg,
+                text: corrected.segments?.[i]?.text || seg.text,
+              })) || [],
+            },
+          }
+        })
+        setCorrectionProgress(100)
+        return corrected
+      }
+
+      // 解析 SSE 流
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No response body')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let finalData: VideoTranscript | null = null
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+
+        // 解析 SSE 数据行
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // 保留最后不完整的行
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const dataStr = line.slice(6)
+
+          try {
+            const msg = JSON.parse(dataStr)
+
+            if (msg.type === 'delta') {
+              // 流式文本增量
+              setCorrectionStreamText((prev) => prev + msg.text)
+              // 根据已接收文本长度估算进度
+              setCorrectionProgress((prev) => {
+                const textProgress = Math.min(80, 30 + (correctionStreamText.length / rawText.length) * 50)
+                return Math.max(prev, Math.round(textProgress))
+              })
+            } else if (msg.type === 'final') {
+              // 最终结果
+              finalData = msg.data as VideoTranscript
+              setCorrectionProgress(100)
+            } else if (msg.type === 'error') {
+              throw new Error(msg.error || 'Correction failed')
+            }
+          } catch (parseErr) {
+            // 忽略解析错误，继续
+            if (parseErr instanceof Error && parseErr.message.includes('Correction failed')) {
+              throw parseErr
+            }
+          }
+        }
+      }
+
+      if (!finalData) {
+        throw new Error('No final result received from stream')
+      }
+
+      const corrected = finalData
+      setTranscripts((prev) => {
+        const existing = prev[awemeId]
+        return {
+          ...prev,
+          [awemeId]: {
+            ...(existing || {}),
+            ...corrected,
+            segments: existing?.segments?.map((seg, i) => ({
+              ...seg,
+              text: corrected.segments?.[i]?.text || seg.text,
+            })) || [],
+          },
+        }
+      })
+      return corrected
+    } catch (err) {
+      setCorrectionError(
+        err instanceof Error ? err.message : 'Unknown error',
+      )
+      return null
+    } finally {
+      clearInterval(timer)
+      setCorrectionLoading(false)
+      setCorrectionStreamText('')
+      // 延迟重置进度
+      setTimeout(() => setCorrectionProgress(0), 500)
+    }
+  }, [])
+
+  /**
+   * 检测输入是否为抖音视频链接
+   *
+   * 支持以下场景:
+   *  - 标准视频 URL: https://www.douyin.com/video/123
+   *  - 搜索页 URL: https://www.douyin.com/search/xxx?modal_id=123&type=general
+   *  - 短链接: https://v.douyin.com/xxx/
+   *  - 分享文本: 7.99 复制打开抖音... https://v.douyin.com/xxx/
    */
   const isDouyinVideoUrl = useCallback((input: string): boolean => {
-    // 匹配完整视频链接或短链接
-    return (input.includes('douyin.com') && /\/video\/\d+/.test(input))
-      || input.includes('v.douyin.com')
-      || input.includes('iesdouyin.com')
+    // 匹配完整视频链接（含 /video/{id}）
+    if (input.includes('douyin.com') && /\/video\/\d+/.test(input)) return true
+    // 匹配搜索页链接（含 modal_id 参数）
+    if (input.includes('douyin.com') && /modal_id=\d+/.test(input)) return true
+    // 匹配短链接
+    if (input.includes('v.douyin.com') || input.includes('iesdouyin.com')) return true
+    return false
   }, [])
 
   /**
@@ -752,6 +982,12 @@ export function useDouyinSearch() {
     transcriptError,
     transcripts,
     extractTranscript,
+    // 文案纠错
+    correctionLoading,
+    correctionError,
+    correctionProgress,
+    correctionStreamText,
+    correctTranscript,
   }
 }
 
@@ -762,6 +998,8 @@ export type {
   DouyinComment,
   CommentAnalysisResult,
   PublishTimeFilter,
+  SearchOptions,
+  MultiTagSearchParams,
   VideoTranscript,
   TranscriptSegment,
   TranscriptCorrection,
