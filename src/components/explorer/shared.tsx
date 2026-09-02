@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { MessageSquare, ThumbsUp, FileText, Copy, Check } from 'lucide-react'
+import { MessageSquare, ThumbsUp, FileText, Copy, Check, Wand2, Loader2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type {
@@ -157,8 +157,20 @@ export function CommentAnalysisView({
 
 export function TranscriptView({
   transcript,
+  onCorrect,
+  correcting,
+  correctionProgress = 0,
+  correctionStreamText = '',
 }: {
   transcript: VideoTranscript
+  /** 手动触发 LLM 纠错回调 */
+  onCorrect?: () => void
+  /** 是否正在纠错中 */
+  correcting?: boolean
+  /** 纠错进度百分比 (0-100) */
+  correctionProgress?: number
+  /** 流式纠错实时文本 */
+  correctionStreamText?: string
 }) {
   const [showSegments, setShowSegments] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -178,6 +190,8 @@ export function TranscriptView({
   const isLong = transcript.text.length > 150
 
   const hasCorrections = (transcript.correctionCount ?? 0) > 0
+  const isCorrected = transcript.corrected === true || hasCorrections
+  const canCorrect = !isCorrected && onCorrect && transcript.rawText
 
   return (
     <div className="mt-2 rounded-lg border border-muted bg-muted/30 p-3">
@@ -185,13 +199,47 @@ export function TranscriptView({
         <span className="text-xs font-medium flex items-center gap-1">
           <FileText className="size-3.5" />
           口播文案
-          {hasCorrections && (
+          {isCorrected ? (
             <Badge variant="secondary" className="text-xs ml-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               已纠错 {transcript.correctionCount} 处
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-xs ml-1 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              未纠错
             </Badge>
           )}
         </span>
         <div className="flex items-center gap-2">
+          {/* 手动纠错按钮 */}
+          {canCorrect && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-xs border-amber-500/30 text-amber-600 hover:text-amber-700 dark:text-amber-400"
+              onClick={onCorrect}
+              disabled={correcting}
+              title="使用 AI 纠正 ASR 转写中的识别错误"
+            >
+              {correcting ? (
+                <>
+                  <Loader2 className="size-3 animate-spin" />
+                  纠错中 {correctionProgress > 0 ? `${correctionProgress}%` : '...'}
+                </>
+              ) : (
+                <>
+                  <Wand2 className="size-3" />
+                  AI 纠错
+                </>
+              )}
+            </Button>
+          )}
+          {/* 纠错中状态 - 无纠错按钮时 */}
+          {correcting && !canCorrect && (
+            <Badge variant="secondary" className="text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <Loader2 className="size-3 animate-spin mr-1" />
+              纠错中 {correctionProgress > 0 ? `${correctionProgress}%` : '...'}
+            </Badge>
+          )}
           <Badge variant="secondary" className="text-xs">
             {transcript.language}
           </Badge>
@@ -213,6 +261,37 @@ export function TranscriptView({
           </Button>
         </div>
       </div>
+
+      {/* 纠错进度条 */}
+      {correcting && correctionProgress > 0 && (
+        <div className="mb-2">
+          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-amber-500/60 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${correctionProgress}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {correctionProgress < 30
+              ? 'AI 正在分析文本...'
+              : correctionProgress < 80
+                ? '正在纠错识别错误...'
+                : correctionProgress < 100
+                  ? '即将完成...'
+                  : '纠错完成！'}
+          </p>
+        </div>
+      )}
+
+      {/* 流式纠错实时预览 */}
+      {correcting && correctionStreamText && (
+        <div className="mb-2 rounded border border-amber-500/20 bg-amber-500/5 p-2">
+          <p className="text-xs text-muted-foreground mb-1">实时纠错预览：</p>
+          <p className="text-sm whitespace-pre-wrap leading-relaxed line-clamp-3">
+            {correctionStreamText}
+          </p>
+        </div>
+      )}
 
       {/* 全文文案 */}
       <p className={`text-sm whitespace-pre-wrap leading-relaxed ${isLong && !expanded ? 'line-clamp-3' : ''}`}>
@@ -334,7 +413,7 @@ export function TranscriptView({
 
 // ─── Utils ─────────────────────────────────────────────
 
-function formatDuration(seconds: number): string {
+export function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m}:${s.toString().padStart(2, '0')}`
