@@ -133,6 +133,9 @@ export interface KnowledgeIndexEntry {
   confidence: ConfidenceLevel;
   human_expression_verdict?: HumanExpressionVerdict;
   search_text: string;
+  search_name: string;
+  search_description: string;
+  search_pattern: string;
   trusted_evidence_count: number;
   unique_content_count: number;
   evidence_strength: number;
@@ -195,8 +198,8 @@ export const CATEGORY_SYNONYMS: Record<KnowledgeCategory, string[]> = {
 // ─── Level Synonyms for Keyword Matching ─────────────────────────────────────
 
 export const LEVEL_SYNONYMS: Record<KnowledgeLevel, string[]> = {
-  strategic_pattern: ['战略', '策略', '宏观', 'strategic', '全局'],
-  structural_pattern: ['结构', '模式', '框架', 'structural', '组织'],
-  expression_principle: ['表达', '原则', '原理', 'expression', '写作'],
-  surface_technique: ['技巧', '手法', '表面', 'surface', '技术'],
+  strategic_pattern: ['战略', '策略', '宏观', '认知', '反转', '心理', '底层逻辑', 'strategic', '全局'],
+  structural_pattern: ['结构', '模式', '框架', '开头', '钩子', '组织', 'structural'],
+  expression_principle: ['表达', '原则', '原理', '真人', '自然', '口语', '真实', '思考', 'expression', '写作'],
+  surface_technique: ['技巧', '手法', '表面', '句式', '语言', '数字', '命令', '行动', '文案', 'surface', '技术'],
 };

@@ -1,7 +1,7 @@
 /**
- * P0.2.3 — Knowledge Ranker
+ * P0.2.3-FIX — Knowledge Ranker
  *
- * Implements a deterministic, explainable ranking model.
+ * Implements a deterministic, explainable ranking model with real scoring.
  *
  * Score Formula:
  *   score = keyword_match * 0.35
@@ -12,7 +12,11 @@
  *         + confidence_score * 0.10
  *         + evidence_strength * 0.05
  *
- * All scores are deterministic for the same input.
+ * Key fixes:
+ * - Level match: real synonym-based scoring (not fixed 0.5)
+ * - Name match: uses search_name only (not search_text)
+ * - Description match: uses search_description only (not search_text)
+ * - Category match: prevents single-character substring false positives
  */
 
 import {
@@ -22,13 +26,15 @@ import {
   DEFAULT_RANKING_WEIGHTS,
   CONFIDENCE_SCORES,
   CATEGORY_SYNONYMS,
+  LEVEL_SYNONYMS,
   KnowledgeCategory,
+  KnowledgeLevel,
 } from './types';
 
 // ─── Match Scoring ───────────────────────────────────────────────────────────
 
 /**
- * Compute keyword match score against search_text.
+ * Compute keyword match score against search_text (full content).
  * Returns { score: 0-1, matched_terms: string[] }.
  *
  * Score = (number of unique keywords matched) / (total unique keywords)
@@ -50,56 +56,96 @@ function scoreKeywordMatch(
 
 /**
  * Compute name match score.
- * Checks if any keyword is a substring of the name.
+ * Checks if any keyword is a substring of the normalized name field.
  */
 function scoreNameMatch(
-  name: string,
+  searchName: string,
   keywords: string[]
 ): number {
   if (keywords.length === 0) return 0;
-  const lowerName = name.toLowerCase();
-  const matched = keywords.filter((kw) => lowerName.includes(kw.toLowerCase()));
-  return Math.min(matched.length / keywords.length, 1);
-}
-
-/**
- * Compute description match score.
- * Uses a longer field (search_text contains description).
- * We use the full search_text for this since description is a major component.
- */
-function scoreDescriptionMatch(
-  searchText: string,
-  keywords: string[]
-): number {
-  // search_text includes description as primary content
-  if (keywords.length === 0) return 0;
-  const matched = keywords.filter((kw) => searchText.includes(kw.toLowerCase()));
+  const matched = keywords.filter((kw) => {
+    const lowerKw = kw.toLowerCase();
+    // Only match keywords with length >= 2, or exact match for single chars
+    if (lowerKw.length === 1) return false;
+    return searchName.includes(lowerKw);
+  });
   return Math.min(new Set(matched).size / keywords.length, 1);
 }
 
 /**
+ * Compute description match score.
+ * Uses the dedicated description field, not the full search_text.
+ */
+function scoreDescriptionMatch(
+  searchDescription: string,
+  keywords: string[]
+): number {
+  if (keywords.length === 0) return 0;
+  const matched = keywords.filter((kw) => {
+    const lowerKw = kw.toLowerCase();
+    if (lowerKw.length === 1) return false;
+    return searchDescription.includes(lowerKw);
+  });
+  return Math.min(new Set(matched).size / keywords.length, 1);
+}
+
+/**
+ * Check if a keyword matches a term with proper boundary rules:
+ * - For single-char keywords: require exact match (no substring)
+ * - For multi-char keywords: substring match is acceptable
+ * - For Chinese: match as phrase (at least 2 chars)
+ */
+function keywordMatchesTerm(keyword: string, term: string): boolean {
+  const kw = keyword.toLowerCase();
+  const t = term.toLowerCase();
+
+  // Single-char keywords must match exactly (not as substring)
+  if (kw.length === 1) {
+    return kw === t;
+  }
+
+  // Multi-char keywords: substring match is fine
+  return t.includes(kw);
+}
+
+/**
  * Compute category match score.
+ * Uses category synonyms with proper boundary matching.
+ * Prevents false positives from single-char substring matches.
  */
 function scoreCategoryMatch(
   category: KnowledgeCategory,
   keywords: string[]
 ): number {
   const synonyms = CATEGORY_SYNONYMS[category] ?? [];
-  const allTerms = [category, ...synonyms];
+  const allTerms = [...synonyms];
+
   const matched = keywords.filter((kw) =>
-    allTerms.some((term) => term.includes(kw.toLowerCase()) || kw.toLowerCase().includes(term))
+    allTerms.some((term) => keywordMatchesTerm(kw, term))
   );
-  return matched.length > 0 ? Math.min(matched.length / 2, 1) : 0;
+
+  if (matched.length === 0) return 0;
+  // Scale: 1 match = 0.5, 2+ matches = 1.0
+  return Math.min(new Set(matched).size / 2, 1);
 }
 
 /**
- * Compute level match score.
- * Simplified: returns 0.5 if any level-related term matches, driven mainly by confidence.
+ * Compute level match score based on LEVEL_SYNONYMS.
+ * Returns 1.0 if any keyword matches the level's synonyms, 0 otherwise.
+ * This measures whether the query explicitly expresses a knowledge level intent.
  */
-function scoreLevelMatch(): number {
-  // Level match is less about topic relevance and more about structural alignment
-  // We use a neutral score here; level filtering is done at the filter stage, not ranking
-  return 0.5;
+function scoreLevelMatch(
+  level: KnowledgeLevel,
+  keywords: string[]
+): number {
+  if (keywords.length === 0) return 0;
+
+  const synonyms = LEVEL_SYNONYMS[level] ?? [];
+  const matched = keywords.filter((kw) =>
+    synonyms.some((syn) => keywordMatchesTerm(kw, syn))
+  );
+
+  return matched.length > 0 ? 1.0 : 0;
 }
 
 // ─── Ranking Functions ────────────────────────────────────────────────────────
@@ -124,10 +170,10 @@ function scoreEntry(
   };
 } {
   const kwResult = scoreKeywordMatch(entry.search_text, keywords);
-  const nameScore = scoreNameMatch(entry.name, keywords);
-  const descScore = scoreDescriptionMatch(entry.search_text, keywords);
+  const nameScore = scoreNameMatch(entry.search_name, keywords);
+  const descScore = scoreDescriptionMatch(entry.search_description, keywords);
   const catScore = scoreCategoryMatch(entry.category, keywords);
-  const levelScore = scoreLevelMatch();
+  const levelScore = scoreLevelMatch(entry.knowledge_level, keywords);
   const confScore = CONFIDENCE_SCORES[entry.confidence];
   const evStrength = entry.evidence_strength;
 
@@ -245,7 +291,6 @@ export function rankEntries(
     if (confDiff !== 0) return confDiff;
 
     // 3. Evidence strength descending
-    // (need to recompute since we lost this after scoreEntry)
     if (b.debug.evidence_strength_value !== a.debug.evidence_strength_value) {
       return b.debug.evidence_strength_value - a.debug.evidence_strength_value;
     }

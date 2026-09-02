@@ -12,9 +12,16 @@ import {
   KnowledgeLevel,
   KUStatus,
   ConfidenceLevel,
-  CATEGORY_SYNONYMS,
-  LEVEL_SYNONYMS,
 } from './types';
+
+// ─── Text Normalization ──────────────────────────────────────────────────────
+
+/**
+ * Normalize text for indexing: lowercase, trim whitespace.
+ */
+function normalizeText(text: string): string {
+  return text.toLowerCase().trim();
+}
 import { countTrustedEvidence } from './knowledge-filters';
 
 // ─── Index Builder ───────────────────────────────────────────────────────────
@@ -70,6 +77,9 @@ export function buildIndexEntry(unit: CanonicalKnowledgeUnit): KnowledgeIndexEnt
     confidence: unit.confidence,
     human_expression_verdict: unit.human_expression_verdict,
     search_text: buildSearchText(unit),
+    search_name: normalizeText(unit.name),
+    search_description: normalizeText(unit.description),
+    search_pattern: normalizeText(unit.abstract_pattern ?? ''),
     trusted_evidence_count: countTrustedEvidence(unit),
     unique_content_count: unit.evidence.unique_content_count,
     evidence_strength: computeEvidenceStrength(unit),
@@ -88,7 +98,11 @@ export function buildIndex(units: CanonicalKnowledgeUnit[]): KnowledgeIndexEntry
 /**
  * Extract keywords from a topic string.
  * Supports both space-delimited English/Chinese and continuous Chinese text (via bigram segmentation).
- * Also expands using category/level synonyms.
+ *
+ * Note: Category/level synonym expansion is intentionally NOT performed here.
+ * Category and level intent matching is handled by the dedicated scoring functions
+ * (scoreCategoryMatch, scoreLevelMatch) in the ranker, which use proper boundary-aware matching.
+ * Expanding all synonyms at keyword extraction level causes false positives for unrelated queries.
  */
 export function extractKeywords(topic: string): string[] {
   const lower = topic.toLowerCase();
@@ -104,7 +118,7 @@ export function extractKeywords(topic: string): string[] {
       // Pure English token — add as-is
       keywords.push(token);
     } else if (/^[一-龥]+$/.test(token)) {
-      // Pure Chinese token — add bigrams + whole token
+      // Pure Chinese token — add whole token
       keywords.push(token);
       // Generate bigrams for better Chinese matching
       if (token.length >= 2) {
@@ -118,29 +132,10 @@ export function extractKeywords(topic: string): string[] {
     }
   }
 
-  // Expand with category synonyms
-  for (const [category, synonyms] of Object.entries(CATEGORY_SYNONYMS)) {
-    for (const synonym of synonyms) {
-      if (lower.includes(synonym)) {
-        // Add the category itself and related synonyms
-        keywords.push(category);
-        keywords.push(...synonyms.filter((s) => s !== synonym && s.length > 1));
-      }
-    }
-  }
-
-  // Expand with level synonyms
-  for (const [level, synonyms] of Object.entries(LEVEL_SYNONYMS)) {
-    for (const synonym of synonyms) {
-      if (lower.includes(synonym)) {
-        keywords.push(level);
-        keywords.push(...synonyms.filter((s) => s !== synonym && s.length > 1));
-      }
-    }
-  }
-
-  // Deduplicate
-  return [...new Set(keywords)];
+  // Deduplicate and filter: only keep keywords with length >= 2
+  // Single-char keywords cause excessive false positives
+  const unique = [...new Set(keywords)];
+  return unique.filter((kw) => kw.length >= 2);
 }
 
 // ─── Filter Helpers ──────────────────────────────────────────────────────────

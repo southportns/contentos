@@ -1,0 +1,295 @@
+{
+  "version": "1.0",
+  "evaluated_at": "2026-09-02T10:18:05.049Z",
+  "k": 5,
+  "metrics": {
+    "strict": {
+      "precision_at_5": 0.27,
+      "recall_at_5": 0.44,
+      "hit_rate_at_5": 0.33
+    },
+    "relaxed": {
+      "precision_at_5": 0.38,
+      "recall_at_5": 0.18,
+      "hit_rate_at_5": 0.44
+    },
+    "irrelevant_query_rejection_rate": 1
+  },
+  "queries": [
+    {
+      "query_id": "Q001",
+      "query": "爱自己",
+      "expected": [
+        "KU_014"
+      ],
+      "accepted": [
+        "KU_010",
+        "KU_011",
+        "KU_018",
+        "KU_020",
+        "KU_016"
+      ],
+      "retrieved": [
+        "KU_010"
+      ],
+      "strict_hits": [],
+      "relaxed_hits": [
+        "KU_010"
+      ],
+      "strict_precision_at_5": 0,
+      "strict_recall_at_5": 0,
+      "strict_hit": false,
+      "relaxed_precision_at_5": 1,
+      "relaxed_recall_at_5": 0.16666666666666666,
+      "relaxed_hit": true,
+      "is_irrelevant_query": false,
+      "correct_rejection": false
+    },
+    {
+      "query_id": "Q002",
+      "query": "职场边界",
+      "expected": [],
+      "accepted": [
+        "KU_007"
+      ],
+      "retrieved": [],
+      "strict_hits": [],
+      "relaxed_hits": [],
+      "strict_precision_at_5": 0,
+      "strict_recall_at_5": 1,
+      "strict_hit": false,
+      "relaxed_precision_at_5": 0,
+      "relaxed_recall_at_5": 0,
+      "relaxed_hit": false,
+      "is_irrelevant_query": false,
+      "correct_rejection": false
+    },
+    {
+      "query_id": "Q003",
+      "query": "女性成长",
+      "expected": [
+        "KU_010",
+        "KU_011"
+      ],
+      "accepted": [
+        "KU_003",
+        "KU_005",
+        "KU_014",
+        "KU_008",
+        "KU_018"
+      ],
+      "retrieved": [],
+      "strict_hits": [],
+      "relaxed_hits": [],
+      "strict_precision_at_5": 0,
+      "strict_recall_at_5": 0,
+      "strict_hit": false,
+      "relaxed_precision_at_5": 0,
+      "relaxed_recall_at_5": 0,
+      "relaxed_hit": false,
+      "is_irrelevant_query": false,
+      "correct_rejection": false
+    },
+    {
+      "query_id": "Q004",
+      "query": "被爱",
+      "expected": [
+        "KU_014"
+      ],
+      "accepted": [
+        "KU_008",
+        "KU_009",
+        "KU_018",
+        "KU_010"
+      ],
+      "retrieved": [],
+      "strict_hits": [],
+      "relaxed_hits": [],
+      "strict_precision_at_5": 0,
+      "strict_recall_at_5": 0,
+      "strict_hit": false,
+      "relaxed_precision_at_5": 0,
+      "relaxed_recall_at_5": 0,
+      "relaxed_hit": false,
+      "is_irrelevant_query": false,
+      "correct_rejection": false
+    },
+    {
+      "query_id": "Q005",
+      "query": "自我价值",
+      "expected": [
+        "KU_010",
+        "KU_013"
+      ],
+      "accepted": [
+        "KU_014",
+        "KU_011",
+        "KU_020"
+      ],
+      "retrieved": [],
+      "strict_hits": [],
+      "relaxed_hits": [],
+      "strict_precision_at_5": 0,
+      "strict_recall_at_5": 0,
+      "strict_hit": false,
+      "relaxed_precision_at_5": 0,
+      "relaxed_recall_at_5": 0,
+      "relaxed_hit": false,
+      "is_irrelevant_query": false,
+      "correct_rejection": false
+    },
+    {
+      "query_id": "Q006",
+      "query": "开头技巧",
+      "expected": [
+        "KU_001",
+        "KU_003",
+        "KU_005"
+      ],
+      "accepted": [
+        "KU_002",
+        "KU_004",
+        "KU_007"
+      ],
+      "retrieved": [],
+      "strict_hits": [],
+      "relaxed_hits": [],
+      "strict_precision_at_5": 0,
+      "strict_recall_at_5": 0,
+      "strict_hit": false,
+      "relaxed_precision_at_5": 0,
+      "relaxed_recall_at_5": 0,
+      "relaxed_hit": false,
+      "is_irrelevant_query": false,
+      "correct_rejection": false
+    },
+    {
+      "query_id": "Q007",
+      "query": "认知反转",
+      "expected": [
+        "KU_014"
+      ],
+      "accepted": [
+        "KU_012",
+        "KU_024",
+        "KU_010"
+      ],
+      "retrieved": [
+        "KU_014"
+      ],
+      "strict_hits": [
+        "KU_014"
+      ],
+      "relaxed_hits": [
+        "KU_014"
+      ],
+      "strict_precision_at_5": 1,
+      "strict_recall_at_5": 1,
+      "strict_hit": true,
+      "relaxed_precision_at_5": 1,
+      "relaxed_recall_at_5": 0.25,
+      "relaxed_hit": true,
+      "is_irrelevant_query": false,
+      "correct_rejection": false
+    },
+    {
+      "query_id": "Q008",
+      "query": "结尾行动",
+      "expected": [
+        "KU_022"
+      ],
+      "accepted": [
+        "KU_021"
+      ],
+      "retrieved": [
+        "KU_022"
+      ],
+      "strict_hits": [
+        "KU_022"
+      ],
+      "relaxed_hits": [
+        "KU_022"
+      ],
+      "strict_precision_at_5": 1,
+      "strict_recall_at_5": 1,
+      "strict_hit": true,
+      "relaxed_precision_at_5": 1,
+      "relaxed_recall_at_5": 0.5,
+      "relaxed_hit": true,
+      "is_irrelevant_query": false,
+      "correct_rejection": false
+    },
+    {
+      "query_id": "Q009",
+      "query": "真实自然表达",
+      "expected": [
+        "KU_018",
+        "KU_020"
+      ],
+      "accepted": [
+        "KU_016"
+      ],
+      "retrieved": [
+        "KU_020",
+        "KU_018",
+        "KU_013",
+        "KU_011",
+        "KU_007"
+      ],
+      "strict_hits": [
+        "KU_020",
+        "KU_018"
+      ],
+      "relaxed_hits": [
+        "KU_020",
+        "KU_018"
+      ],
+      "strict_precision_at_5": 0.4,
+      "strict_recall_at_5": 1,
+      "strict_hit": true,
+      "relaxed_precision_at_5": 0.4,
+      "relaxed_recall_at_5": 0.6666666666666666,
+      "relaxed_hit": true,
+      "is_irrelevant_query": false,
+      "correct_rejection": false
+    },
+    {
+      "query_id": "Q010",
+      "query": "量子物理芯片技术",
+      "expected": [],
+      "accepted": [],
+      "retrieved": [],
+      "strict_hits": [],
+      "relaxed_hits": [],
+      "strict_precision_at_5": 0,
+      "strict_recall_at_5": 1,
+      "strict_hit": false,
+      "relaxed_precision_at_5": 0,
+      "relaxed_recall_at_5": 1,
+      "relaxed_hit": false,
+      "is_irrelevant_query": true,
+      "correct_rejection": true
+    }
+  ],
+  "summary": {
+    "best_query": {
+      "id": "Q007",
+      "query": "认知反转",
+      "precision": 1
+    },
+    "worst_query": {
+      "id": "Q006",
+      "query": "开头技巧",
+      "precision": 0
+    },
+    "zero_hit_queries": [
+      "Q001 (爱自己)",
+      "Q002 (职场边界)",
+      "Q003 (女性成长)",
+      "Q004 (被爱)",
+      "Q005 (自我价值)",
+      "Q006 (开头技巧)"
+    ],
+    "false_positive_queries": []
+  }
+}
