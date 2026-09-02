@@ -21,6 +21,7 @@ import {
   CommentAnalysisView,
   TranscriptView,
   formatNumber,
+  formatDuration,
 } from '@/components/explorer/shared'
 import { ResearchProgress } from '@/components/explorer/research-progress'
 
@@ -348,30 +349,35 @@ function ResearchContentCard({
           </div>
         </div>
 
-        {hasMetrics && (
-          <div className="flex gap-3 text-xs text-muted-foreground">
-            {metrics?.likes != null && (
-              <span className="flex items-center gap-0.5">
-                <Heart className="size-3" /> {formatNumber(metrics.likes)}
-              </span>
-            )}
-            {metrics?.comments != null && (
-              <span className="flex items-center gap-0.5">
-                <MessageCircle className="size-3" /> {formatNumber(metrics.comments)}
-              </span>
-            )}
-            {metrics?.shares != null && (
-              <span className="flex items-center gap-0.5">
-                <Share2 className="size-3" /> {formatNumber(metrics.shares)}
-              </span>
-            )}
-            {metrics?.favorites != null && (
-              <span className="flex items-center gap-0.5">
-                <Bookmark className="size-3" /> {formatNumber(metrics.favorites)}
-              </span>
-            )}
-          </div>
-        )}
+{hasMetrics && (
+<div className="flex gap-3 text-xs text-muted-foreground">
+{metrics?.likes != null && (
+<span className="flex items-center gap-0.5">
+<Heart className="size-3" /> {formatNumber(metrics.likes)}
+</span>
+)}
+{metrics?.comments != null && (
+<span className="flex items-center gap-0.5">
+<MessageCircle className="size-3" /> {formatNumber(metrics.comments)}
+</span>
+)}
+{metrics?.shares != null && (
+<span className="flex items-center gap-0.5">
+<Share2 className="size-3" /> {formatNumber(metrics.shares)}
+</span>
+)}
+{metrics?.favorites != null && (
+<span className="flex items-center gap-0.5">
+<Bookmark className="size-3" /> {formatNumber(metrics.favorites)}
+</span>
+)}
+{transcript?.duration != null && (
+<span className="flex items-center gap-0.5">
+<Clock className="size-3" /> {formatDuration(transcript.duration)}
+</span>
+)}
+</div>
+)}
 
         {content.content && (
           <p className="text-xs text-muted-foreground">
@@ -386,9 +392,31 @@ function ResearchContentCard({
           </div>
         )}
 
+        {/* Correction error */}
+        {douyin.correctionError && transcript && (
+          <div className="rounded border border-destructive/20 bg-destructive/5 p-2 text-xs text-destructive">
+            纠错失败：{douyin.correctionError}
+          </div>
+        )}
+
         {/* Transcript results */}
         {transcript && (
-          <TranscriptView transcript={transcript} />
+          <TranscriptView
+            transcript={transcript}
+            onCorrect={() => {
+              if (!awemeId || !transcript.rawText) return
+              douyin.correctTranscript(
+                awemeId,
+                transcript.rawText,
+                transcript.videoDesc,
+                transcript.videoAuthor,
+                transcript.model,
+              )
+            }}
+            correcting={douyin.correctionLoading}
+            correctionProgress={douyin.correctionProgress}
+            correctionStreamText={douyin.correctionStreamText}
+          />
         )}
 
         {/* Comment error */}
