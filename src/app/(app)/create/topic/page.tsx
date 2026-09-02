@@ -27,6 +27,7 @@ import { useWorkflow, workflowActions } from '@/hooks/use-workflow'
 import type { TopicProfile } from '@/hooks/use-workflow'
 import { useContentLibrary } from '@/hooks/use-content-library'
 import { PersonaSelector } from '@/components/create/persona-selector'
+import { StepDistill } from '@/components/create/step-distill'
 import { formatNumber } from '@/components/explorer/shared'
 
 interface ProjectLoadData {
@@ -321,8 +322,12 @@ function TopicPageInner() {
           自由创作
         </button>
         <button
-          className="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all text-muted-foreground hover:text-foreground"
-          onClick={() => router.push('/create/distill')}
+          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all ${
+            mode === 'distill'
+              ? 'bg-background text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setMode('distill')}
         >
           <BookOpen className="inline-block size-4 mr-1.5" />
           文件提炼
@@ -341,7 +346,9 @@ function TopicPageInner() {
         </button>
       </div>
 
-      {mode === 'free' ? (
+      {mode === 'distill' ? (
+        <StepDistill />
+      ) : mode === 'free' ? (
         <Card>
           <CardContent className="flex flex-col gap-4 p-6">
             <div className="flex flex-col gap-2">
