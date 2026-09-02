@@ -81,10 +81,14 @@ interface EvaluationResults {
 const K = 5;
 const dataset = evalDataset as unknown as EvaluationDataset;
 
-function computePrecision(retrieved: string[], relevant: string[]): number {
-  if (retrieved.length === 0) return 0;
-  const hits = retrieved.filter((id) => relevant.includes(id)).length;
-  return hits / retrieved.length;
+function computePrecisionAtK(
+  retrieved: string[],
+  relevant: string[],
+  k: number
+): number {
+  const topK = retrieved.slice(0, k);
+  const hits = topK.filter((id) => relevant.includes(id)).length;
+  return hits / k;
 }
 
 function computeRecall(retrieved: string[], relevant: string[]): number {
@@ -110,13 +114,13 @@ function runEvaluation(): EvaluationResults {
 
     // Strict metrics (expected only)
     const strictHits = retrieved.filter((id) => expected.includes(id));
-    const strictPrecision = computePrecision(retrieved, expected);
+    const strictPrecision = computePrecisionAtK(retrieved, expected, K);
     const strictRecall = computeRecall(retrieved, expected);
     const strictHit = strictHits.length > 0;
 
     // Relaxed metrics (expected + accepted)
     const relaxedHits = retrieved.filter((id) => relaxedRelevant.includes(id));
-    const relaxedPrecision = computePrecision(retrieved, relaxedRelevant);
+    const relaxedPrecision = computePrecisionAtK(retrieved, relaxedRelevant, K);
     const relaxedRecall = computeRecall(retrieved, relaxedRelevant);
     const relaxedHit = relaxedHits.length > 0;
 

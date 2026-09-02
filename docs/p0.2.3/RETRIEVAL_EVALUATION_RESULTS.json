@@ -1,15 +1,15 @@
 {
   "version": "1.0",
-  "evaluated_at": "2026-09-02T10:18:05.049Z",
+  "evaluated_at": "2026-09-02T13:51:22.297Z",
   "k": 5,
   "metrics": {
     "strict": {
-      "precision_at_5": 0.27,
+      "precision_at_5": 0.09,
       "recall_at_5": 0.44,
       "hit_rate_at_5": 0.33
     },
     "relaxed": {
-      "precision_at_5": 0.38,
+      "precision_at_5": 0.11,
       "recall_at_5": 0.18,
       "hit_rate_at_5": 0.44
     },
@@ -39,7 +39,7 @@
       "strict_precision_at_5": 0,
       "strict_recall_at_5": 0,
       "strict_hit": false,
-      "relaxed_precision_at_5": 1,
+      "relaxed_precision_at_5": 0.2,
       "relaxed_recall_at_5": 0.16666666666666666,
       "relaxed_hit": true,
       "is_irrelevant_query": false,
@@ -183,10 +183,10 @@
       "relaxed_hits": [
         "KU_014"
       ],
-      "strict_precision_at_5": 1,
+      "strict_precision_at_5": 0.2,
       "strict_recall_at_5": 1,
       "strict_hit": true,
-      "relaxed_precision_at_5": 1,
+      "relaxed_precision_at_5": 0.2,
       "relaxed_recall_at_5": 0.25,
       "relaxed_hit": true,
       "is_irrelevant_query": false,
@@ -210,10 +210,10 @@
       "relaxed_hits": [
         "KU_022"
       ],
-      "strict_precision_at_5": 1,
+      "strict_precision_at_5": 0.2,
       "strict_recall_at_5": 1,
       "strict_hit": true,
-      "relaxed_precision_at_5": 1,
+      "relaxed_precision_at_5": 0.2,
       "relaxed_recall_at_5": 0.5,
       "relaxed_hit": true,
       "is_irrelevant_query": false,
@@ -273,9 +273,9 @@
   ],
   "summary": {
     "best_query": {
-      "id": "Q007",
-      "query": "认知反转",
-      "precision": 1
+      "id": "Q009",
+      "query": "真实自然表达",
+      "precision": 0.4
     },
     "worst_query": {
       "id": "Q006",

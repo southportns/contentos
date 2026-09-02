@@ -1,7 +1,7 @@
 # P0.2.3 — Knowledge Store Report
 
 > Knowledge Store & Knowledge Index  
-> Version: 1.1 (P0.2.3-FIX)  
+> Version: 1.2 (P0.2.3-FIX-2)  
 > Date: 2026-09-02
 
 ---
@@ -255,12 +255,12 @@ Queries: 10
 
 ```
 Strict Metrics (expected only):
-  Precision@5: 0.27
+  Precision@5: 0.09
   Recall@5:    0.44
   HitRate@5:   0.33
 
 Relaxed Metrics (expected + accepted):
-  Precision@5: 0.38
+  Precision@5: 0.11
   Recall@5:    0.18
   HitRate@5:   0.44
 
@@ -325,7 +325,7 @@ Q006 (开头技巧) - strict: NO, relaxed: NO
 
 ### Conclusion
 
-Current keyword-based retrieval achieves **33% strict hit rate** on relevant queries. This is expected for a lexical matching system with only 24 knowledge units. **Embedding-based semantic retrieval** (future phase) is required to significantly improve these metrics.
+Current keyword-based retrieval achieves **33% strict hit rate** on relevant queries. The **strict Precision@5 of 0.09** reflects the fact that most queries return very few results (often 0 or 1) within a 5-slot window. This is expected for a lexical matching system with only 24 knowledge units. **Embedding-based semantic retrieval** (future phase) is required to significantly improve these metrics.
 
 ---
 
@@ -406,6 +406,15 @@ interface KnowledgeRetriever {
 - Computes Strict/Relaxed Precision@5, Recall@5, HitRate@5
 - Computes Irrelevant Query Rejection Rate
 - Generates `RETRIEVAL_EVALUATION_RESULTS.json` with full results
+
+### Issue 3: Precision@5 Formula Correction (Fixed)
+
+- **Root Cause**: Previously computed `Precision@5 = hits / retrieved.length`, which inflated results when fewer than 5 results were returned
+- **Fix**: Changed to `Precision@5 = hits / 5` (always divide by K, not by actual count)
+- **Impact**: Strict Precision@5 dropped from 0.27 → 0.09, Relaxed Precision@5 dropped from 0.38 → 0.11
+- **Correctness**: Now accurately measures the fraction of the Top-5 slots filled with relevant results
+- **Tests**: Added 10 unit tests in `scripts/evaluate-knowledge-retrieval.test.ts` verifying the formula
+- Q001 verification: Relaxed Precision@5 = 1/5 = **0.20** (previously reported as 1.00)
 
 ### Issue 2: Ranking Model Calibration (Fixed)
 
