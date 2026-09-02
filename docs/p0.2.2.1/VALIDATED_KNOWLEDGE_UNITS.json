@@ -1,0 +1,1116 @@
+{
+  "version": "2.0",
+  "date": "2026-09-02",
+  "phase": "P0.2.2.1 Knowledge Cleanup & Validation",
+  "total_knowledge_units": 24,
+  "statistics": {
+    "validated": 17,
+    "candidate": 7,
+    "reclassified": 0,
+    "rejected": 0,
+    "total_evidence_before": 80,
+    "total_evidence_after": 73,
+    "evidence_removed_invalid": 5,
+    "evidence_removed_duplicate": 1,
+    "evidence_removed_noise": 1,
+    "high_noise_risk": 2,
+    "medium_noise_risk": 3,
+    "low_noise_risk": 19
+  },
+  "knowledge_units": [
+    {
+      "knowledge_id": "KU_001",
+      "category": "hook",
+      "knowledge_level": "structural_pattern",
+      "name": "Question-based Conversational Hook",
+      "description": "通过直接向观众提问建立即时对话感，制造参与感和身份共鸣",
+      "abstract_pattern": "Question → Shared Experience → Curiosity",
+      "function": "建立注意力和身份共鸣，让观众感觉'这是在说我'",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_001_01",
+            "content_id": "cmtifxn9r0001gsrtxnkvbmzf",
+            "quote": "你们有没有发现有一些关系你一开始很期待，但是后来却是越相处越累",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_001_02",
+            "content_id": "cmtihp48w0000ygrtsrf1p1xr",
+            "quote": "但是你有没有仔细想过，为什么是女孩子长脑子最快的方式呢？是因为女孩子不长脑子吗？",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_001_03",
+            "content_id": "cmtjdo1ni0002h0rtgoifw23p",
+            "quote": "先问你个问题，你是愿意花2万块钱去动个双眼皮，还是愿意花一个月工资去搞懂这个社会的底层运行规则？",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_001_04",
+            "content_id": "cmtjdlzuo0001h0rtll7p5uax",
+            "quote": "你有没有发现那些就是随手一穿就很好看的人，他们不知道背地里面试了多少搓？",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 4
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_002",
+      "category": "hook",
+      "knowledge_level": "structural_pattern",
+      "name": "Controversial Assertion Hook",
+      "description": "用争议性或反直觉的观点开场，立即制造认知冲突，激发观看欲望",
+      "abstract_pattern": "Controversial Statement → Identity Challenge → Curiosity",
+      "function": "通过挑战观众固有认知，制造'我想看看她到底想说什么'的好奇心",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_002_01",
+            "content_id": "cmtig0aoa0002gsrtbh7hywcp",
+            "quote": "说一个很多女生不愿意承认的社会现状，就是现在我们国内女性普遍非常缺乏付出意识",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_002_02",
+            "content_id": "cmti6dd1800005grtwqbodpeh",
+            "quote": "我真的看不下去了我发言我觉得他在方方面面对一个女明星全方位的封杀和围剿",
+            "location": "opening",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "medium",
+            "note": "情绪宣泄为主，非刻意设计的争议性钩子"
+          }
+        ],
+        "unique_content_count": 2
+      },
+      "confidence": "low",
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_003",
+      "category": "hook",
+      "knowledge_level": "structural_pattern",
+      "name": "Age-Marked Authority Hook",
+      "description": "用年龄标记建立'过来人'身份权威，让观众产生'她有经验'的信任感",
+      "abstract_pattern": "Age Marker → Humble Authority → Lesson Preview",
+      "function": "用年龄差距制造'前辈给建议'的心理定位",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_003_01",
+            "content_id": "cmtihs7200001ygrtngbm3whf",
+            "quote": "我23岁啊，回过头看我18岁走过的路，真的是踩了太多没必要的坑了",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_003_02",
+            "content_id": "cmtih2k420000vgrtk27ynrz4",
+            "quote": "说难听点可能年纪稍微小一点的女孩都听不懂我在说什么就是我从17岁开始出来打拼嘛",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_003_03",
+            "content_id": "cmtihp48w0000ygrtsrf1p1xr",
+            "quote": "哈大家好，我是思雨，今年30岁。今天我想跟二十多岁的女生分享一个非常非常重要的事情",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_003_04",
+            "content_id": "cmtihxd130002ygrt94ko3pre",
+            "quote": "哈喽大家好，我是思雨，今年30岁。我今天特别想要跟你们分享一个你们肯定都懂的美丽羞耻证语",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 4
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_004",
+      "category": "hook",
+      "knowledge_level": "structural_pattern",
+      "name": "Personal Experience Scene Hook",
+      "description": "用具体的生活场景切入，从个人感受出发引出观点，制造真实感和代入感",
+      "abstract_pattern": "Scene → Personal Feeling → Insight Seed",
+      "function": "从具体场景切入，让观点'有来源'而非'凭空而来'",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_004_01",
+            "content_id": "cmtigcdp20005gsrtdhx6cxe2",
+            "quote": "我晚上刚跟几个做生意的姐姐吃完饭，就有个很强烈的感受",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_004_02",
+            "content_id": "cmtigbg5e0004gsrtzsv4ei7p",
+            "quote": "我刚下来溜达了一圈，然后刷到了一条很有能量的画，分享给屏幕前的女生们",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 2
+      },
+      "confidence": "low",
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_005",
+      "category": "hook",
+      "knowledge_level": "structural_pattern",
+      "name": "Identity-Targeted Hook",
+      "description": "直接用身份标签称呼目标观众群体，制造'这就是在说我'的即时识别",
+      "abstract_pattern": "Identity Label → Pain Point → Promise of Solution",
+      "function": "精准定位目标受众，让被点到的人产生强烈的代入感",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_005_01",
+            "content_id": "cmtjew7680006h0rtxogty151",
+            "quote": "如果你天性就不是攻击性很强的人，并且因为这样的性格吃了太多的亏，那么你一定思考过一个问题",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_005_02",
+            "content_id": "cmtjdq5oh0003h0rtjxoc0jji",
+            "quote": "所有家庭条件一般，但是又很向往高质量生活的女性，请记住了",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_005_03",
+            "content_id": "cmtjdtvgr0004h0rtldet37ou",
+            "quote": "女人的能力是什么她必须要清楚怎么让自己变成一个紧密女孩",
+            "location": "opening",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "medium",
+            "note": "缺乏明确的'如果你...'结构，不够精准指向"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_006",
+      "category": "structure",
+      "knowledge_level": "structural_pattern",
+      "name": "Concept-Naming Insight Structure",
+      "description": "用一个新概念命名观众熟悉但无法清晰表达的体验，然后用对比解释概念",
+      "abstract_pattern": "Concept Naming → Contrast Definition → Progressive Revelation",
+      "function": "用简单概念解释复杂体验，让观众产生'原来这叫这个'的顿悟感",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_006_01",
+            "content_id": "cmtifxn9r0001gsrtxnkvbmzf",
+            "quote": "我今天想讲一个很多女孩子都在经历，但是不一定说得清楚的东西，叫低配关系",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_006_02",
+            "content_id": "cmtiimd0m0000h0rtjldcal7m",
+            "quote": "我把它叫做爱己商",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 2
+      },
+      "confidence": "low",
+      "status": "candidate",
+      "note": "原第3条证据已移除（属认知重命名而非概念命名）"
+    },
+    {
+      "knowledge_id": "KU_007",
+      "category": "structure",
+      "knowledge_level": "structural_pattern",
+      "name": "Listicle Knowledge Output",
+      "description": "用编号列表传递大量信息，结构清晰但需要避免过度格式化以保持自然感",
+      "abstract_pattern": "Numbered List → Quick Scanning → Save for Later",
+      "function": "高密度信息传递，便于观众快速获取和收藏",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_007_01",
+            "content_id": "cmtifwg6z0000gsrth3uzhlxv",
+            "quote": "一、能问豆包解决的事情，就不要老是问别人。2、没必要在职场里面交朋友",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_007_02",
+            "content_id": "cmtih97vu0001vgrtaeed76g1",
+            "quote": "一货都是从口出的，一年学说话，十年学闭嘴",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "谚语/格言形式，非典型清单体"
+          },
+          {
+            "evidence_id": "EV_007_03",
+            "content_id": "cmtihs7200001ygrtngbm3whf",
+            "quote": "首先第一个，18岁以后你就要开始为自己的人生负责了",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_008",
+      "category": "emotion",
+      "knowledge_level": "structural_pattern",
+      "name": "Regret-to-Wisdom Emotional Arc",
+      "description": "从遗憾情绪出发，通过'过来人'视角传递经验，制造'我不想你重蹈覆辙'的关怀感",
+      "abstract_pattern": "Personal Regret → Lesson Extraction → Warning/Advice",
+      "function": "用个人遗憾作为情感钩子，用经验作为解决方案",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_008_01",
+            "content_id": "cmtifxn9r0001gsrtxnkvbmzf",
+            "quote": "我后来越来越明白，一个女生要是想要活得轻松一点，那你就一定要学会去识别低配关系",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_008_02",
+            "content_id": "cmtihs7200001ygrtngbm3whf",
+            "quote": "我23岁啊，回过头看我18岁走过的路，真的是踩了太多没必要的坑了",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_008_03",
+            "content_id": "cmtigcdp20005gsrtdhx6cxe2",
+            "quote": "我晚上刚跟几个做生意的姐姐吃完饭，就有个很强烈的感受",
+            "location": "opening",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "场景开场白，未展示遗憾到智慧的情感弧线"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_009",
+      "category": "emotion",
+      "knowledge_level": "structural_pattern",
+      "name": "Shared Experience Empathy",
+      "description": "描述一个群体共有的模糊感受，让观众产生'她懂我'的强烈共鸣",
+      "abstract_pattern": "Shared Pain → Validation → You're Not Alone",
+      "function": "通过描述共同体验，让观众感到被理解和被看见",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_009_01",
+            "content_id": "cmtih2k420000vgrtk27ynrz4",
+            "quote": "可能只有经历过的女生才懂",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_009_02",
+            "content_id": "cmtjeb56p0005h0rtbxah3hg7",
+            "quote": "人这一辈子无非都在追求爱这个字",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "泛化陈述，未能精准描述共同体验"
+          },
+          {
+            "evidence_id": "EV_009_03",
+            "content_id": "cmtjiepr30007h0rte9vu5isw",
+            "quote": "我的高中三年就充斥着两件事。第一件事是人际关系，就特别害怕落单的窘迫",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "具体个人经历，可能触发群体共鸣"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_010",
+      "category": "perspective",
+      "knowledge_level": "strategic_pattern",
+      "name": "Direct Address Empowerment",
+      "description": "用'姐妹/女生'直接称呼观众，配合赋能式语言建立情感连接和信任",
+      "abstract_pattern": "Direct Address → Empowerment Statement → Actionable Advice",
+      "function": "建立'自己人'的感觉，降低防御心理，增强说服力",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_010_01",
+            "content_id": "cmtifxn9r0001gsrtxnkvbmzf",
+            "quote": "姐妹们，任何一段让你长期掉状态的关系，本质上它都不是滋养你的，是消耗",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_010_02",
+            "content_id": "cmtigbg5e0004gsrtzsv4ei7p",
+            "quote": "姐妹们记住，你的财富就是你身边最亲近的五个人的平均值",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_010_03",
+            "content_id": "cmti6dd1800005grtwqbodpeh",
+            "quote": "所以呢我真心建议所有年轻女孩子，真的一定要给自己建立一个判断标准",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_010_04",
+            "content_id": "cmtihgl3w0002vgrtbq1kmwbt",
+            "quote": "所以姐妹你们一定一定要记得，千万千万要把优质蛋白、优质脂肪这东西给它补上来",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 4
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_011",
+      "category": "perspective",
+      "knowledge_level": "strategic_pattern",
+      "name": "First-Person Vulnerability Lens",
+      "description": "用第一人称分享个人经历和脆弱时刻，建立真实感和信任感",
+      "abstract_pattern": "Vulnerability → Relatability → Trust Building",
+      "function": "通过暴露脆弱打破'完美博主'距离感，让观众觉得'她和我一样'",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_011_01",
+            "content_id": "cmtiexhr9000068rtqeib610v",
+            "quote": "我以前也不敢做自媒体，不敢面对镜头，说话都磕巴",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_011_02",
+            "content_id": "cmtigbg5e0004gsrtzsv4ei7p",
+            "quote": "我之前135斤，我靠运动瘦了20斤。但是我瘦下来的结果皮脂醇增高，暴饮暴食，反弹就恶性循环",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_011_03",
+            "content_id": "cmtihxd130002ygrt94ko3pre",
+            "quote": "我曾经就是这样的人，总是顾全大局，所以很少当众发泄情绪",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated",
+      "note": "原第4条证据（重复）已移除；原 content_ids 中无对应证据的条目已清理"
+    },
+    {
+      "knowledge_id": "KU_012",
+      "category": "language",
+      "knowledge_level": "surface_technique",
+      "name": "Not-A-But-B Cognitive Contrast",
+      "description": "用'不是A，而是B'的句式重新定义概念，制造认知反转",
+      "abstract_pattern": "Not A → Redefine as B → Reframing",
+      "function": "用对比重新定义概念，赋予旧事物新意义",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_012_01",
+            "content_id": "cmti6dd1800005grtwqbodpeh",
+            "quote": "你化的不是妆，那是你的价值；你穿的不是衣服，那是你的品质；你减的也不是肥，那是对你人生的重塑啊",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_012_02",
+            "content_id": "cmtih97vu0001vgrtaeed76g1",
+            "quote": "抢男人有什么意思？抢男人饭碗才有意思",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "反问+对比，非严格not-A-but-B结构"
+          },
+          {
+            "evidence_id": "EV_012_03",
+            "content_id": "cmtig0aoa0002gsrtbh7hywcp",
+            "quote": "如果你拥有顶级的颜值和背景，那你当然可以什么都不用付出，就有人前赴后继来为你付出，只求你给一个好脸色。但问题你不是，我也不是",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "情境对比+反转，非严格not-A-but-B"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_013",
+      "category": "language",
+      "knowledge_level": "surface_technique",
+      "name": "Imperative Direct Command",
+      "description": "用'你就记住啊'、'你给我'等直接命令式表达，制造权威感和紧迫感",
+      "abstract_pattern": "Command → Reason → Compliance",
+      "function": "用直接命令式表达打破观众心理防御，增强说服力",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_013_01",
+            "content_id": "cmti6dd1800005grtwqbodpeh",
+            "quote": "你就记住啊，你化的不是妆，那是你的价值",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_013_02",
+            "content_id": "cmtihgl3w0002vgrtbq1kmwbt",
+            "quote": "你就直接去把你的这个肩膀给我打开，把你的背停下来",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_013_03",
+            "content_id": "cmtifxn9r0001gsrtxnkvbmzf",
+            "quote": "你付出了时间、付出了情绪、付出了耐心、付出了理解，可是你得到的却是反复的失望",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "排比描述为主，无直接命令"
+          },
+          {
+            "evidence_id": "EV_013_04",
+            "content_id": "cmtjew7680006h0rtxogty151",
+            "quote": "不要告诉任何人你的过去",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 4
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_014",
+      "category": "cognition",
+      "knowledge_level": "strategic_pattern",
+      "name": "Expectation Reversal Pattern",
+      "description": "挑战观众固有认知，用反直觉但逻辑自洽的观点制造认知冲击",
+      "abstract_pattern": "Common Belief → Challenge → Reversed Truth",
+      "function": "打破思维定式，制造'原来我一直是错的'的认知刷新",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_014_01",
+            "content_id": "cmtig0aoa0002gsrtbh7hywcp",
+            "quote": "我们一直以为追求被爱很重要，后来才发现，更重要的是学会爱自己",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_014_02",
+            "content_id": "cmtifxn9r0001gsrtxnkvbmzf",
+            "quote": "我们一直以为女性天生恋爱脑，但这根本就是个谎言",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_014_03",
+            "content_id": "cmtigcdp20005gsrtdhx6cxe2",
+            "quote": "只有一种恋爱模式是成功的，那就是女生懂付出，男生的有良心",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "断言式观点，非典型的'一直以为...其实...'反转"
+          },
+          {
+            "evidence_id": "EV_014_04",
+            "content_id": "cmtihp48w0000ygrtsrf1p1xr",
+            "quote": "我们以为是在找爱人，其实是在找一个能证明我值得的答案",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_014_05",
+            "content_id": "cmtjdtvgr0004h0rtldet37ou",
+            "quote": "世界上除了血缘关系，任何情感关系本质上都是一场价值交换",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "断言式观点，非典型认知反转结构"
+          }
+        ],
+        "unique_content_count": 5
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_015",
+      "category": "cognition",
+      "knowledge_level": "surface_technique",
+      "name": "Specific Number Argumentation",
+      "description": "用具体数字增强说服力，让抽象观点变得可感知、可验证",
+      "abstract_pattern": "Concrete Numbers → Concrete Scenarios → Believability",
+      "function": "用具体数字让抽象道理变得触手可及，增强可信度",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_015_01",
+            "content_id": "cmtig0aoa0002gsrtbh7hywcp",
+            "quote": "很多女生宁愿花1万块去婚恋机构找什么所谓的A8A9优质单身男，就算知道可能会被骗，也不舍得在自己的男朋友身上花这1万块钱",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_015_02",
+            "content_id": "cmtihxd130002ygrt94ko3pre",
+            "quote": "一周至少要吃三次三文鱼",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "简单数据陈述，缺乏论证力度"
+          },
+          {
+            "evidence_id": "EV_015_03",
+            "content_id": "cmtiimd0m0000h0rtjldcal7m",
+            "quote": "我瘦下来的结果皮脂醇增高，暴饮暴食，反弹就恶性循环，整整的持续了八年的时间",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_016",
+      "category": "human_expression",
+      "knowledge_level": "expression_principle",
+      "name": "Natural Cognitive Trace",
+      "description": "允许语言存在自然的思考和连接痕迹，避免过度工整、过度完整、过度书面。核心是表达背后的真实思维流动感。",
+      "abstract_pattern": "Natural Connector → Processing Signal → Authentic Flow",
+      "function": "让表达更像真实思考而非排练过的稿子，降低AI味",
+      "principle": "写作时不必追求完美流畅。允许出现自然的思考连接词（其实、怎么说呢、就是、我后来发现），这些'不完美'恰恰是真人感的来源。",
+      "surface_forms": [
+        "其实...",
+        "怎么说呢...",
+        "就是...",
+        "我后来发现...",
+        "嗯..."
+      ],
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_016_01",
+            "content_id": "cmtjdlzuo0001h0rtll7p5uax",
+            "quote": "就是当我第一次听到这个词的时候，我会觉得有点笼统",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_016_02",
+            "content_id": "cmtihxd130002ygrt94ko3pre",
+            "quote": "嗯，就是当你第一次听到这个词的时候",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "medium",
+            "noise_risk": "medium",
+            "note": "'嗯'可能是口语填充词，也可能是ASR噪音"
+          },
+          {
+            "evidence_id": "EV_016_03",
+            "content_id": "cmtiexhr9000068rtqeib610v",
+            "quote": "哎，对我来说菜单是全英文的，看不懂的都叫高端局哈",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_016_04",
+            "content_id": "cmtihgl3w0002vgrtbq1kmwbt",
+            "quote": "那个说话的语气，那些小动作、小的微表情，你就不放心跟他过钱儿",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "口语化列举，思维自然流动"
+          },
+          {
+            "evidence_id": "EV_016_05",
+            "content_id": "cmtjeb56p0005h0rtbxah3hg7",
+            "quote": "人这一辈子无非都在追求爱这个字想要大家聊聊这个话题咱们东亚小孩",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "low",
+            "noise_risk": "high",
+            "note": "疑似ASR句子粘连，多个独立分句被连在一起"
+          }
+        ],
+        "unique_content_count": 5
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_017",
+      "category": "human_expression",
+      "knowledge_level": "expression_principle",
+      "name": "Self-Correction Realness",
+      "description": "说错话后自我纠正，或绕一下再说，模拟真实说话时的思维过程",
+      "abstract_pattern": "Error → Self-Awareness → Correction → Humor",
+      "function": "通过暴露'不完美'增强真实感和可信度",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_017_01",
+            "content_id": "cmtiexhr9000068rtqeib610v",
+            "quote": "我想解释一下，说这是姐夫来上海了，结果嘴一快说成了啊，这是上海的姐夫",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 1
+      },
+      "confidence": "low",
+      "status": "candidate",
+      "note": "原第2、3条证据移除（非自我修正，仅为叙事）。仅1条有效证据，需更多数据验证"
+    },
+    {
+      "knowledge_id": "KU_018",
+      "category": "human_expression",
+      "knowledge_level": "expression_principle",
+      "name": "Authenticity Marker — Emotional Pivot",
+      "description": "在轻松或叙述性内容中突然插入真实情绪，制造'意外'的真实感",
+      "abstract_pattern": "Lightness → Emotional Pivot → Authenticity Spike",
+      "function": "用情绪突转制造真实感，让内容更有记忆点",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_018_01",
+            "content_id": "cmtiexhr9000068rtqeib610v",
+            "quote": "我对姐夫就是生理性喜欢",
+            "location": "opening",
+            "validation": "weak",
+            "evidence_quality": "low",
+            "noise_risk": "low",
+            "note": "孤立语句，需原视频上下文确认情绪突转"
+          },
+          {
+            "evidence_id": "EV_018_02",
+            "content_id": "cmtjeb56p0005h0rtbxah3hg7",
+            "quote": "允许自己有脾气允许失控允许自己有随时能抽身的底气",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_018_03",
+            "content_id": "cmtjiepr30007h0rte9vu5isw",
+            "quote": "这种迷茫、恐惧甚至叫怯懦。我懂，因为我也曾站在那里，既不敢向前也不敢后退，所以别怕所以别怕",
+            "location": "ending",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_019",
+      "category": "human_expression",
+      "knowledge_level": "expression_principle",
+      "name": "Cognitive Veracity Signal",
+      "description": "句子不完整或意思到了就跳下一句，模拟真实说话时的思维跳跃。这是认知真实感的信号，不是语法错误。",
+      "abstract_pattern": "Fragment → Implied Meaning → Move On",
+      "function": "用不完整表达模拟真实思维流动，降低'书面感'",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_019_01",
+            "content_id": "cmtjdlzuo0001h0rtll7p5uax",
+            "quote": "你要你要使劲想我该怎么把这个困难变成我的一个优势",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "medium",
+            "noise_risk": "medium",
+            "note": "'你要你要'可能是口头自我修正，也可能是ASR重复"
+          },
+          {
+            "evidence_id": "EV_019_02",
+            "content_id": "cmtjeb56p0005h0rtbxah3hg7",
+            "quote": "不要入任何人的局任何人说什么都不重要因为你的世界你做主就是他人的评价呀跟女女无关你也不要入儿",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "low",
+            "noise_risk": "high",
+            "note": "疑似ASR句子粘连，无法确认是否刻意为之的碎片化表达"
+          },
+          {
+            "evidence_id": "EV_019_03",
+            "content_id": "cmtjew7680006h0rtxogty151",
+            "quote": "我的高中三年就充斥着两件事。第一件事是人际关系，就特别害怕落单的窘迫以及额外珍视呵护的女生之间的友情。第二件事就是成绩成绩成绩学习学习学习了",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "medium",
+            "noise_risk": "medium",
+            "note": "'成绩成绩成绩'是刻意重复，但整句较长可能有ASR影响"
+          },
+          {
+            "evidence_id": "EV_019_04",
+            "content_id": "cmtih2k420000vgrtk27ynrz4",
+            "quote": "我的高中三年就充斥着两件事",
+            "location": "opening",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 4
+      },
+      "confidence": "low",
+      "status": "candidate",
+      "note": "存在高ASR噪音风险证据；部分证据（#2、#3）难以确认是真人表达还是ASR产物"
+    },
+    {
+      "knowledge_id": "KU_020",
+      "category": "human_expression",
+      "knowledge_level": "expression_principle",
+      "name": "Intentional Rhythm Device",
+      "description": "通过有意识地重复同一主语或句式强化情绪冲击。这是AI倾向于避免但真人常用的表达手法。",
+      "abstract_pattern": "Repetition → Rhythm → Emotional Intensity",
+      "function": "用重复制造节奏感和情绪递进，增强表达力度",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_020_01",
+            "content_id": "cmtd3jnet0000dwrtj3krmeef",
+            "quote": "他忽略了年龄差他忽略了美貌就是一种权利他忽略了人家就是人间富贵花",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_020_02",
+            "content_id": "cmtifxn9r0001gsrtxnkvbmzf",
+            "quote": "你总是在解释，对方总是在敷衍你总是在付出，对方总是在享受，你总是在维系，对方总是在观望",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_020_03",
+            "content_id": "cmtjeb56p0005h0rtbxah3hg7",
+            "quote": "小时候追求爸妈的爱长大追求朋友的爱要求当对方的第一顺位到了谈恋爱的时候就更加疯狂了",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated",
+      "note": "原第2条证据（与KU_019共享的高ASR噪音句）已移除"
+    },
+    {
+      "knowledge_id": "KU_021",
+      "category": "ending",
+      "knowledge_level": "surface_technique",
+      "name": "Emotional Echo Ending",
+      "description": "用重复或回环的方式结尾，制造情感余韵",
+      "abstract_pattern": "Emotional Statement → Echo → Gentle Close",
+      "function": "用情绪而非结论结尾，给观众留下温暖或思考的空间",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_021_01",
+            "content_id": "cmtjiepr30007h0rte9vu5isw",
+            "quote": "所以别怕所以别怕",
+            "location": "ending",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_021_02",
+            "content_id": "cmtjeb56p0005h0rtbxah3hg7",
+            "quote": "希望我说的对你们有帮助晚安女孩",
+            "location": "ending",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "一般性结束语，非典型情绪回环"
+          }
+        ],
+        "unique_content_count": 2
+      },
+      "confidence": "low",
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_022",
+      "category": "ending",
+      "knowledge_level": "surface_technique",
+      "name": "Action Prompt Ending",
+      "description": "用明确的行动号召结尾，引导观众做出具体行为",
+      "abstract_pattern": "Urgency → Action Request → Compliance",
+      "function": "制造紧迫感，引导互动行为",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_022_01",
+            "content_id": "cmtihs7200001ygrtngbm3whf",
+            "quote": "视频可能随时会被下架，最好把我设成特别关注啊",
+            "location": "ending",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_022_02",
+            "content_id": "cmtifwg6z0000gsrth3uzhlxv",
+            "quote": "你们可以艾一下豆包，给你们整理一个那种什么思维导图",
+            "location": "ending",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "软性建议，非强烈行动号召"
+          },
+          {
+            "evidence_id": "EV_022_03",
+            "content_id": "cmtiimd0m0000h0rtjldcal7m",
+            "quote": "所以如果你想看，一定要记得关注我的这个账号和我的这个系列",
+            "location": "ending",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_022_04",
+            "content_id": "cmtihp48w0000ygrtko3pre",
+            "quote": "真的很建议屏幕前的你们去关注这几个博主，真的会打开你的认知",
+            "location": "ending",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 4
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_023",
+      "category": "structure",
+      "knowledge_level": "structural_pattern",
+      "name": "Contrast Pair Explanation",
+      "description": "用正反对比解释概念，让抽象概念变得清晰可感",
+      "abstract_pattern": "Contrast A vs B → Concept Clarification",
+      "function": "用对比让观众快速理解复杂概念的本质差异",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_023_01",
+            "content_id": "cmtifxn9r0001gsrtxnkvbmzf",
+            "quote": "你总是在解释，对方总是在敷衍你总是在付出，对方总是在享受，你总是在维系，对方总是在观望",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_023_02",
+            "content_id": "cmtigcdp20005gsrtdhx6cxe2",
+            "quote": "一个完成了自身商业化，跟真实世界交过手的女性，她整个人呈现出来的状态是完全不一样的",
+            "location": "body",
+            "validation": "weak",
+            "evidence_quality": "medium",
+            "noise_risk": "low",
+            "note": "描述性对比，非严格正反对照结构"
+          },
+          {
+            "evidence_id": "EV_023_03",
+            "content_id": "cmtig0aoa0002gsrtbh7hywcp",
+            "quote": "很多女生宁愿花1万块去婚恋机构找什么所谓的A8A9优质单身男，就算知道可能会被骗，也不舍得在自己的男朋友身上花这1万块钱",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 3
+      },
+      "confidence": "medium",
+      "status": "validated"
+    },
+    {
+      "knowledge_id": "KU_024",
+      "category": "cognition",
+      "knowledge_level": "strategic_pattern",
+      "name": "Reframing Definition",
+      "description": "重新定义观众熟悉的概念，赋予旧词新义或颠覆其原有含义",
+      "abstract_pattern": "Old Concept → New Definition → Perspective Shift",
+      "function": "通过重新定义改变观众的思考框架",
+      "evidence": {
+        "items": [
+          {
+            "evidence_id": "EV_024_01",
+            "content_id": "cmtifxn9r0001gsrtxnkvbmzf",
+            "quote": "什么叫低配关系？就是你总是在解释，对方总是在敷衍",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          },
+          {
+            "evidence_id": "EV_024_02",
+            "content_id": "cmtihs7200001ygrtngbm3whf",
+            "quote": "一个女生真正的成熟不是多会忍，而是你终于知道什么关系该留，什么关系必须要放",
+            "location": "body",
+            "validation": "valid",
+            "evidence_quality": "high",
+            "noise_risk": "low"
+          }
+        ],
+        "unique_content_count": 2
+      },
+      "confidence": "low",
+      "status": "candidate"
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "version": "1.0",
+  "date": "2026-09-02",
+  "phase": "P0.2.2.1 Knowledge Cleanup & Validation",
+  "summary": {
+    "total_actions": 8,
+    "full_rejections": 0,
+    "evidence_removed": 6,
+    "duplicates_removed": 1,
+    "confidence_downgrades": 4,
+    "knowledge_level_assignments": 24
+  },
+  "actions": [
+    {
+      "action_id": "ACT_001",
+      "knowledge_id": "KU_006",
+      "action": "evidence_removed",
+      "detail": {
+        "evidence_removed": "EV_006_03 (原第3条)",
+        "original_quote": "就是当你发生一些不是特别好的事情的时候，经历了一些困难的时候，你要你要使劲想我该怎么把我的困难变成我的一个优势",
+        "reason": "Evidence 无法支持 'Concept-Naming' 知识声明。该句描述的是认知重定义（Cognitive Reframing）而非概念命名。content_id cmtjdlzuo0001h0rtll7p5uax 的这条证据与 Reframing Definition 更为匹配，不应用于本 KU。",
+        "result": "KU_006 confidence 降为 low，status 降为 candidate"
+      }
+    },
+    {
+      "action_id": "ACT_002",
+      "knowledge_id": "KU_010",
+      "action": "content_id_cleaned",
+      "detail": {
+        "content_id_removed": "cmtjdtvgr0004h0rtldet37ou",
+        "reason": "该 content_id 在 evidence.content_ids 列表中但在 evidence.examples 中无对应条目。属于数据不一致问题，已清理。",
+        "result": "KU_010 仅保留 4 个有证据支撑的 content_id，置信度维持 medium"
+      }
+    },
+    {
+      "action_id": "ACT_003",
+      "knowledge_id": "KU_011",
+      "action": "evidence_deduplication",
+      "detail": {
+        "evidence_removed": "原第4条",
+        "original_quote": "我以前也不敢做自媒体，不敢面对镜头，说话都磕巴",
+        "duplicate_of": "原第1条（完全相同）",
+        "reason": "同一句话被重复计算为两条 evidence，违反去重原则。",
+        "content_ids_cleaned": ["cmtjew7680006h0rtxogty151", "cmtjdq5oh0003h0rtjxoc0jji", "cmtifwg6z0000gsrth3uzhlxv"],
+        "result": "KU_011 从 4 条 evidence（含重复+无映射）降为 3 条有效 evidence，置信度维持 medium"
+      }
+    },
+    {
+      "action_id": "ACT_004",
+      "knowledge_id": "KU_016",
+      "action": "evidence_removed",
+      "detail": {
+        "evidence_removed": "原第6条",
+        "original_quote": "哈大家好，我是思雨，今年30岁",
+        "reason": "常规开场问候语，不能证明 'Natural Cognitive Trace' 表达原则。缺乏思考连接词或口语填充特征。",
+        "result": "KU_016 从 6 条降为 5 条，置信度维持 medium"
+      }
+    },
+    {
+      "action_id": "ACT_005",
+      "knowledge_id": "KU_017",
+      "action": "evidence_removed",
+      "detail": {
+        "evidence_removed": ["原第2条", "原第3条"],
+        "original_quotes": [
+          "我在上大学的时候，政治课里面的那个四门就学得非常好。我当时就是一个很虚无、很愤世嫉俗、很冷漠的人",
+          "我之前135斤，我靠运动瘦了20斤。但是我瘦下来的结果皮脂醇增高，暴饮暴食，反弹就恶性循环"
+        ],
+        "reason": "两条 evidence 均为描述性叙述或个人经历分享，不构成 'Self-Correction' 模式的证据。第2条无任何错误-意识-修正过程；第3条为时间线叙事（'之前...但是...'），非口语中的自我纠正。",
+        "result": "KU_017 从 3 条降为 1 条有效 evidence，置信度降为 low，status 降为 candidate"
+      }
+    },
+    {
+      "action_id": "ACT_006",
+      "knowledge_id": "KU_019",
+      "action": "noise_flagged",
+      "detail": {
+        "evidence_flagged": "EV_019_02 (原第2条)",
+        "quote": "不要入任何人的局任何人说什么都不重要因为你的世界你做主就是他人的评价呀跟女女无关你也不要入儿",
+        "noise_risk": "high",
+        "analysis": "该句极可能是 ASR 句子粘连。多个独立句子被合并为一整句（缺少标点分隔：'局任何'、'主就是'、'价呀跟'、'女无关你'、'不要入儿'等断句位置均不自然）。虽然看起来像'碎片化表达'，但无法排除 ASR 错误的可能性。",
+        "result": "标记为 weak，noise_risk=high，不作为有效证据使用"
+      }
+    },
+    {
+      "action_id": "ACT_007",
+      "knowledge_id": "KU_020",
+      "action": "evidence_removed_and_dedup",
+      "detail": {
+        "evidence_removed": "原第2条",
+        "original_quote": "不要入任何人的局任何人说什么都不重要因为你的世界你做主就是他人的评价呀跟女女无关你也不要入儿",
+        "reason": "与 KU_019_02 完全相同。该句已标记为高 ASR 噪音风险，无论归属于哪个 KU 都不应作为有效证据。同时此为跨 KU 重复证据。",
+        "result": "KU_020 从 4 条降为 3 条有效 evidence，置信度维持 medium"
+      }
+    },
+    {
+      "action_id": "ACT_008",
+      "knowledge_id": "KU_016",
+      "action": "noise_flagged",
+      "detail": {
+        "evidence_flagged": "EV_016_05",
+        "quote": "人这一辈子无非都在追求爱这个字想要大家聊聊这个话题咱们东亚小孩",
+        "noise_risk": "high",
+        "analysis": "该句存在明显 ASR 句子粘连特征。'爱这个字想要'、'这个话题咱们' 均为非自然断句。正常口语应在'字'后停顿、在'话题'后停顿。整体看像三个独立句子被合并。",
+        "result": "标记为 weak，noise_risk=high，单独注明"
+      }
+    }
+  ],
+  "no_full_rejections": {
+    "explanation": "没有 KU 被完全拒绝（status=rejected）。原因：所有 KU 至少有 1 条有效 evidence 支撑其核心概念；知识声明虽强弱不同，但都有复用价值。弱证据 KU 被保留为 candidate 而非 rejected，等待后续数据验证。"
+  }
+}
