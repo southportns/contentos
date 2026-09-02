@@ -80,3 +80,36 @@ export { retrieve, searchEntries } from './knowledge-retriever';
 // ─── Data ───────────────────────────────────────────────────────────────────
 
 export { KNOWLEDGE_UNITS, DATASET_META } from './knowledge-data';
+
+// ─── Semantic Retrieval (P0.3.1) ──────────────────────────────────────────
+
+export type {
+  RetrievalMethod,
+  EmbeddingProvider,
+  SemanticIndexEntry,
+  SemanticIndex,
+  SemanticRetrievalQuery,
+  SemanticRetrievalResult,
+  SemanticRetrievalResponse,
+  KnowledgeRetriever,
+  SemanticIndexBuilderOptions,
+} from './semantic';
+
+export {
+  DEFAULT_SEMANTIC_QUERY,
+  MockEmbeddingProvider,
+  EmbeddingProviderRegistry,
+  defaultMockProvider,
+  defaultRegistry,
+  cosineSimilarity,
+  normalizedCosineSimilarity,
+  findMostSimilar,
+  rankBySimilarity,
+  buildSemanticIndex,
+  entryMatchesFilters,
+  computeIndexStats,
+  SemanticRetriever,
+  createSemanticRetriever,
+  SemanticSearchEngine,
+  createSemanticSearchEngine,
+} from './semantic';
