@@ -11,6 +11,7 @@ import {
   isDouyinShortUrl,
   resolveDouyinShortUrl,
   checkDouyinHealth,
+  withConcurrencyLimit,
   type PublishTimeFilter,
 } from '@/lib/tools/douyin-client'
 import {
@@ -75,10 +76,19 @@ function isDouyinQuery(query: string): boolean {
 }
 
 /**
- * 检查 query 是否是抖音 URL（包含完整链接或短链接）
+ * 检查 query 是否是抖音 URL（包含完整链接、搜索页链接或短链接）
+ *
+ * 支持以下场景:
+ *  - 标准 URL: https://www.douyin.com/video/123
+ *  - 搜索页 URL: https://www.douyin.com/search/xxx?modal_id=123&type=general
+ *  - 短链: https://v.douyin.com/xxx/
+ *  - 分享文本: 7.99 复制打开抖音... https://v.douyin.com/xxx/
  */
 function isDouyinUrl(query: string): boolean {
-  return (extractAwemeId(query) !== null && query.includes('douyin')) || isDouyinShortUrl(query)
+  // 先尝试提取 awemeId（已支持 modal_id 和分享文本中的 URL 提取）
+  if (extractAwemeId(query) !== null) return true
+  // 再检查是否包含短链接
+  return isDouyinShortUrl(query)
 }
 
 /**
@@ -132,8 +142,12 @@ async function searchViaDouyin(
     const items = await searchDouyin(query, limit, publishTime)
 
     // 并行获取所有视频的详细数据（点赞、评论等）
-    const detailPromises = items.slice(0, limit).map(async (item) => {
-      try {
+    // 使用并发限流器（最多 3 个同时请求），避免微服务过载导致级联超时
+    const searchItems = items.slice(0, limit)
+    const detailResults = await withConcurrencyLimit(
+      searchItems,
+      3, // 最多 3 个并发请求，微服务可以稳定处理
+      async (item) => {
         const detail = await getVideoDetail(item.aweme_id)
         return {
           platform: 'douyin' as const,
@@ -153,29 +167,39 @@ async function searchViaDouyin(
             views: null,
           },
         }
-      } catch {
-        // 如果详情获取失败，使用搜索结果中的基础信息
-        return {
-          platform: 'douyin' as const,
-          url: `https://www.douyin.com/video/${item.aweme_id}`,
-          title: item.desc || null,
-          author: null,
-          content: item.desc || null,
-          cover: item.cover || null,
-          publishedAt: null,
-          metrics: null,
-        }
+      },
+    )
+
+    // 将成功获取详情的结果和降级到搜索结果的结果合并
+    const details = detailResults.map((r, i) => {
+      if (r.ok) return r.result
+      // 详情获取失败，降级使用搜索结果中的基础信息
+      const item = searchItems[i]
+      return {
+        platform: 'douyin' as const,
+        url: `https://www.douyin.com/video/${item.aweme_id}`,
+        title: item.desc || null,
+        author: null,
+        content: item.desc || null,
+        cover: item.cover || null,
+        publishedAt: null,
+        metrics: null,
       }
     })
-
-    const details = await Promise.all(detailPromises)
     contents.push(...details)
-    return { contents }
+
+    // 如果部分详情获取失败，在返回信息中提示
+    const failedCount = detailResults.filter((r) => !r.ok).length
+    const partialMsg = failedCount > 0
+      ? `（${failedCount} 条视频详情获取失败，已使用搜索结果中的基础信息）`
+      : undefined
+
+    return { contents, error: partialMsg }
   } catch (err) {
     const msg = err instanceof Error ? err.message : '未知错误'
     const isTimeout = msg.includes('aborted') || msg.includes('timeout')
     const userMsg = isTimeout
-      ? `抖音数据获取超时（微服务响应缓慢）。请稍后重试，或直接使用视频链接获取详情。`
+      ? `抖音搜索超时（已自动重试）。建议：1) 减少搜索数量；2) 稍等 30 秒后重试；3) 直接粘贴视频链接获取详情。`
       : `抖音数据获取失败：${msg}`
     return { contents, error: userMsg }
   }

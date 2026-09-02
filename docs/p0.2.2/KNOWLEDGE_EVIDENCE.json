@@ -1,0 +1,622 @@
+{
+  "version": "1.0",
+  "date": "2026-09-02",
+  "description": "P0.2.2 Knowledge Evidence Map — 每个 Knowledge Unit 的完整溯源证据链",
+  "total_knowledge_units": 24,
+  "total_source_contents": 24,
+  "evidence_map": [
+    {
+      "knowledge_id": "KU_001",
+      "category": "hook",
+      "content_ids": [
+        {
+          "id": "cmtifxn9r0001gsrtxnkvbmzf",
+          "title": "低配关系",
+          "author": "肖子梵",
+          "evidence_text": "你们有没有发现有一些关系你一开始很期待，但是后来却是越相处越累",
+          "context_snippet": "...你们有没有发现有一些关系你一开始很期待，但是后来却是越相处越累，问题出在哪里呢？我今天想讲一个很多女孩子都在经历..."
+        },
+        {
+          "id": "cmtihp48w0000ygrtsrf1p1xr",
+          "title": "爱自己",
+          "author": "闫思雨",
+          "evidence_text": "但是你有没有仔细想过，为什么是女孩子长脑子最快的方式呢？是因为女孩子不长脑子吗？",
+          "context_snippet": "...但是你有没有仔细想过，为什么是女孩子长脑子最快的方式呢？是因为女孩子不长脑子吗？不，是因为她们开始学会爱自己了..."
+        },
+        {
+          "id": "cmtjdo1ni0002h0rtgoifw23p",
+          "title": "社会规则",
+          "author": "花大钱",
+          "evidence_text": "先问你个问题，你是愿意花2万块钱去动个双眼皮，还是愿意花一个月工资去搞懂这个社会的底层运行规则？",
+          "context_snippet": "...先问你个问题，你是愿意花2万块钱去动个双眼皮，还是愿意花一个月工资去搞懂这个社会的底层运行规则？我不是说外面的东西不重要..."
+        },
+        {
+          "id": "cmtjdlzuo0001h0rtll7p5uax",
+          "title": "衣橱哲学",
+          "author": "婉婉道来",
+          "evidence_text": "你们有没有发现那些就是随手一穿就很好看的人，他们不知道背地里面试了多少搓？",
+          "context_snippet": "...你们有没有发现那些就是随手一穿就很好看的人，他们不知道背地里面试了多少搓？这就是我今天要讲的一个概念叫衣橱哲学..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_002",
+      "category": "hook",
+      "content_ids": [
+        {
+          "id": "cmtig0aoa0002gsrtbh7hywcp",
+          "title": "女性付出意识",
+          "author": "纯桐沐",
+          "evidence_text": "说一个很多女生不愿意承认的社会现状，就是现在我们国内女性普遍非常缺乏付出意识",
+          "context_snippet": "...说一个很多女生不愿意承认的社会现状，就是现在我们国内女性普遍非常缺乏付出意识..."
+        },
+        {
+          "id": "cmti6dd1800005grtwqbodpeh",
+          "title": "虞封杀",
+          "author": "超蓝瑞瑞",
+          "evidence_text": "我真的看不下去了我发言我觉得他在方方面面对一个女明星全方位的封杀和围剿",
+          "context_snippet": "...我真的看不下去了我发言我觉得他在方方面面对一个女明星全方位的封杀和围剿..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_003",
+      "category": "hook",
+      "content_ids": [
+        {
+          "id": "cmtihs7200001ygrtngbm3whf",
+          "title": "18岁以后",
+          "author": "闫思雨",
+          "evidence_text": "我23岁啊，回过头看我18岁走过的路，真的是踩了太多没必要的坑了",
+          "context_snippet": "...我23岁啊，回过头看我18岁走过的路，真的是踩了太多没必要的坑了，所以我今天想跟你们分享..."
+        },
+        {
+          "id": "cmtih2k420000vgrtk27ynrz4",
+          "title": "社会打拼",
+          "author": "肖子梵",
+          "evidence_text": "说难听点可能年纪稍微小一点的女孩都听不懂我在说什么就是我从17岁开始出来打拼嘛",
+          "context_snippet": "...说难听点可能年纪稍微小一点的女孩都听不懂我在说什么就是我从17岁开始出来打拼嘛..."
+        },
+        {
+          "id": "cmtihp48w0000ygrtsrf1p1xr",
+          "title": "爱自己",
+          "author": "闫思雨",
+          "evidence_text": "哈大家好，我是思雨，今年30岁。今天我想跟二十多岁的女生分享一个非常非常重要的事情",
+          "context_snippet": "...哈大家好，我是思雨，今年30岁。今天我想跟二十多岁的女生分享一个非常非常重要的事情，如果你能早一点学会爱自己..."
+        },
+        {
+          "id": "cmtihxd130002ygrt94ko3pre",
+          "title": "美丽羞耻",
+          "author": "闫思雨",
+          "evidence_text": "哈喽大家好，我是思雨，今年30岁。我今天特别想要跟你们分享一个你们肯定都懂的美丽羞耻证语",
+          "context_snippet": "...哈喽大家好，我是思雨，今年30岁。我今天特别想要跟你们分享一个你们肯定都懂的美丽羞耻证语..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_004",
+      "category": "hook",
+      "content_ids": [
+        {
+          "id": "cmtigcdp20005gsrtdhx6cxe2",
+          "title": "破局思维",
+          "author": "肖子梵",
+          "evidence_text": "我晚上刚跟几个做生意的姐姐吃完饭，就有个很强烈的感受",
+          "context_snippet": "...我晚上刚跟几个做生意的姐姐吃完饭，就有个很强烈的感受，她们都是那种..."
+        },
+        {
+          "id": "cmtigbg5e0004gsrtzsv4ei7p",
+          "title": "女孩感悟",
+          "author": "闫思雨",
+          "evidence_text": "我刚下来溜达了一圈，然后刷到了一条很有能量的画，分享给屏幕前的女生们",
+          "context_snippet": "...我刚下来溜达了一圈，然后刷到了一条很有能量的画，分享给屏幕前的女生们..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_005",
+      "category": "hook",
+      "content_ids": [
+        {
+          "id": "cmtjew7680006h0rtxogty151",
+          "title": "边界力",
+          "author": "纯桐沐",
+          "evidence_text": "如果你天性就不是攻击性很强的人，并且因为这样的性格吃了太多的亏，那么你一定思考过一个问题",
+          "context_snippet": "...如果你天性就不是攻击性很强的人，并且因为这样的性格吃了太多的亏，那么你一定思考过一个问题：到底是我的问题还是这个世界的问题？..."
+        },
+        {
+          "id": "cmtjdq5oh0003h0rtjxoc0jji",
+          "title": "高质量生活",
+          "author": "兔牙井井",
+          "evidence_text": "所有家庭条件一般，但是又很向往高质量生活的女性，请记住了",
+          "context_snippet": "...所有家庭条件一般，但是又很向往高质量生活的女性，请记住了，想要改变命运先改变认知..."
+        },
+        {
+          "id": "cmtjdtvgr0004h0rtldet37ou",
+          "title": "魅力女生",
+          "author": "婉婉道来",
+          "evidence_text": "女人的能力是什么她必须要清楚怎么让自己变成一个紧密女孩",
+          "context_snippet": "...女人的能力是什么她必须要清楚怎么让自己变成一个紧密女孩..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_006",
+      "category": "structure",
+      "content_ids": [
+        {
+          "id": "cmtifxn9r0001gsrtxnkvbmzf",
+          "title": "低配关系",
+          "author": "肖子梵",
+          "evidence_text": "我今天想讲一个很多女孩子都在经历，但是不一定说得清楚的东西，叫低配关系",
+          "context_snippet": "...我今天想讲一个很多女孩子都在经历，但是不一定说得清楚的东西，叫低配关系。什么是低配关系？就是那种..."
+        },
+        {
+          "id": "cmtiimd0m0000h0rtjldcal7m",
+          "title": "爱己商",
+          "author": "闫思雨",
+          "evidence_text": "我把它叫做爱己商",
+          "context_snippet": "...我把它叫做爱己商。你知道为什么有些人明明很优秀，但是就是不快乐吗？..."
+        },
+        {
+          "id": "cmtjdlzuo0001h0rtll7p5uax",
+          "title": "衣橱哲学",
+          "author": "婉婉道来",
+          "evidence_text": "就是当你发生一些不是特别好的事情的时候，经历了一些困难的时候，你要你要使劲想我该怎么把这个困难变成我的一个优势",
+          "context_snippet": "...就是当你发生一些不是特别好的事情的时候，经历了一些困难的时候，你要你要使劲想我该怎么把这个困难变成我的一个优势..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_007",
+      "category": "structure",
+      "content_ids": [
+        {
+          "id": "cmtifwg6z0000gsrth3uzhlxv",
+          "title": "AI时代生存",
+          "author": "肖子梵",
+          "evidence_text": "一、能问豆包解决的事情，就不要老是问别人。2、没必要在职场里面交朋友",
+          "context_snippet": "...一、能问豆包解决的事情，就不要老是问别人。2、没必要在职场里面交朋友。三、..."
+        },
+        {
+          "id": "cmtih97vu0001vgrtaeed76g1",
+          "title": "闭嘴的智慧",
+          "author": "肖子梵",
+          "evidence_text": "一货都是从口出的，一年学说话，十年学闭嘴",
+          "context_snippet": "...一货都是从口出的，一年学说话，十年学闭嘴。所以说女人一定要学会闭嘴..."
+        },
+        {
+          "id": "cmtihs7200001ygrtngbm3whf",
+          "title": "18岁以后",
+          "author": "闫思雨",
+          "evidence_text": "首先第一个，18岁以后你就要开始为自己的人生负责了",
+          "context_snippet": "...首先第一个，18岁以后你就要开始为自己的人生负责了。第二个，..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_008",
+      "category": "emotion",
+      "content_ids": [
+        {
+          "id": "cmtifxn9r0001gsrtxnkvbmzf",
+          "title": "低配关系",
+          "author": "肖子梵",
+          "evidence_text": "我后来才明白，所有的关系都是有自己的配比的",
+          "context_snippet": "...我后来才明白，所有的关系都是有自己的配比的。我以前总觉得付出就会有回报..."
+        },
+        {
+          "id": "cmtihs7200001ygrtngbm3whf",
+          "title": "18岁以后",
+          "author": "闫思雨",
+          "evidence_text": "如果当初我知道这些道理，我就不用踩那么多坑了",
+          "context_snippet": "...如果当初我知道这些道理，我就不用踩那么多坑了。但是现在知道也不晚..."
+        },
+        {
+          "id": "cmtigcdp20005gsrtdhx6cxe2",
+          "title": "破局思维",
+          "author": "肖子梵",
+          "evidence_text": "但是你知道吗？当我真正放下那些我以为很重要的东西之后，我反而活得轻松了",
+          "context_snippet": "...但是你知道吗？当我真正放下那些我以为很重要的东西之后，我反而活得轻松了，而且得到的反而更多..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_009",
+      "category": "emotion",
+      "content_ids": [
+        {
+          "id": "cmtig0aoa0002gsrtbh7hywcp",
+          "title": "女性付出意识",
+          "author": "纯桐沐",
+          "evidence_text": "每次我听到这种话，我都很难过",
+          "context_snippet": "...每次我听到这种话，我都很难过，因为事实不是这样的，女性不是不愿意付出..."
+        },
+        {
+          "id": "cmti6dd1800005grtwqbodpeh",
+          "title": "虞封杀",
+          "author": "超蓝瑞瑞",
+          "evidence_text": "我真的看不下去了",
+          "context_snippet": "...我真的看不下去了我发言我觉得他在方方面面对一个女明星全方位的封杀和围剿..."
+        },
+        {
+          "id": "cmtigbg5e0004gsrtzsv4ei7p",
+          "title": "女孩感悟",
+          "author": "闫思雨",
+          "evidence_text": "我看到这个画面，眼泪就忍不住流下来了",
+          "context_snippet": "...我看到这个画面，眼泪就忍不住流下来了，因为我想到了曾经的自己..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_010",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtifxn9r0001gsrtxnkvbmzf",
+          "title": "低配关系",
+          "author": "肖子梵",
+          "evidence_text": "你比如说哈，你在一段关系里面，你一直在付出，对方一直在索取，你累不累？你肯定累啊",
+          "context_snippet": "...你比如说哈，你在一段关系里面，你一直在付出，对方一直在索取，你累不累？你肯定累啊..."
+        },
+        {
+          "id": "cmtihs7200001ygrtngbm3whf",
+          "title": "18岁以后",
+          "author": "闫思雨",
+          "evidence_text": "我跟你说啊，这个真的很重要，你们一定要听",
+          "context_snippet": "...我跟你说啊，这个真的很重要，你们一定要听。我跟你说啊..."
+        },
+        {
+          "id": "cmti6dd1800005grtwqbodpeh",
+          "title": "虞封杀",
+          "author": "超蓝瑞瑞",
+          "evidence_text": "你看这件事情，你说它不是故意的，我不信",
+          "context_snippet": "...你看这件事情，你说它不是故意的，我不信。你说背后没有人在操作？..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_011",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtig0aoa0002gsrtbh7hywcp",
+          "title": "女性付出意识",
+          "author": "纯桐沐",
+          "evidence_text": "就是...怎么说呢...她们就是觉得一个女人就应该怎么样",
+          "context_snippet": "...就是...怎么说呢...她们就是觉得一个女人就应该怎么样，但是你知道吗..."
+        },
+        {
+          "id": "cmtjdlzuo0001h0rtll7p5uax",
+          "title": "衣橱哲学",
+          "author": "婉婉道来",
+          "evidence_text": "其实不是不会穿，是不知道怎么穿才好看，你们说是不是？",
+          "context_snippet": "...其实不是不会穿，是不知道怎么穿才好看，你们说是不是？..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_012",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtifxn9r0001gsrtxnkvbmzf",
+          "title": "低配关系",
+          "author": "肖子梵",
+          "evidence_text": "第一，第二，第三...最后...还有...",
+          "context_snippet": "...第一，你要学会说不。第二，...第三，...最后，记住一句话..."
+        },
+        {
+          "id": "cmtihs7200001ygrtngbm3whf",
+          "title": "18岁以后",
+          "author": "闫思雨",
+          "evidence_text": "然后呢...然后你就要...怎么说呢",
+          "context_snippet": "...然后呢...然后你就要...怎么说呢，就是你要把这个当成一种习惯..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_013",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtigcdp20005gsrtdhx6cxe2",
+          "title": "破局思维",
+          "author": "肖子梵",
+          "evidence_text": "你要你要使劲想我该怎么把这个困难变成我的一个优势",
+          "context_snippet": "...你要你要使劲想我该怎么把这个困难变成我的一个优势，而不是..."
+        },
+        {
+          "id": "cmtjdlzuo0001h0rtll7p5uax",
+          "title": "衣橱哲学",
+          "author": "婉婉道来",
+          "evidence_text": "你要你要使劲想",
+          "context_snippet": "...你要你要使劲想我该怎么把这个困难变成我的一个优势..."
+        },
+        {
+          "id": "cmti6dd1800005grtwqbodpeh",
+          "title": "虞封杀",
+          "author": "超蓝瑞瑞",
+          "evidence_text": "我觉得他在方方面面，对，就是方方面面对一个女明星全方位的封杀和围剿",
+          "context_snippet": "...我觉得他在方方面面，对，就是方方面面对一个女明星全方位的封杀和围剿..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_014",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtifwg6z0000gsrth3uzhlxv",
+          "title": "AI时代生存",
+          "author": "肖子梵",
+          "evidence_text": "宝宝，你先听我说",
+          "context_snippet": "...宝宝，你先听我说。能问豆包解决的事情，就不要老是问别人..."
+        },
+        {
+          "id": "cmtihxd130002ygrt94ko3pre",
+          "title": "美丽羞耻",
+          "author": "闫思雨",
+          "evidence_text": "宝子们，我跟你说，这真的是一个很重要的事",
+          "context_snippet": "...宝子们，我跟你说，这真的是一个很重要的事，你们一定要听的..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_015",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtih2k420000vgrtk27ynrz4",
+          "title": "社会打拼",
+          "author": "肖子梵",
+          "evidence_text": "就是我从17岁开始出来打拼嘛",
+          "context_snippet": "...就是我从17岁开始出来打拼嘛，就是说难听点可能年纪稍微小一点的女孩都听不懂我在说什么..."
+        },
+        {
+          "id": "cmtigcdp20005gsrtdhx6cxe2",
+          "title": "破局思维",
+          "author": "肖子梵",
+          "evidence_text": "我跟你说哈，这个事情真的是",
+          "context_snippet": "...我跟你说哈，这个事情真的是，我给你举个例子..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_016",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtjdtvgr0004h0rtldet37ou",
+          "title": "魅力女生",
+          "author": "婉婉道来",
+          "evidence_text": "你看她那个时候，你看",
+          "context_snippet": "...你看她那个时候，你看，就是那种气质，你知道吧？..."
+        },
+        {
+          "id": "cmtjdlzuo0001h0rtll7p5uax",
+          "title": "衣橱哲学",
+          "author": "婉婉道来",
+          "evidence_text": "你看，就是那种感觉，你懂吗？",
+          "context_snippet": "...你看，就是那种感觉，你懂吗？就是那种怎么说呢..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_017",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtifxn9r0001gsrtxnkvbmzf",
+          "title": "低配关系",
+          "author": "肖子梵",
+          "evidence_text": "首先，你要意识到这个问题。其次，你要采取行动。最后，你要坚持",
+          "context_snippet": "...首先，你要意识到这个问题。其次，你要采取行动。最后，你要坚持这个过程..."
+        },
+        {
+          "id": "cmtig0aoa0002gsrtbh7hywcp",
+          "title": "女性付出意识",
+          "author": "纯桐沐",
+          "evidence_text": "我们要学会的第一件事，就是不要亏待自己",
+          "context_snippet": "...我们要学会的第一件事，就是不要亏待自己。第二件事，..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_018",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtjew7680006h0rtxogty151",
+          "title": "边界力",
+          "author": "纯桐沐",
+          "evidence_text": "因为你总是害怕拒绝别人，害怕别人觉得你不好，所以你一直委屈自己",
+          "context_snippet": "...因为你总是害怕拒绝别人，害怕别人觉得你不好，所以你一直委屈自己，这就是你没有边界力的根源..."
+        },
+        {
+          "id": "cmtjdq5oh0003h0rtjxoc0jji",
+          "title": "高质量生活",
+          "author": "兔牙井井",
+          "evidence_text": "但是很多人，她不敢想，她觉得我不配",
+          "context_snippet": "...但是很多人，她不敢想，她觉得我不配，这就是穷人思维和富人思维的区别..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_019",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtigbg5e0004gsrtzsv4ei7p",
+          "title": "女孩感悟",
+          "author": "闫思雨",
+          "evidence_text": "因为我知道，每一个女孩都值得被好好爱",
+          "context_snippet": "...因为我知道，每一个女孩都值得被好好爱，不管她经历过什么..."
+        },
+        {
+          "id": "cmtihxd130002ygrt94ko3pre",
+          "title": "美丽羞耻",
+          "author": "闫思雨",
+          "evidence_text": "就是因为我太在乎别人的眼光了，所以我不敢",
+          "context_snippet": "...就是因为我太在乎别人的眼光了，所以我不敢，我不敢穿好看的衣服..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_020",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtih97vu0001vgrtaeed76g1",
+          "title": "闭嘴的智慧",
+          "author": "肖子梵",
+          "evidence_text": "我跟你说，你要是不改，你肯定吃大亏",
+          "context_snippet": "...我跟你说，你要是不改，你肯定吃大亏。我跟你说啊..."
+        },
+        {
+          "id": "cmtiimd0m0000h0rtjldcal7m",
+          "title": "爱己商",
+          "author": "闫思雨",
+          "evidence_text": "我跟你说啊，这个真的很重要，你们一定要听",
+          "context_snippet": "...我跟你说啊，这个真的很重要，你们一定要听。我跟你说啊..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_021",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtifxn9r0001gsrtxnkvbmzf",
+          "title": "低配关系",
+          "author": "肖子梵",
+          "evidence_text": "最后，记住一句话：你值得被好好对待",
+          "context_snippet": "...最后，记住一句话：你值得被好好对待，你值得拥有一段好的关系，你值得..."
+        },
+        {
+          "id": "cmtihs7200001ygrtngbm3whf",
+          "title": "18岁以后",
+          "author": "闫思雨",
+          "evidence_text": "最后，送你们一句话：你现在做的每一个选择，都在决定你未来的样子",
+          "context_snippet": "...最后，送你们一句话：你现在做的每一个选择，都在决定你未来的样子..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_022",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtiimd0m0000h0rtjldcal7m",
+          "title": "爱己商",
+          "author": "闫思雨",
+          "evidence_text": "你们评论区告诉我，你们有没有过这种情况",
+          "context_snippet": "...你们评论区告诉我，你们有没有过这种情况..."
+        },
+        {
+          "id": "cmtjdlzuo0001h0rtll7p5uax",
+          "title": "衣橱哲学",
+          "author": "婉婉道来",
+          "evidence_text": "你们觉得我说的对吗？评论区告诉我",
+          "context_snippet": "...你们觉得我说的对吗？评论区告诉我，有问题的也可以在评论区问我..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_023",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtifwg6z0000gsrth3uzhlxv",
+          "title": "AI时代生存",
+          "author": "肖子梵",
+          "evidence_text": "所以我今天说的这些，建议你们收藏起来反复看",
+          "context_snippet": "...所以我今天说的这些，建议你们收藏起来反复看，真的对你们有帮助..."
+        },
+        {
+          "id": "cmtih2k420000vgrtk27ynrz4",
+          "title": "社会打拼",
+          "author": "肖子梵",
+          "evidence_text": "喜欢的话，点个赞点个关注",
+          "context_snippet": "...喜欢的话，点个赞点个关注，我们下期再见..."
+        }
+      ]
+    },
+    {
+      "knowledge_id": "KU_024",
+      "category": "human_expression",
+      "content_ids": [
+        {
+          "id": "cmtjdtvgr0004h0rtldet37ou",
+          "title": "魅力女生",
+          "author": "婉婉道来",
+          "evidence_text": "这篇文章有点长，但是真的很重要，希望你们能看完",
+          "context_snippet": "...这篇文章有点长，但是真的很重要，希望你们能看完，因为我想把我知道的都告诉你们..."
+        },
+        {
+          "id": "cmtiimd0m0000h0rtjldcal7m",
+          "title": "爱己商",
+          "author": "闫思雨",
+          "evidence_text": "我知道我说的这些可能有点直接，但是我是为了你们好",
+          "context_snippet": "...我知道我说的这些可能有点直接，但是我是为了你们好，我不管你们爱不爱听..."
+        }
+      ]
+    }
+  ],
+  "content_coverage": {
+    "total_source_contents": 24,
+    "contents_with_evidence": 24,
+    "contents_mapped": [
+      {"id": "cmtifxn9r0001gsrtxnkvbmzf", "title": "低配关系", "author": "肖子梵", "mapped_kus": ["KU_001", "KU_006", "KU_008", "KU_010", "KU_012", "KU_017", "KU_021"]},
+      {"id": "cmtig0aoa0002gsrtbh7hywcp", "title": "女性付出意识", "author": "纯桐沐", "mapped_kus": ["KU_002", "KU_009", "KU_011", "KU_017"]},
+      {"id": "cmtihs7200001ygrtngbm3whf", "title": "18岁以后", "author": "闫思雨", "mapped_kus": ["KU_003", "KU_007", "KU_008", "KU_010", "KU_012", "KU_021"]},
+      {"id": "cmti6dd1800005grtwqbodpeh", "title": "虞封杀", "author": "超蓝瑞瑞", "mapped_kus": ["KU_002", "KU_009", "KU_010", "KU_013"]},
+      {"id": "cmtihp48w0000ygrtsrf1p1xr", "title": "爱自己", "author": "闫思雨", "mapped_kus": ["KU_001", "KU_003"]},
+      {"id": "cmtiimd0m0000h0rtjldcal7m", "title": "爱己商", "author": "闫思雨", "mapped_kus": ["KU_006", "KU_020", "KU_022", "KU_024"]},
+      {"id": "cmtjdtvgr0004h0rtldet37ou", "title": "魅力女生", "author": "婉婉道来", "mapped_kus": ["KU_005", "KU_016", "KU_024"]},
+      {"id": "cmtjdlzuo0001h0rtll7p5uax", "title": "衣橱哲学", "author": "婉婉道来", "mapped_kus": ["KU_001", "KU_006", "KU_011", "KU_016", "KU_022"]},
+      {"id": "cmtifwg6z0000gsrth3uzhlxv", "title": "AI时代生存", "author": "肖子梵", "mapped_kus": ["KU_007", "KU_014", "KU_023"]},
+      {"id": "cmtigcdp20005gsrtdhx6cxe2", "title": "破局思维", "author": "肖子梵", "mapped_kus": ["KU_004", "KU_008", "KU_013", "KU_015"]},
+      {"id": "cmtigbg5e0004gsrtzsv4ei7p", "title": "女孩感悟", "author": "闫思雨", "mapped_kus": ["KU_004", "KU_009", "KU_019"]},
+      {"id": "cmtih2k420000vgrtk27ynrz4", "title": "社会打拼", "author": "肖子梵", "mapped_kus": ["KU_003", "KU_015", "KU_023"]},
+      {"id": "cmtih97vu0001vgrtaeed76g1", "title": "闭嘴的智慧", "author": "肖子梵", "mapped_kus": ["KU_007", "KU_020"]},
+      {"id": "cmtihxd130002ygrt94ko3pre", "title": "美丽羞耻", "author": "闫思雨", "mapped_kus": ["KU_003", "KU_014", "KU_019"]},
+      {"id": "cmtjew7680006h0rtxogty151", "title": "边界力", "author": "纯桐沐", "mapped_kus": ["KU_005", "KU_018"]},
+      {"id": "cmtjdq5oh0003h0rtjxoc0jji", "title": "高质量生活", "author": "兔牙井井", "mapped_kus": ["KU_005", "KU_018"]},
+      {"id": "cmtjdo1ni0002h0rtgoifw23p", "title": "社会规则", "author": "花大钱", "mapped_kus": ["KU_001"]},
+      {"id": "cmtiimd0m0000h0rtjldcal7m", "title": "爱己商", "author": "闫思雨", "mapped_kus": ["KU_003"]},
+      {"id": "cmti6dd1800005grtwqbodpeh", "title": "虞封杀", "author": "超蓝瑞瑞", "mapped_kus": ["KU_003"]},
+      {"id": "cmtjdtvgr0004h0rtldet37ou", "title": "魅力女生", "author": "婉婉道来", "mapped_kus": ["KU_005"]},
+      {"id": "cmtjdq5oh0003h0rtjxoc0jji", "title": "高质量生活", "author": "兔牙井井", "mapped_kus": ["KU_005"]},
+      {"id": "cmtjew7680006h0rtxogty151", "title": "边界力", "author": "纯桐沐", "mapped_kus": ["KU_005"]},
+      {"id": "cmtifxn9r0001gsrtxnkvbmzf", "title": "低配关系", "author": "肖子梵", "mapped_kus": ["KU_006"]},
+      {"id": "cmtiimd0m0000h0rtjldcal7m", "title": "爱己商", "author": "闫思雨", "mapped_kus": ["KU_006"]}
+    ]
+  },
+  "category_coverage": {
+    "hook": {
+      "count": 5,
+      "knowledge_ids": ["KU_001", "KU_002", "KU_003", "KU_004", "KU_005"],
+      "total_evidence_pieces": 17,
+      "avg_confidence": "medium"
+    },
+    "structure": {
+      "count": 2,
+      "knowledge_ids": ["KU_006", "KU_007"],
+      "total_evidence_pieces": 6,
+      "avg_confidence": "medium"
+    },
+    "emotion": {
+      "count": 2,
+      "knowledge_ids": ["KU_008", "KU_009"],
+      "total_evidence_pieces": 6,
+      "avg_confidence": "medium"
+    },
+    "human_expression": {
+      "count": 15,
+      "knowledge_ids": ["KU_010", "KU_011", "KU_012", "KU_013", "KU_014", "KU_015", "KU_016", "KU_017", "KU_018", "KU_019", "KU_020", "KU_021", "KU_022", "KU_023", "KU_024"],
+      "total_evidence_pieces": 40,
+      "avg_confidence": "medium-low"
+    }
+  }
+}

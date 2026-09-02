@@ -1,0 +1,817 @@
+{
+  "knowledge_units": [
+    {
+      "knowledge_id": "KU_001",
+      "category": "hook",
+      "name": "Question-based Conversational Hook",
+      "description": "通过直接向观众提问建立即时对话感，制造参与感和身份共鸣",
+      "pattern": "你有没有发现...",
+      "abstract_pattern": "Question → Shared Experience → Curiosity",
+      "function": "建立注意力和身份共鸣，让观众感觉'这是在说我'",
+      "evidence": {
+        "content_ids": [
+          "cmtifxn9r0001gsrtxnkvbmzf",
+          "cmtihp48w0000ygrtsrf1p1xr",
+          "cmtjdo1ni0002h0rtgoifw23p",
+          "cmtjdlzuo0001h0rtll7p5uax"
+        ],
+        "examples": [
+          "你们有没有发现有一些关系你一开始很期待，但是后来却是越相处越累",
+          "但是你有没有仔细想过，为什么是女孩子长脑子最快的方式呢？是因为女孩子不长脑子吗？",
+          "先问你个问题，你是愿意花2万块钱去动个双眼皮，还是愿意花一个月工资去搞懂这个社会的底层运行规则？",
+          "你有没有发现那些就是随手一穿就很好看的人，他们不知道背地里面试了多少搓？"
+        ]
+      },
+      "frequency": 4,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "女性成长",
+        "情感关系",
+        "认知提升"
+      ],
+      "risk": [
+        "过度使用容易产生模板感",
+        "问题需要精准匹配目标受众真实痛点"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_002",
+      "category": "hook",
+      "name": "Controversial Assertion Hook",
+      "description": "用争议性或反直觉的观点开场，立即制造认知冲突，激发观看欲望",
+      "pattern": "说一个很多女生不愿意承认的社会现状...",
+      "abstract_pattern": "Controversial Statement → Identity Challenge → Curiosity",
+      "function": "通过挑战观众固有认知，制造'我想看看她到底想说什么'的好奇心",
+      "evidence": {
+        "content_ids": [
+          "cmtig0aoa0002gsrtbh7hywcp",
+          "cmti6dd1800005grtwqbodpeh"
+        ],
+        "examples": [
+          "说一个很多女生不愿意承认的社会现状，就是现在我们国内女性普遍非常缺乏付出意识",
+          "我真的看不下去了我发言我觉得他在方方面面对一个女明星全方位的封杀和围剿"
+        ]
+      },
+      "frequency": 2,
+      "confidence": "low",
+      "applicable_scenarios": [
+        "社会评论",
+        "性别议题",
+        "认知冲击"
+      ],
+      "risk": [
+        "争议性过强可能引发负面评论",
+        "需要后续内容支撑，否则显得标题党"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_003",
+      "category": "hook",
+      "name": "Age-Marked Authority Hook",
+      "description": "用年龄标记建立'过来人'身份权威，让观众产生'她有经验'的信任感",
+      "pattern": "我X岁啊，回过头看我X岁走过的路...",
+      "abstract_pattern": "Age Marker → Humble Authority → Lesson Preview",
+      "function": "用年龄差距制造'前辈给建议'的心理定位",
+      "evidence": {
+        "content_ids": [
+          "cmtihs7200001ygrtngbm3whf",
+          "cmtih2k420000vgrtk27ynrz4",
+          "cmtihp48w0000ygrtsrf1p1xr",
+          "cmtihxd130002ygrt94ko3pre"
+        ],
+        "examples": [
+          "我23岁啊，回过头看我18岁走过的路，真的是踩了太多没必要的坑了",
+          "说难听点可能年纪稍微小一点的女孩都听不懂我在说什么就是我从17岁开始出来打拼嘛",
+          "哈大家好，我是思雨，今年30岁。今天我想跟二十多岁的女生分享一个非常非常重要的事情",
+          "哈喽大家好，我是思雨，今年30岁。我今天特别想要跟你们分享一个你们肯定都懂的美丽羞耻证语"
+        ]
+      },
+      "frequency": 4,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "人生建议",
+        "女性成长",
+        "过来人经验"
+      ],
+      "risk": [
+        "过度使用可能显得'好为人师'",
+        "需要真实感支撑，否则显得刻意"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_004",
+      "category": "hook",
+      "name": "Personal Experience Scene Hook",
+      "description": "用具体的生活场景切入，从个人感受出发引出观点，制造真实感和代入感",
+      "pattern": "我[时间]刚[做某事]，就有个很强烈的感受...",
+      "abstract_pattern": "Scene → Personal Feeling → Insight Seed",
+      "function": "从具体场景切入，让观点'有来源'而非'凭空而来'",
+      "evidence": {
+        "content_ids": [
+          "cmtigcdp20005gsrtdhx6cxe2",
+          "cmtigbg5e0004gsrtzsv4ei7p"
+        ],
+        "examples": [
+          "我晚上刚跟几个做生意的姐姐吃完饭，就有个很强烈的感受",
+          "我刚下来溜达了一圈，然后刷到了一条很有能量的画，分享给屏幕前的女生们"
+        ]
+      },
+      "frequency": 2,
+      "confidence": "low",
+      "applicable_scenarios": [
+        "个人感悟",
+        "认知分享",
+        "经验传递"
+      ],
+      "risk": [
+        "场景需要足够具体才能产生代入感",
+        "过渡到观点需要自然"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_005",
+      "category": "hook",
+      "name": "Identity-Targeted Hook",
+      "description": "直接用身份标签称呼目标观众群体，制造'这就是在说我'的即时识别",
+      "pattern": "如果你[身份描述]，并且因为这样的性格吃了太多的亏...",
+      "abstract_pattern": "Identity Label → Pain Point → Promise of Solution",
+      "function": "精准定位目标受众，让被点到的人产生强烈的代入感",
+      "evidence": {
+        "content_ids": [
+          "cmtjew7680006h0rtxogty151",
+          "cmtjdq5oh0003h0rtjxoc0jji",
+          "cmtjdtvgr0004h0rtldet37ou"
+        ],
+        "examples": [
+          "如果你天性就不是攻击性很强的人，并且因为这样的性格吃了太多的亏，那么你一定思考过一个问题",
+          "所有家庭条件一般，但是又很向往高质量生活的女性，请记住了",
+          "女人的能力是什么她必须要清楚怎么让自己变成一个紧密女孩"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "个人成长",
+        "边界力",
+        "财务独立"
+      ],
+      "risk": [
+        "身份标签需要精准，过宽则无效",
+        "可能让未被标签覆盖的观众流失"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_006",
+      "category": "structure",
+      "name": "Concept-Naming Insight Structure",
+      "description": "用一个新概念命名观众熟悉但无法清晰表达的体验，然后用对比解释概念",
+      "pattern": "我今天想讲一个很多女孩子都在经历，但是不一定说得清楚的东西，叫[概念名]",
+      "abstract_pattern": "Concept Naming → Contrast Definition → Progressive Revelation",
+      "function": "用简单概念解释复杂体验，让观众产生'原来这叫这个'的顿悟感",
+      "evidence": {
+        "content_ids": [
+          "cmtifxn9r0001gsrtxnkvbmzf",
+          "cmtiimd0m0000h0rtjldcal7m",
+          "cmtjdlzuo0001h0rtll7p5uax"
+        ],
+        "examples": [
+          "我今天想讲一个很多女孩子都在经历，但是不一定说得清楚的东西，叫低配关系",
+          "我把它叫做爱己商",
+          "就是当你发生一些不是特别好的事情的时候，经历了一些困难的时候，你要你要使劲想我该怎么把这个困难变成我的一个优势"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "情感关系",
+        "自我成长",
+        "认知提升"
+      ],
+      "risk": [
+        "概念需要足够精准和简洁",
+        "如果概念不够新，显得老套"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_007",
+      "category": "structure",
+      "name": "Listicle Knowledge Output",
+      "description": "用编号列表传递大量信息，结构清晰但需要避免过度格式化以保持自然感",
+      "pattern": "一、[要点1]。2、[要点2]。三[要点3]...",
+      "abstract_pattern": "Numbered List → Quick Scanning → Save for Later",
+      "function": "高密度信息传递，便于观众快速获取和收藏",
+      "evidence": {
+        "content_ids": [
+          "cmtifwg6z0000gsrth3uzhlxv",
+          "cmtih97vu0001vgrtaeed76g1",
+          "cmtihs7200001ygrtngbm3whf"
+        ],
+        "examples": [
+          "一、能问豆包解决的事情，就不要老是问别人。2、没必要在职场里面交朋友",
+          "一货都是从口出的，一年学说话，十年学闭嘴",
+          "首先第一个，18岁以后你就要开始为自己的人生负责了"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "实用建议",
+        "干货分享",
+        "收藏型内容"
+      ],
+      "risk": [
+        "过度使用编号会显得像'课程'而非口播",
+        "缺乏情感和节奏变化会增加AI味",
+        "需要穿插个人体验和口语化表达来平衡"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_008",
+      "category": "emotion",
+      "name": "Regret-to-Wisdom Emotional Arc",
+      "description": "从遗憾情绪出发，通过'过来人'视角传递经验，制造'我不想你重蹈覆辙'的关怀感",
+      "pattern": "我后来才明白... / 如果当初知道...",
+      "abstract_pattern": "Personal Regret → Lesson Extraction → Warning/Advice",
+      "function": "用个人遗憾作为情感钩子，用经验作为解决方案",
+      "evidence": {
+        "content_ids": [
+          "cmtifxn9r0001gsrtxnkvbmzf",
+          "cmtihs7200001ygrtngbm3whf",
+          "cmtigcdp20005gsrtdhx6cxe2"
+        ],
+        "examples": [
+          "我后来越来越明白，一个女生要是想要活得轻松一点，那你就一定要学会去识别低配关系",
+          "我23岁啊，回过头看我18岁走过的路，真的是踩了太多没必要的坑了",
+          "我晚上刚跟几个做生意的姐姐吃完饭，就有个很强烈的感受"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "人生建议",
+        "女性成长",
+        "情感关系"
+      ],
+      "risk": [
+        "过度使用'我后来才明白'会显得老生常谈",
+        "需要真实个人经历支撑"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_009",
+      "category": "emotion",
+      "name": "Shared Experience Empathy",
+      "description": "描述一个群体共有的模糊感受，让观众产生'她懂我'的强烈共鸣",
+      "pattern": "可能只有经历过的女生才懂...",
+      "abstract_pattern": "Shared Pain → Validation → You're Not Alone",
+      "function": "通过描述共同体验，让观众感到被理解和被看见",
+      "evidence": {
+        "content_ids": [
+          "cmtih2k420000vgrtk27ynrz4",
+          "cmtjeb56p0005h0rtbxah3hg7",
+          "cmtjiepr30007h0rte9vu5isw"
+        ],
+        "examples": [
+          "可能只有经历过的女生才懂…",
+          "人这一辈子无非都在追求爱这个字",
+          "我的高中三年就充斥着两件事。第一件事是人际关系，就特别害怕落单的窘迫"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "情感共鸣",
+        "自我接纳",
+        "成长困惑"
+      ],
+      "risk": [
+        "需要精准描述共同体验，否则显得空洞",
+        "过度使用会显得矫情"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_010",
+      "category": "perspective",
+      "name": "Direct Address Empowerment",
+      "description": "用'姐妹/女生'直接称呼观众，配合赋能式语言建立情感连接和信任",
+      "pattern": "姐妹们，... / 女生一定要...",
+      "abstract_pattern": "Direct Address → Empowerment Statement → Actionable Advice",
+      "function": "建立'自己人'的感觉，降低防御心理，增强说服力",
+      "evidence": {
+        "content_ids": [
+          "cmtifxn9r0001gsrtxnkvbmzf",
+          "cmtigbg5e0004gsrtzsv4ei7p",
+          "cmti6dd1800005grtwqbodpeh",
+          "cmtihgl3w0002vgrtbq1kmwbt",
+          "cmtjdtvgr0004h0rtldet37ou"
+        ],
+        "examples": [
+          "姐妹们，任何一段让你长期掉状态的关系，本质上它都不是滋养你的，是消耗",
+          "姐妹们记住，你的财富就是你身边最亲近的五个人的平均值",
+          "所以呢我真心建议所有年轻女孩子，真的一定要给自己建立一个判断标准",
+          "所以姐妹你们一定一定要记得，千万千万要把优质蛋白、优质脂肪这东西给它补上来"
+        ]
+      },
+      "frequency": 5,
+      "confidence": "high",
+      "applicable_scenarios": [
+        "女性成长",
+        "赋能内容",
+        "实用建议"
+      ],
+      "risk": [
+        "过度使用'姐妹们'会产生套路感",
+        "需要配合真实内容，否则显得空洞"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_011",
+      "category": "perspective",
+      "name": "First-Person Vulnerability Lens",
+      "description": "用第一人称分享个人经历和脆弱时刻，建立真实感和信任感",
+      "pattern": "我以前也... / 我那个时候...",
+      "abstract_pattern": "Vulnerability → Relatability → Trust Building",
+      "function": "通过暴露脆弱打破'完美博主'距离感，让观众觉得'她和我一样'",
+      "evidence": {
+        "content_ids": [
+          "cmtiexhr9000068rtqeib610v",
+          "cmtigbg5e0004gsrtzsv4ei7p",
+          "cmtihxd130002ygrt94ko3pre",
+          "cmtjew7680006h0rtxogty151",
+          "cmtjdq5oh0003h0rtjxoc0jji",
+          "cmtifwg6z0000gsrth3uzhlxv"
+        ],
+        "examples": [
+          "我以前也不敢做自媒体，不敢面对镜头，说话都磕巴",
+          "我之前135斤，我靠运动瘦了20斤。但是我瘦下来的结果皮脂醇增高，暴饮暴食，反弹就恶性循环",
+          "我曾经就是这样的人，总是顾全大局，所以很少当众发泄情绪",
+          "我以前也不敢做自媒体，不敢面对镜头，说话都磕巴"
+        ]
+      },
+      "frequency": 6,
+      "confidence": "high",
+      "applicable_scenarios": [
+        "个人成长",
+        "自我暴露",
+        "信任建立"
+      ],
+      "risk": [
+        "暴露需要适度，过度会显得刻意卖惨",
+        "需要与正向观点结合，否则显得负面"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_012",
+      "category": "language",
+      "name": "Not-A-But-B Cognitive Contrast",
+      "description": "用'不是A，而是B'的句式重新定义概念，制造认知反转",
+      "pattern": "你化的不是妆，那是你的价值",
+      "abstract_pattern": "Not A → Redefine as B → Reframing",
+      "function": "用对比重新定义概念，赋予旧事物新意义",
+      "evidence": {
+        "content_ids": [
+          "cmti6dd1800005grtwqbodpeh",
+          "cmtih97vu0001vgrtaeed76g1",
+          "cmtig0aoa0002gsrtbh7hywcp"
+        ],
+        "examples": [
+          "你化的不是妆，那是你的价值；你穿的不是衣服，那是你的品质；你减的也不是肥，那是对你人生的重塑啊",
+          "抢男人有什么意思？抢男人饭碗才有意思",
+          "如果你拥有顶级的颜值和背景，那你当然可以什么都不用付出，就有人前赴后继来为你付出，只求你给一个好脸色。但问题你不是，我也不是"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "认知重构",
+        "励志鸡汤",
+        "价值重塑"
+      ],
+      "risk": [
+        "排比句过于工整会显得像'鸡汤体'",
+        "AI也容易生成类似表达"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_013",
+      "category": "language",
+      "name": "Imperative Direct Command",
+      "description": "用'你就记住啊'、'你给我'等直接命令式表达，制造权威感和紧迫感",
+      "pattern": "你就记住啊，...",
+      "abstract_pattern": "Command → Reason → Compliance",
+      "function": "用直接命令式表达打破观众心理防御，增强说服力",
+      "evidence": {
+        "content_ids": [
+          "cmti6dd1800005grtwqbodpeh",
+          "cmtihgl3w0002vgrtbq1kmwbt",
+          "cmtifxn9r0001gsrtxnkvbmzf",
+          "cmtjew7680006h0rtxogty151"
+        ],
+        "examples": [
+          "你就记住啊，你化的不是妆，那是你的价值",
+          "你就直接去把你的这个肩膀给我打开，把你的背停下来",
+          "你付出了时间、付出了情绪、付出了耐心、付出了理解，可是你得到的却是反复的失望",
+          "不要告诉任何人你的过去"
+        ]
+      },
+      "frequency": 4,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "实用建议",
+        "行为指导",
+        "自我提升"
+      ],
+      "risk": [
+        "过度使用会显得说教",
+        "需要建立在信任基础上才有效"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_014",
+      "category": "cognition",
+      "name": "Expectation Reversal Pattern",
+      "description": "挑战观众固有认知，用反直觉但逻辑自洽的观点制造认知冲击",
+      "pattern": "我们一直以为...其实...",
+      "abstract_pattern": "Common Belief → Challenge → Reversed Truth",
+      "function": "打破思维定式，制造'原来我一直是错的'的认知刷新",
+      "evidence": {
+        "content_ids": [
+          "cmtig0aoa0002gsrtbh7hywcp",
+          "cmtifxn9r0001gsrtxnkvbmzf",
+          "cmtigcdp20005gsrtdhx6cxe2",
+          "cmtihp48w0000ygrtsrf1p1xr",
+          "cmtjdtvgr0004h0rtldet37ou"
+        ],
+        "examples": [
+          "我们一直以为追求被爱很重要，后来才发现，更重要的是学会爱自己",
+          "我们一直以为女性天生恋爱脑，但这根本就是个谎言",
+          "只有一种恋爱模式是成功的，那就是女生懂付出，男生的有良心",
+          "我们以为是在找爱人，其实是在找一个能证明我值得的答案",
+          "世界上除了血缘关系，任何情感关系本质上都是一场价值交换"
+        ]
+      },
+      "frequency": 5,
+      "confidence": "high",
+      "applicable_scenarios": [
+        "认知反转",
+        "情感关系",
+        "自我觉醒"
+      ],
+      "risk": [
+        "反转需要有逻辑支撑，否则显得刻意",
+        "过度使用会显得'为反而反'"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_015",
+      "category": "cognition",
+      "name": "Specific Number Argumentation",
+      "description": "用具体数字增强说服力，让抽象观点变得可感知、可验证",
+      "pattern": "宁愿花1万块去...也不舍得在....",
+      "abstract_pattern": "Concrete Numbers → Concrete Scenarios → Believability",
+      "function": "用具体数字让抽象道理变得触手可及，增强可信度",
+      "evidence": {
+        "content_ids": [
+          "cmtig0aoa0002gsrtbh7hywcp",
+          "cmtihxd130002ygrt94ko3pre",
+          "cmtiimd0m0000h0rtjldcal7m"
+        ],
+        "examples": [
+          "很多女生宁愿花1万块去婚恋机构找什么所谓的A8A9优质单身男，就算知道可能会被骗，也不舍得在自己的男朋友身上花这1万块钱",
+          "一周至少要吃三次三文鱼",
+          "我瘦下来的结果皮脂醇增高，暴饮暴食，反弹就恶性循环，整整的持续了八年的时间"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "社会评论",
+        "实用建议",
+        "认知提升"
+      ],
+      "risk": [
+        "数字需要真实可信，不能随意编造",
+          "过度使用会显得像'数据报告'"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_016",
+      "category": "human_expression",
+      "name": "Fluency-Filler Natural Pause",
+      "description": "用'就是'、'嗯'、'啊'等口语填充词模拟真实思考过程",
+      "pattern": "就是... / 嗯... / 啊...",
+      "abstract_pattern": "Filler → Processing → Continuation",
+      "function": "让表达更像真实对话而非书面朗读，降低AI味",
+      "evidence": {
+        "content_ids": [
+          "cmtjdlzuo0001h0rtll7p5uax",
+          "cmtihxd130002ygrt94ko3pre",
+          "cmtiexhr9000068rtqeib610v",
+          "cmtihgl3w0002vgrtbq1kmwbt",
+          "cmtjeb56p0005h0rtbxah3hg7",
+          "cmtihp48w0000ygrtsrf1p1xr"
+        ],
+        "examples": [
+          "就是当我第一次听到这个词的时候，我会觉得有点笼统",
+          "嗯，就是当你第一次听到这个词的时候",
+          "哎，对我来说菜单是全英文的，看不懂的都叫高端局哈",
+          "那个说话的语气，那些小动作、小的微表情，你就不放心跟他过钱儿",
+          "人这一辈子无非都在追求爱这个字想要大家聊聊这个话题咱们东亚小孩",
+          "哈大家好，我是思雨，今年30岁"
+        ]
+      },
+      "frequency": 6,
+      "confidence": "high",
+      "applicable_scenarios": [
+        "所有口播内容",
+        "降低AI感",
+        "增加自然度"
+      ],
+      "risk": [
+        "过度使用会显得表达不流畅",
+        "需要根据语境自然插入"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_017",
+      "category": "human_expression",
+      "name": "Self-Correction Realness",
+      "description": "说错话后自我纠正，或绕一下再说，模拟真实说话时的思维过程",
+      "pattern": "我想解释一下，说这是...结果嘴一快说成了...",
+      "abstract_pattern": "Error → Self-Awareness → Correction → Humor",
+      "function": "通过暴露'不完美'增强真实感和可信度",
+      "evidence": {
+        "content_ids": [
+          "cmtiexhr9000068rtqeib610v",
+          "cmtihp48w0000ygrtsrf1p1xr",
+          "cmtihxd130002ygrt94ko3pre"
+        ],
+        "examples": [
+          "我想解释一下，说这是姐夫来上海了，结果嘴一快说成了啊，这是上海的姐夫",
+          "我在上大学的时候，政治课里面的那个四门就学得非常好。我当时就是一个很虚无、很愤世嫉俗、很冷漠的人",
+          "我之前135斤，我靠运动瘦了20斤。但是我瘦下来的结果皮脂醇增高，暴饮暴食，反弹就恶性循环"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "脱口秀",
+        "个人分享",
+        "幽默内容"
+      ],
+      "risk": [
+        "需要自然，刻意制造'错误'会显得做作",
+        "不适合所有内容类型"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_018",
+      "category": "human_expression",
+      "name": "Emotional Abrupt Shift",
+      "description": "在幽默或平静叙述中突然插入真实情绪，制造情感冲击",
+      "pattern": "[搞笑内容]→[突然转向真情]→[金句]",
+      "abstract_pattern": "Lightness → Emotional Pivot → Authenticity Spike",
+      "function": "用情绪突转制造'意外'的真实感，让内容更有记忆点",
+      "evidence": {
+        "content_ids": [
+          "cmtiexhr9000068rtqeib610v",
+          "cmtjeb56p0005h0rtbxah3hg7",
+          "cmtjiepr30007h0rte9vu5isw"
+        ],
+        "examples": [
+          "我对姐夫就是生理性喜欢"（从搞笑叙事突然转向真情流露）",
+          "允许自己有脾气允许失控允许自己有随时能抽身的底气"（从叙述突然转向情绪释放）,
+          "这种迷茫、恐惧甚至叫怯懦。我懂，因为我也曾站在那里，既不敢向前也不敢后退，所以别怕所以别怕"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "情感共鸣",
+        "个人故事",
+        "深度内容"
+      ],
+      "risk": [
+        "需要铺垫足够的情绪基础",
+        "过度使用会显得情绪不稳定"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_019",
+      "category": "human_expression",
+      "name": "Incomplete Sentence Realness",
+      "description": "句子不完整，意思到了就行，模拟真实说话时的思维跳跃",
+      "pattern": "[不完整句子]...[意思到了就跳下一句]",
+      "abstract_pattern": "Fragment → Implied Meaning → Move On",
+      "function": "用不完整表达模拟真实思维流动，降低'书面感'",
+      "evidence": {
+        "content_ids": [
+          "cmtjdlzuo0001h0rtll7p5uax",
+          "cmtjeb56p0005h0rtbxah3hg7",
+          "cmtjew7680006h0rtxogty151",
+          "cmtih2k420000vgrtk27ynrz4"
+        ],
+        "examples": [
+          "你要你要使劲想我该怎么把这个困难变成我的一个优势",
+          "不要入任何人的局任何人说什么都不重要因为你的世界你做主就是他人的评价呀跟女女无关你也不要入儿",
+          "我的高中三年就充斥着两件事。第一件事是人际关系，就特别害怕落单的窘迫以及额外珍视呵护的女生之间的友情。第二件事就是成绩成绩成绩学习学习学习了"
+        ]
+      },
+      "frequency": 4,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "口语化表达",
+        "情感宣泄",
+        "自我对话"
+      ],
+      "risk": [
+        "过度使用会让内容显得混乱",
+        "需要确保核心意思仍然传达清楚"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_020",
+      "category": "human_expression",
+      "name": "Repetition for Emphasis",
+      "description": "通过连续重复同一主语或句式强化情绪冲击",
+      "pattern": "他忽略了X他忽略了Y他忽略了Z",
+      "abstract_pattern": "Repetition → Rhythm → Emotional Intensity",
+      "function": "用重复制造节奏感和情绪递进，增强表达力度",
+      "evidence": {
+        "content_ids": [
+          "cmtd3jnet0000dwrtj3krmeef",
+          "cmtih2k420000vgrtk27ynrz4",
+          "cmtifxn9r0001gsrtxnkvbmzf",
+          "cmtjeb56p0005h0rtbxah3hg7"
+        ],
+        "examples": [
+          "他忽略了年龄差他忽略了美貌就是一种权利他忽略了人家就是人间富贵花",
+          "不要入任何人的局任何人说什么都不重要因为你的世界你做主就是他人的评价呀跟女女无关你也不要入儿",
+          "你总是在解释，对方总是在敷衍你总是在付出，对方总是在享受，你总是在维系，对方总是在观望",
+          "小时候追求爸妈的爱长大追求朋友的爱要求当对方的第一顺位到了谈恋爱的时候就更加疯狂了"
+        ]
+      },
+      "frequency": 4,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "情绪表达",
+        "观点强调",
+        "排比修辞"
+      ],
+      "risk": [
+        "AI倾向于避免重复，但这恰恰是真人表达",
+        "需要控制频率，过度会显得刻意"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_021",
+      "category": "ending",
+      "name": "Emotional Echo Ending",
+      "description": "用重复或回环的方式结尾，制造情感余韵，让观众在情绪中结束观看",
+      "pattern": "所以别怕所以别怕 / 晚安，女孩",
+      "abstract_pattern": "Emotional Statement → Echo → Gentle Close",
+      "function": "用情绪而非结论结尾，给观众留下温暖或思考的空间",
+      "evidence": {
+        "content_ids": [
+          "cmtjiepr30007h0rte9vu5isw",
+          "cmtjeb56p0005h0rtbxah3hg7"
+        ],
+        "examples": [
+          "所以别怕所以别怕",
+          "希望我说的对你们有帮助晚安女孩"
+        ]
+      },
+      "frequency": 2,
+      "confidence": "low",
+      "applicable_scenarios": [
+        "情感共鸣",
+        "心理咨询",
+        "温暖收尾"
+      ],
+      "risk": [
+        "使用频率低，可能不适合所有内容",
+        "需要与整体情绪基调匹配"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_022",
+      "category": "ending",
+      "name": "Action Prompt Ending",
+      "description": "用明确的行动号召结尾，引导观众做出具体行为（点赞/收藏/关注）",
+      "pattern": "视频可能随时会被下架，最好把我设成特别关注 / 你们可以艾一下豆包",
+      "abstract_pattern": "Urgency → Action Request → Compliance",
+      "function": "制造紧迫感，引导互动行为",
+      "evidence": {
+        "content_ids": [
+          "cmtihs7200001ygrtngbm3whf",
+          "cmtifwg6z0000gsrth3uzhlxv",
+          "cmtiimd0m0000h0rtjldcal7m",
+          "cmtihp48w0000ygrtko3pre"
+        ],
+        "examples": [
+          "视频可能随时会被下架，最好把我设成特别关注啊",
+          "你们可以艾一下豆包，给你们整理一个那种什么思维导图",
+          "所以如果你想看，一定要记得关注我的这个账号和我的这个系列",
+          "真的很建议屏幕前的你们去关注这几个博主，真的会打开你的认知"
+        ]
+      },
+      "frequency": 4,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "增长引导",
+        "互动引导",
+        "播客推广"
+      ],
+      "risk": [
+        "过度使用会显得功利",
+        "需要自然过渡，不能太突兀"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_023",
+      "category": "structure",
+      "name": "Contrast Pair Explanation",
+      "description": "用正反对比解释概念，让抽象概念变得清晰可感",
+      "pattern": "[正面]总是[行为]，[反面]总是[行为]",
+      "abstract_pattern": "Contrast A vs B → Concept Clarification",
+      "function": "用对比让观众快速理解复杂概念的本质差异",
+      "evidence": {
+        "content_ids": [
+          "cmtifxn9r0001gsrtxnkvbmzf",
+          "cmtigcdp20005gsrtdhx6cxe2",
+          "cmtig0aoa0002gsrtbh7hywcp"
+        ],
+        "examples": [
+          "你总是在解释，对方总是在敷衍你总是在付出，对方总是在享受，你总是在维系，对方总是在观望",
+          "一个完成了自身商业化，跟真实世界交过手的女性，她整个人呈现出来的状态是完全不一样的",
+          "很多女生宁愿花1万块去婚恋机构找什么所谓的A8A9优质单身男，就算知道可能会被骗，也不舍得在自己的男朋友身上花这1万块钱"
+        ]
+      },
+      "frequency": 3,
+      "confidence": "medium",
+      "applicable_scenarios": [
+        "概念解释",
+        "关系分析",
+        "认知提升"
+      ],
+      "risk": [
+        "对比需要足够鲜明才能有效",
+        "过度使用会显得二元对立"
+      ],
+      "status": "candidate"
+    },
+    {
+      "knowledge_id": "KU_024",
+      "category": "cognition",
+      "name": "Reframing Definition",
+      "description": "重新定义观众熟悉的概念，赋予旧词新义或颠覆其原有含义",
+      "pattern": "什么叫[概念]？就是[新解释]",
+      "abstract_pattern": "Old Concept → New Definition → Perspective Shift",
+      "function": "通过重新定义改变观众的思考框架",
+      "evidence": {
+        "content_ids": [
+          "cmtifxn9r0001gsrtxnkvbmzf",
+          "cmtihs7200001ygrtngbm3whf"
+        ],
+        "examples": [
+          "什么叫低配关系？就是你总是在解释，对方总是在敷衍",
+          "一个女生真正的成熟不是多会忍，而是你终于知道什么关系该留，什么关系必须要放"
+        ]
+      },
+      "frequency": 2,
+      "confidence": "low",
+      "applicable_scenarios": [
+        "认知提升",
+        "概念重新定义",
+        "思维升级"
+      ],
+      "risk": [
+        "新定义需要逻辑自洽且易于理解",
+        "过度使用会显得'玩概念'"
+      ],
+      "status": "candidate"
+    }
+  ]
+}

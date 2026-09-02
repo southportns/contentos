@@ -9,6 +9,8 @@ import {
   expressionPlanSchema,
   expressionAuditSchema,
   expressionRewriteResultSchema,
+  conclusionModeSchema,
+  auditIssueTypeSchema,
   validateExpressionPlan,
   validateExpressionAudit,
   validateExpressionRewriteResult,
@@ -18,6 +20,42 @@ import {
   VALID_EXPRESSION_AUDIT,
   FAILING_EXPRESSION_AUDIT,
 } from './fixtures'
+
+describe('ConclusionMode Schema (P0.1.5)', () => {
+  it('should accept all 8 conclusion modes', () => {
+    const modes = [
+      'reflection',
+      'open_ended',
+      'echo',
+      'question',
+      'direct_takeaway',
+      'scene_return',
+      'self_aware',
+      'quiet_statement',
+    ]
+    for (const mode of modes) {
+      const result = conclusionModeSchema.safeParse(mode)
+      expect(result.success).toBe(true)
+    }
+  })
+
+  it('should reject invalid conclusion mode', () => {
+    const result = conclusionModeSchema.safeParse('summary')
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('AuditIssueType Schema (P0.1.5)', () => {
+  it('should accept conclusion_cliche type', () => {
+    const result = auditIssueTypeSchema.safeParse('conclusion_cliche')
+    expect(result.success).toBe(true)
+  })
+
+  it('should accept emotion_shift_excessive type', () => {
+    const result = auditIssueTypeSchema.safeParse('emotion_shift_excessive')
+    expect(result.success).toBe(true)
+  })
+})
 
 describe('ExpressionPlan Schema', () => {
   it('should validate a valid ExpressionPlan', () => {

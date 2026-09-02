@@ -3,21 +3,22 @@ import { z } from 'zod'
 import { getComments, extractAwemeId, checkDouyinHealth } from '@/lib/tools/douyin-client'
 
 export const runtime = 'nodejs'
-export const maxDuration = 45
+export const maxDuration = 100
 
 const commentsSchema = z.object({
   awemeId: z.string().optional(),
   url: z.string().optional(),
-  count: z.number().int().positive().max(50).default(20),
+  count: z.number().int().positive().max(50).default(50),
   cursor: z.number().int().min(0).default(0),
 })
 
 export async function POST(req: NextRequest) {
+  let awemeId: string | null = null
   try {
     const body = await req.json()
     const input = commentsSchema.parse(body)
 
-    const awemeId =
+    awemeId =
       input.awemeId || (input.url ? extractAwemeId(input.url) : null)
 
     if (!awemeId) {
@@ -63,11 +64,50 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const errMsg = error instanceof Error ? error.message : 'Unknown error'
+    const isTimeout = errMsg.includes('aborted') || errMsg.includes('timeout')
+    const isRiskControl =
+      errMsg.includes('403') ||
+      errMsg.includes('429') ||
+      errMsg.includes('Empty 200') ||
+      errMsg.includes('anti-bot')
+
+    // 风控/超时场景：返回 200 + success=false + 空评论列表，
+    // 让前端 UI 能优雅降级（显示"评论获取失败"而非整页崩溃）
+    if (isTimeout || isRiskControl) {
+      const userMsg = isTimeout
+        ? '评论采集超时。抖音可能触发反爬虫，请稍等后重试。'
+        : '抖音风控拦截了评论获取。请稍后重试或刷新 Cookie。'
+
+      console.error('[douyin-comments] Risk control / timeout:', {
+        awemeId,
+        error: errMsg,
+        isTimeout,
+        isRiskControl,
+      })
+
+      return NextResponse.json({
+        success: false,
+        error: userMsg,
+        data: {
+          awemeId: awemeId || '',
+          count: 0,
+          hasMore: false,
+          cursor: 0,
+          comments: [],
+        },
+      })
+    }
+
+    console.error('[douyin-comments] Error:', {
+      awemeId,
+      error: errMsg,
+    })
+
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : 'Unknown error',
+        error: errMsg,
       },
       { status: 500 },
     )

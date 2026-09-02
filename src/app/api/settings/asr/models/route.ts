@@ -45,22 +45,40 @@ function getEnvValue(envContent: string, key: string): string {
 }
 
 // ─── Static fallback ASR models ───────────────────────
-
+// Only models that support the async transcription API (POST /services/audio/asr/transcription
+// with X-DashScope-Async header) are listed here.
+// Flash models (qwen3-asr-flash, qwen-audio-3.0-asr-flash, fun-asr-flash) use a synchronous
+// API and do NOT support our async transcription pipeline.
 const FALLBACK_ASR_MODELS = [
   'paraformer-v1',
-  'qwen-audio-3.0-asr-flash',
-  'qwen3-asr-flash-2026-02-10',
-  'fun-asr-flash-2026-06-15',
+  'paraformer-v2',
+  'paraformer-8k-v1',
 ]
 
 // ─── ASR model filter ─────────────────────────────────
-// 百炼 /v1/models 返回所有模型，需要过滤出 ASR 相关的
+// 百炼 /v1/models 返回所有模型，需要过滤出 ASR 相关的，
+// 并且只保留支持异步转写 API 的模型。
 
 const ASR_KEYWORDS = ['asr', 'speech', 'transcription', 'paraformer', 'fun-asr']
 
+// 这些模型使用同步 API，不支持我们的异步转写 pipeline（POST /services/audio/asr/transcription）
+// 如果用户选择了这些模型，提交异步转写任务时会返回 400 url error
+const UNSUPPORTED_ASYNC_MODELS = [
+  'qwen3-asr-flash',
+  'qwen-audio-3.0-asr-flash',
+  'fun-asr-flash',
+  'paraformer-flash',
+  'paraformer-realtime',
+  'paraformer-v2-realtime',
+]
+
 function isAsrModel(modelId: string): boolean {
   const lower = modelId.toLowerCase()
-  return ASR_KEYWORDS.some((kw) => lower.includes(kw))
+  // 必须包含 ASR 相关关键词
+  if (!ASR_KEYWORDS.some((kw) => lower.includes(kw))) return false
+  // 排除不支持异步转写的模型
+  if (UNSUPPORTED_ASYNC_MODELS.some((m) => lower.includes(m))) return false
+  return true
 }
 
 // ─── Schema ───────────────────────────────────────────

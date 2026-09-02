@@ -31,7 +31,9 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from '@/components/ui/sidebar'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useContentLibrary } from '@/hooks/use-content-library'
 
 const navItems = [
   { title: '主页', href: '/', icon: Home },
@@ -52,6 +54,7 @@ const explorerSubItems = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const { contents } = useContentLibrary()
 
   return (
     <Sidebar collapsible="none">
@@ -111,6 +114,7 @@ export function AppSidebar() {
                       <SidebarMenuSub className="mt-0.5 gap-0.5">
                         {explorerSubItems.map((sub) => {
                           const isSubActive = pathname === sub.href
+                          const isLibrary = sub.href === '/explorer/library'
                           return (
                             <SidebarMenuSubItem key={sub.href}>
                               <SidebarMenuSubButton
@@ -119,6 +123,11 @@ export function AppSidebar() {
                               >
                                 <sub.icon className="size-3.5" />
                                 <span>{sub.title}</span>
+                                {isLibrary && contents.length > 0 && (
+                                  <Badge variant="secondary" className="ml-auto h-4 min-w-4 px-1 text-xs tabular-nums">
+                                    {contents.length}
+                                  </Badge>
+                                )}
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                           )

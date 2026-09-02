@@ -64,7 +64,11 @@ class ProviderRegistry {
   }
 
   getAll(): ASRProvider[] {
-    return Array.from(this.providers.values())
+    return Array.from(this.providers.values()).sort((a, b) => {
+      const pa = this.priorities.get(a.id) ?? 100
+      const pb = this.priorities.get(b.id) ?? 100
+      return pa - pb
+    })
   }
 }
 
@@ -125,38 +129,46 @@ export function selectProviderForAuto(
 function createDefaultRegistry(): ProviderRegistry {
   const registry = new ProviderRegistry()
 
-  // Local providers (always available)
+  // Local providers (always available, lowest priority as last resort)
   const localProvider = new LocalWhisperProvider()
   registry.register(localProvider, 100)
 
-  // Cloud — 只注册用户选择的单一 Provider
-  const cloudProvider = getEnvVar('ASR_CLOUD_PROVIDER') || 'alibaba'
+  // Cloud providers — 注册所有配置了 API Key 的云 Provider
+  // 阿里云 (priority 50): 有 CDN 直链时秒级响应，无直链时快速失败
+  // 小米 MiMo (priority 60): 通过 Base64 上传本地音频，不需要公网 URL
+  //
+  // Failover 链路: alibaba (首选, 需 CDN 直链) → xiaomi (云端 fallback, Base64 上传) → local-whisper (最后手段)
+  const primaryCloud = getEnvVar('ASR_CLOUD_PROVIDER') || 'alibaba'
+  const alibabaKey = getEnvVar('ALIBABA_ASR_API_KEY')
+  const xiaomiKey = getEnvVar('XIAOMI_ASR_API_KEY')
 
-  if (cloudProvider === 'xiaomi') {
-    const xiaomiKey = getEnvVar('XIAOMI_ASR_API_KEY')
-    if (xiaomiKey) {
-      const xiaomiProvider = new CloudXiaomiProvider()
-      registry.register(xiaomiProvider, 50)
-      console.log('[provider-router] Registered CloudXiaomiProvider (ASR_CLOUD_PROVIDER=xiaomi)')
-    } else {
-      console.warn('[provider-router] ASR_CLOUD_PROVIDER=xiaomi but XIAOMI_ASR_API_KEY not set')
-    }
+  // 注册首选云 Provider（priority 50）
+  if (primaryCloud === 'xiaomi' && xiaomiKey) {
+    const xiaomiProvider = new CloudXiaomiProvider()
+    registry.register(xiaomiProvider, 50)
+    console.log('[provider-router] Registered CloudXiaomiProvider (primary, ASR_CLOUD_PROVIDER=xiaomi)')
+  } else if (primaryCloud === 'alibaba' && alibabaKey) {
+    const alibabaProvider = new CloudAlibabaProvider()
+    registry.register(alibabaProvider, 50)
+    console.log('[provider-router] Registered CloudAlibabaProvider (primary, ASR_CLOUD_PROVIDER=alibaba)')
   } else {
-    // default: alibaba
-    const alibabaKey = getEnvVar('ALIBABA_ASR_API_KEY')
-    if (alibabaKey) {
-      const alibabaProvider = new CloudAlibabaProvider()
-      registry.register(alibabaProvider, 50)
-      console.log('[provider-router] Registered CloudAlibabaProvider (ASR_CLOUD_PROVIDER=alibaba)')
-    } else {
-      console.warn('[provider-router] ASR_CLOUD_PROVIDER=alibaba but ALIBABA_ASR_API_KEY not set')
-    }
+    console.warn(`[provider-router] ASR_CLOUD_PROVIDER=${primaryCloud} but key not set`)
   }
 
-  // 回退检查：如果选定的 Provider 没配置 key，检查另一个
+  // 注册备用云 Provider（priority 60）—— 实现 cloud-to-cloud failover
+  // 当首选 Provider 失败时，先尝试另一个云 Provider，再回退到本地 Whisper
+  if (primaryCloud === 'alibaba' && xiaomiKey) {
+    const xiaomiProvider = new CloudXiaomiProvider()
+    registry.register(xiaomiProvider, 60)
+    console.log('[provider-router] Registered CloudXiaomiProvider (secondary fallback)')
+  } else if (primaryCloud === 'xiaomi' && alibabaKey) {
+    const alibabaProvider = new CloudAlibabaProvider()
+    registry.register(alibabaProvider, 60)
+    console.log('[provider-router] Registered CloudAlibabaProvider (secondary fallback)')
+  }
+
+  // 如果没有任何云 Provider 注册成功，尝试用任意可用的 key 注册
   if (registry.getByMode('cloud').length === 0) {
-    const alibabaKey = getEnvVar('ALIBABA_ASR_API_KEY')
-    const xiaomiKey = getEnvVar('XIAOMI_ASR_API_KEY')
     if (alibabaKey) {
       const alibabaProvider = new CloudAlibabaProvider()
       registry.register(alibabaProvider, 50)

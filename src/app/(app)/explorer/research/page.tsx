@@ -150,14 +150,22 @@ export default function ResearchPage() {
               <span className="text-sm text-muted-foreground">
                 采集到 {douyin.researchResults.length} 条内容
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => douyin.addToWorkflow(douyin.researchResults)}
-              >
-                <Plus className="size-3.5" />
-                {contents.length > 0 ? '更新内容库' : '加入内容库'}
-              </Button>
+              <div className="flex items-center gap-2">
+                {contents.length > 0 && (
+                  <Badge variant="secondary" className="shrink-0 gap-1">
+                    <FileText className="size-3" />
+                    {contents.length} 篇
+                  </Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => douyin.addToWorkflow(douyin.researchResults)}
+                >
+                  <Plus className="size-3.5" />
+                  {contents.length > 0 ? '更新内容库' : '加入内容库'}
+                </Button>
+              </div>
             </div>
 
             {/* Results list */}

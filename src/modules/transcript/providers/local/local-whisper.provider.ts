@@ -101,11 +101,25 @@ export class LocalWhisperProvider implements ASRProvider {
     options?: ASROptions,
   ): Promise<TranscriptResult> {
     // LocalWhisperProvider 通过 douyin-ingest CLI 完成整个流程
-    // 它接受 URL 或 awemeId，内部完成下载 + 提取 + ASR
-    const url = audio.url || audio.filePath
+    // douyin-ingest 的位置参数 (user) 只接受 HTTP(S) URL、短链或分享文本，
+    // 不接受本地文件路径。
+    //
+    // 优先用 audio.url（标准抖音 URL）调用 douyin-ingest：
+    //   - douyin-ingest 内部有缓存机制，Failover 场景下预提取的音频会被缓存复用，
+    //     不会重复下载视频。
+    //   - 使用 --cache-ttl 0 强制执行转写（避免缓存命中跳过转写）。
+    //
+    // 只有当 audio.url 不存在时（极少见），才尝试用 filePath（但 douyin-ingest
+    // 可能无法处理本地路径，这是最后手段）。
+    const hasLocalFile = audio.filePath && existsSync(audio.filePath)
+    const url = audio.url || (hasLocalFile ? audio.filePath! : audio.filePath)
     if (!url) {
       throw new Error('LocalWhisperProvider requires a URL or file path')
     }
+
+    // Failover 场景下已有预提取的本地文件，说明音频已下载过，
+    // douyin-ingest 缓存应该命中。使用 --cache-ttl 0 确保转写不被跳过。
+    const cacheTtl = hasLocalFile ? '0' : INGEST_CACHE_TTL
 
     const sessionId = randomUUID().slice(0, 8)
     const workDir = join(tmpdir(), `douyin-ingest-${sessionId}`)
@@ -123,7 +137,7 @@ export class LocalWhisperProvider implements ASRProvider {
       '--model', model,
       '--device', WHISPER_DEVICE,
       '--beam-size', String(WHISPER_BEAM_SIZE),
-      '--cache-ttl', INGEST_CACHE_TTL,
+      '--cache-ttl', cacheTtl,
       '--speech-audio-dir', join(workDir, 'audio'),
       '--transcript-dir', join(workDir, 'transcripts'),
     ]
@@ -194,6 +208,14 @@ export class LocalWhisperProvider implements ASRProvider {
       if (!tr) {
         throw new Error(
           'No transcription in douyin-ingest output — audio may be empty or transcription dependency missing',
+        )
+      }
+
+      // 防御：如果 transcription 存在但 text 为空，可能是缓存命中但转写被跳过
+      if (!tr.text || tr.text.trim().length === 0) {
+        throw new Error(
+          'douyin-ingest returned empty transcription text — cache may have skipped transcription. ' +
+          'Try clearing cache or using a different video.',
         )
       }
 

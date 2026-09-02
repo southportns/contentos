@@ -59,12 +59,26 @@ function getAlibabaBaseUrl(): string {
 
 function getAlibabaModel(): string {
   // paraformer-v1 supports async transcription API with X-DashScope-Async header
-  // Flash models (qwen-audio-3.0-asr-flash, fun-asr-flash) use a different synchronous API
-  return getEnvVar('ALIBABA_ASR_MODEL') || 'paraformer-v1'
+  // Flash models (qwen3-asr-flash, qwen-audio-3.0-asr-flash, fun-asr-flash) use a different synchronous API
+  // and do NOT support the async transcription endpoint.
+  // If a flash model is configured, fall back to paraformer-v1 for async API compatibility.
+  const configured = getEnvVar('ALIBABA_ASR_MODEL')
+  if (configured) {
+    const flashModels = ['qwen3-asr-flash', 'qwen-audio-3.0-asr-flash', 'fun-asr-flash', 'paraformer-flash']
+    if (flashModels.some(m => configured.includes(m))) {
+      console.warn(
+        `[cloud-alibaba] Model "${configured}" does not support async transcription API. ` +
+        `Falling back to paraformer-v1 for async API compatibility.`,
+      )
+      return 'paraformer-v1'
+    }
+    return configured
+  }
+  return 'paraformer-v1'
 }
 
 const POLL_INTERVAL_MS = 2_000 // 轮询间隔
-const POLL_MAX_ATTEMPTS = 60 // 最多轮询 60 次 (2 min)
+const POLL_MAX_ATTEMPTS = 150 // 最多轮询 150 次 (5 min) — 长音频需要更长时间
 
 // ─── Types ─────────────────────────────────────────────
 
@@ -98,20 +112,33 @@ interface TaskFetchResponse {
     task_id: string
     task_status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELED' | 'UNKNOWN'
     results?: Array<{
-      transcription: string
-      transcription_urls?: string
-      audio_duration?: number
-      segments?: Array<{
-        text: string
-        begin_time: number
-        end_time: number
-      }>
+      file_url?: string
+      transcription_url?: string
+      subtask_status?: string
     }>
+    task_metrics?: Record<string, number>
   }
   usage?: Record<string, number>
   code?: string
   message?: string
   status_code?: number
+}
+
+/** transcription_url 下载后的 JSON 结构 */
+interface TranscriptionJson {
+  file_url?: string
+  properties?: Record<string, unknown>
+  transcripts?: Array<{
+    text: string
+    channel_id?: number
+    language?: string
+  }>
+  sentences?: Array<{
+    text: string
+    begin_time: number
+    end_time: number
+    channel_id?: number
+  }>
 }
 
 // ─── Provider Implementation ────────────────────────────
@@ -262,8 +289,10 @@ export class CloudAlibabaProvider implements ASRProvider {
     }
 
     // OSS URL format: oss://upload_dir/filename
+    // upload_dir already contains the full path prefix (e.g. dashscope-instant/uid/date/uuid)
     const ossUrl = `oss://${cert.upload_dir}/${fileName}`
     console.log(`[cloud-alibaba] OSS upload succeeded, url=${ossUrl}`)
+    console.log(`[cloud-alibaba] OSS key: ${cert.upload_dir}/${fileName}`)
     return ossUrl
   }
 
@@ -357,6 +386,9 @@ export class CloudAlibabaProvider implements ASRProvider {
 
       if (status === 'SUCCEEDED' || status === 'FAILED' || status === 'CANCELED' || status === 'UNKNOWN') {
         console.log(`[cloud-alibaba] Task ${taskId} finished: ${status}`)
+        if (status !== 'SUCCEEDED') {
+          console.log(`[cloud-alibaba] Task failure details: ${JSON.stringify(data).slice(0, 1000)}`)
+        }
         return data
       }
 
@@ -367,6 +399,31 @@ export class CloudAlibabaProvider implements ASRProvider {
     }
 
     throw new Error(`Task ${taskId} timed out after ${POLL_MAX_ATTEMPTS * POLL_INTERVAL_MS / 1000}s`)
+  }
+
+  /**
+   * Step 5: 下载 transcription_url 获取完整转写 JSON
+   * DashScope paraformer-v1 的 results[0].transcription_url 指向一个 JSON 文件，
+   * 包含 transcripts[]（完整文本）和 sentences[]（分句时间戳）。
+   */
+  private async downloadTranscription(transcriptionUrl: string): Promise<TranscriptionJson> {
+    const response = await fetch(transcriptionUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(30_000),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to download transcription: ${response.status} ${response.statusText}`)
+    }
+
+    const text = await response.text()
+    console.log(`[cloud-alibaba] Downloaded transcription JSON: ${text.length} bytes`)
+
+    try {
+      return JSON.parse(text) as TranscriptionJson
+    } catch {
+      throw new Error(`Failed to parse transcription JSON (first 200 chars): ${text.slice(0, 200)}`)
+    }
   }
 
   async transcribe(
@@ -381,26 +438,47 @@ export class CloudAlibabaProvider implements ASRProvider {
     console.log(`[cloud-alibaba] transcribe started, model=${model}`)
     console.log(`[cloud-alibaba] audio: filePath=${audio.filePath ? 'yes' : 'no'}, url=${audio.url ? 'yes' : 'no'}, directUrl=${audio.speechAudioDownloadUrl ? 'yes' : 'no'}`)
 
-    // 准备音频文件
-    const { filePath: audioPath, extracted } = await this.prepareAudioFile(audio)
+    // 如果有公网 CDN 直链，直接使用，无需下载/提取本地文件
+    // DashScope ASR 后端只能访问公网 HTTPS URL，OSS 上传方式存在服务端 bug（FILE_DOWNLOAD_FAILED）
+    const cdnUrl = audio.speechAudioDownloadUrl || audio.audioDownloadUrl
+    let audioPath: string | null = null
+    let extracted: ExtractedAudio | undefined
+
+    if (cdnUrl) {
+      console.log(`[cloud-alibaba] Using CDN direct URL: ${cdnUrl.slice(0, 80)}...`)
+    } else {
+      // 没有 CDN 直链时，OSS 上传路径不可靠（DashScope 后端无法从 OSS bucket 下载文件）
+      // 快速失败，让 provider-router 立即 failover 到 local-whisper
+      // 避免浪费时间在注定失败的 OSS 上传 + 轮询（通常 ~70s）
+      console.warn(
+        '[cloud-alibaba] No CDN direct URL available. ' +
+        'OSS upload path is unreliable (DashScope FILE_DOWNLOAD_FAILED bug). ' +
+        'Failing fast to allow provider failover to local-whisper.',
+      )
+      throw new Error(
+        'CloudAlibabaProvider requires a public CDN URL for reliable transcription. ' +
+        'OSS upload path is known to fail (DashScope FILE_DOWNLOAD_FAILED). ' +
+        'No speechAudioDownloadUrl or audioDownloadUrl available.',
+      )
+    }
+
     const shouldCleanup = !!extracted
 
-    console.log(`[cloud-alibaba] audioPath=${audioPath}, shouldCleanup=${shouldCleanup}`)
-
     try {
-      const audioBuffer = await readFile(audioPath)
-      console.log(`[cloud-alibaba] audio file size: ${audioBuffer.length} bytes`)
+      // 构建 fileUrls — 优先使用 CDN 直链
+      let fileUrls: string[] = []
+      if (cdnUrl) {
+        fileUrls = [cdnUrl]
+      } else {
+        // 此分支不应到达 — cdnUrl 为空时已在上方 throw
+        // 保留作为防御性代码
+        throw new Error('No CDN URL available for cloud transcription')
+      }
 
-      // Step 1: 获取 OSS 上传凭证
-      const cert = await this.getUploadCertificate(apiKey, model)
+      // 提交异步转写任务
+      const taskId = await this.submitTranscriptionTask(apiKey, model, fileUrls, options)
 
-      // Step 2: 上传音频文件到 OSS
-      const ossUrl = await this.uploadToOss(cert, audioPath)
-
-      // Step 3: 提交异步转写任务
-      const taskId = await this.submitTranscriptionTask(apiKey, model, [ossUrl], options)
-
-      // Step 4: 轮询任务结果
+      // 轮询任务结果
       const taskResult = await this.pollTranscriptionTask(apiKey, taskId)
 
       if (taskResult.output.task_status !== 'SUCCEEDED') {
@@ -410,23 +488,39 @@ export class CloudAlibabaProvider implements ASRProvider {
       }
 
       const result = taskResult.output.results?.[0]
-      if (!result?.transcription) {
-        throw new Error('Transcription result is empty')
+      if (!result) {
+        throw new Error('Transcription result is empty: no results array')
+      }
+
+      // DashScope paraformer-v1 返回 transcription_url（需下载获取完整文本）
+      let transcriptionText = ''
+      let segments: TranscriptSegment[] = []
+
+      if (result.transcription_url) {
+        console.log(`[cloud-alibaba] Downloading transcription from URL: ${result.transcription_url.slice(0, 100)}...`)
+        const transJson = await this.downloadTranscription(result.transcription_url)
+        const transcript = transJson.transcripts?.[0]
+        if (!transcript?.text) {
+          throw new Error('Transcription JSON missing transcripts[0].text')
+        }
+        transcriptionText = transcript.text
+
+        // Build segments from sentences
+        segments = (transJson.sentences || []).map(
+          (s, i) => ({
+            id: `${sessionId}-${i}`,
+            startMs: Math.round(s.begin_time),
+            endMs: Math.round(s.end_time),
+            rawText: s.text,
+            source: 'asr' as const,
+          }),
+        )
+      } else {
+        throw new Error('Transcription result missing transcription_url')
       }
 
       const processingTimeMs = Date.now() - startTime
-      console.log(`[cloud-alibaba] transcribe succeeded in ${processingTimeMs}ms, text length=${result.transcription.length}`)
-
-      // Build segments
-      const segments: TranscriptSegment[] = (result.segments || []).map(
-        (s, i) => ({
-          id: `${sessionId}-${i}`,
-          startMs: Math.round(s.begin_time),
-          endMs: Math.round(s.end_time),
-          rawText: s.text,
-          source: 'asr' as const,
-        }),
-      )
+      console.log(`[cloud-alibaba] transcribe succeeded in ${processingTimeMs}ms, text length=${transcriptionText.length}, segments=${segments.length}`)
 
       // Build source info
       const sources: TranscriptSource[] = [{
@@ -451,10 +545,12 @@ export class CloudAlibabaProvider implements ASRProvider {
           model,
         },
         language: options?.language || 'zh',
-        rawText: result.transcription,
-        correctedText: result.transcription,
+        rawText: transcriptionText,
+        correctedText: transcriptionText,
         confidence: quality.confidence,
-        durationMs: result.audio_duration ? Math.round(result.audio_duration * 1000) : 0,
+        durationMs: segments.length > 0
+          ? segments[segments.length - 1].endMs
+          : 0,
         segments,
         sources,
         quality,

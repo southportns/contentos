@@ -122,7 +122,7 @@ export default function SettingsPage() {
   // Cloud — single provider
   const [cloudProvider, setCloudProvider] = useState<ASRCloudProvider>('alibaba')
   const [cloudApiKey, setCloudApiKey] = useState('')
-  const [cloudModel, setCloudModel] = useState('fun-asr')
+  const [cloudModel, setCloudModel] = useState('paraformer-v1')
   const [showCloudKey, setShowCloudKey] = useState(false)
 
   // Sync ASR config from server
@@ -150,7 +150,7 @@ export default function SettingsPage() {
     if (newProvider === 'xiaomi') {
       setCloudModel('mimo-v2.5-asr')
     } else {
-      setCloudModel('fun-asr')
+      setCloudModel('paraformer-v1')
     }
   }
 
@@ -691,8 +691,8 @@ export default function SettingsPage() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="fun-asr">Fun-ASR — 中英文，噪声鲁棒</SelectItem>
-                            <SelectItem value="qwen3-asr-flash">Qwen3-ASR-Flash — 高质量</SelectItem>
+                            <SelectItem value="paraformer-v1">Paraformer-v1 — 中英文，支持异步转写</SelectItem>
+                            <SelectItem value="paraformer-v2">Paraformer-v2 — 更高精度</SelectItem>
                           </SelectContent>
                         </Select>
                       )}

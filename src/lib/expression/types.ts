@@ -41,6 +41,9 @@ export type ConclusionMode =
   | 'echo'
   | 'question'
   | 'direct_takeaway'
+  | 'scene_return'
+  | 'self_aware'
+  | 'quiet_statement'
 
 export type Authority = 'low' | 'medium' | 'high'
 export type EmotionalDistance = 'close' | 'medium' | 'distant'
@@ -121,6 +124,8 @@ export type AuditIssueType =
   | 'fake_specificity'
   | 'repetitive_pattern'
   | 'predictable_structure'
+  | 'conclusion_cliche'
+  | 'emotion_shift_excessive'
 
 export type AuditSeverity = 'low' | 'medium' | 'high'
 

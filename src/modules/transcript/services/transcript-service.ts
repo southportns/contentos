@@ -27,6 +27,7 @@ import {
   type ExtractedAudio,
 } from '../pipeline/audio-extractor'
 import { getEnvVar } from '@/lib/env/env-loader'
+import { extractAwemeId } from '@/lib/tools/douyin-client'
 
 // ─── Input ──────────────────────────────────────────────
 
@@ -43,6 +44,15 @@ export interface TranscriptRequest {
   videoDesc?: string
   /** 视频作者 */
   videoAuthor?: string
+  /**
+   * 是否跳过 LLM 纠错，仅提取 ASR 原始文本。
+   *
+   * - true: 仅执行 ASR 语音识别，跳过 LLM 纠错，返回 rawText
+   * - false/undefined: 执行完整 pipeline（ASR + LLM 纠错）
+   *
+   * 默认 true — 先快速提取文案，用户检查后如有需要再单独纠错。
+   */
+  skipCorrection?: boolean
 }
 
 // ─── Lazy import douyin-client to avoid circular deps ───
@@ -62,21 +72,6 @@ async function getVideoContext(awemeId: string): Promise<{
   } catch {
     return {}
   }
-}
-
-/**
- * 从 URL/ID 提取 awemeId
- */
-function extractAwemeId(input: string): string | null {
-  const trimmed = input.trim()
-  if (/^\d{15,20}$/.test(trimmed)) return trimmed
-  const videoMatch = trimmed.match(/\/video\/(\d{15,20})/)
-  if (videoMatch) return videoMatch[1]
-  const noteMatch = trimmed.match(/\/note\/(\d{15,20})/)
-  if (noteMatch) return noteMatch[1]
-  const modalMatch = trimmed.match(/modal_id=(\d{15,20})/)
-  if (modalMatch) return modalMatch[1]
-  return null
 }
 
 // ─── Service ────────────────────────────────────────────
@@ -116,11 +111,16 @@ export async function executeTranscript(
     quality = 'high',
     videoDesc: externalVideoDesc,
     videoAuthor: externalVideoAuthor,
+    skipCorrection = true, // 默认跳过纠错，用户可手动触发
   } = request
 
   // Step 1: 构建 AudioInput
   const awemeId = extractAwemeId(urlOrId)
-  const url = awemeId && /^\d+$/.test(urlOrId.trim())
+  // 如果输入是纯 ID，构建标准视频 URL
+  // 如果输入是 URL（标准/搜索页/短链），提取到 awemeId 后也构建标准视频 URL
+  //   - 搜索页链接 (modal_id) 不能直接被 douyin-ingest 处理，需转换为标准 URL
+  //   - 分享文本中的短链同理
+  const url = awemeId
     ? `https://www.douyin.com/video/${awemeId}`
     : urlOrId.trim()
 
@@ -193,13 +193,20 @@ export async function executeTranscript(
       videoAuthor = videoAuthor || context.videoAuthor
     }
 
-    // Step 5: LLM 纠错（quality >= high 时执行）
+    // Step 5: LLM 纠错（quality >= high 且未跳过时执行）
     // 优化：LLM 直接输出纯文本（不要求 JSON），生成时间从 ~14s 降至 ~0.2s
+    // 默认跳过纠错，用户可手动触发以节省时间
     let correctedText = asrResult.rawText
     let corrections: TranscriptCorrection[] = []
     let correctionCount = 0
 
-    if (quality !== 'standard') {
+    if (skipCorrection) {
+      // 跳过纠错，correctedText = rawText
+      console.log('[transcript-service] Skipping LLM correction (skipCorrection=true)')
+    } else
+    // 防御：如果 ASR 返回空文本，跳过 LLM 纠错，直接返回空文本
+    // 这通常发生在音频无人声、缓存命中但转写被跳过等场景
+    if (quality !== 'standard' && asrResult.rawText && asrResult.rawText.trim().length > 0) {
       try {
         const correction = await runTranscriptCorrection({
           rawText: asrResult.rawText,
@@ -217,6 +224,11 @@ export async function executeTranscript(
           correctionError,
         )
       }
+    } else if (quality !== 'standard' && (!asrResult.rawText || asrResult.rawText.trim().length === 0)) {
+      console.warn(
+        '[transcript-service] ASR returned empty rawText, skipping LLM correction. ' +
+        `provider=${asrResult.provider.provider}, model=${asrResult.provider.model}`,
+      )
     }
 
     // Step 6: 构建最终 TranscriptResult

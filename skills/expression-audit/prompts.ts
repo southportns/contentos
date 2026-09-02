@@ -46,6 +46,8 @@ issue 类型（type）：
 - fake_specificity: 为了具体而凭空制造个人经历
 - repetitive_pattern: 重复的模式
 - predictable_structure: 内容推进过于可预测，像公式（开头→问题→原因→方法→总结）
+- conclusion_cliche: 结尾使用高频模板（如"大家有没有发现"、"有没有想过"、"你怎么看"等）
+- emotion_shift_excessive: 情绪突转过于频繁（超过全文情绪变化的 40%）
 
 重要判断原则：
 - 词语本身不能直接判定为"AI"。例如"其实""但是""真正"都可以是自然的人类词汇。
@@ -107,9 +109,21 @@ ${draftPreview}
 - diagnosis: 问题描述
 - rewriteInstruction: 修改指令（告诉 rewrite skill 应该怎么改）
 
+【P0.1.5 专项检测】结尾模式检测：
+- 检查结尾是否使用了高频模板（"大家有没有发现"、"有没有想过"、"你怎么看"等）
+- 如果 detected, 标记为 conclusion_cliche (severity: medium)
+- 建议 rewriteInstruction 指向 scene_return / self_aware / quiet_statement 等替代模式
+
+【P0.1.5 专项检测】情绪突转频次检测：
+- 计算全文情绪变化的节点总数
+- 计算其中"情绪突转"（intensity 突变 ≥ 30 或 emotion 质性切换）的占比
+- 如果情绪突转占比 > 40%, 标记为 emotion_shift_excessive (severity: medium)
+- rewriteInstruction 应建议减少突转，留出更多渐变过渡
+
 pass 判断标准：
 - overallScore >= 70 且无 high severity issues → pass = true
-- 否则 → pass = false`
+- 否则 → pass = false
+- 注：conclusion_cliche 和 emotion_shift_excessive 通常为 medium severity，不直接导致 pass=false，但会拉低 overallScore`
 }
 
 function formatExpressionPlan(plan: ExpressionPlan): string {

@@ -19,7 +19,7 @@ export const EXPRESSION_REWRITE_SYSTEM_PROMPT = `你是一个表达修正专家�
 Rewrite 策略（根据 issue type 选择）：
 - formulaic → 替换或删除模板化连接，不改变语义
 - generic → 将抽象表达改为具体观察，但不虚构事实
-- abstract → 优先具体化概念、动作、场景、结果
+- abstract → 优先具体化概念、动作、场景、结果（使用"可泛化但具体"的场景）
 - uniform_rhythm → 调整句子和段落长度分布
 - over_structured → 删除不必要的小结和显式连接
 - over_explained → 删除重复解释，保留核心意思
@@ -29,6 +29,14 @@ Rewrite 策略（根据 issue type 选择）：
 - fake_specificity → 删除伪具体细节，恢复可信的泛化表达
 - repetitive_pattern → 替换重复的模式为多样化表达
 - predictable_structure → 打破公式化推进，重新组织段落顺序或结构
+- conclusion_cliche → 将高频结尾模板替换为 scene_return（回到具体场景）/ self_aware（自嘲式）/ quiet_statement（轻描淡写）
+- emotion_shift_excessive → 减少情绪突转频次至 30%-40%，将部分突转为渐变过渡
+
+【P0.1.5】经历真实性约束（最高优先级）：
+- 禁止添加时间、地点、人名、具体数字等可验证细节
+- 可以使用的模糊化表达："有段时间"、"记得那次"、"那天下午"
+- 感官细节允许（如"盯着屏幕发呆"、"手在抖"），但必须是可泛化的场景
+- 如果原文没有明显虚构，不要过度修改，破坏已有的自然度
 
 ${AUDIENCE_PERSPECTIVE_RULE}
 ${NAME_DESENSITIZATION_RULE}`

@@ -63,6 +63,10 @@ export default function LibraryPage() {
     <Card>
       <CardContent className="flex flex-col gap-4 p-4">
         <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="shrink-0 gap-1">
+            <FileText className="size-3" />
+            {contents.length} 篇
+          </Badge>
           <Input
             placeholder="搜索标题或内容..."
             value={query}

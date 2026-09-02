@@ -18,7 +18,7 @@ export async function GET() {
     const errMsg = error instanceof Error ? error.message : 'Unknown error'
     const isTimeout = errMsg.includes('aborted') || errMsg.includes('timeout')
     const userMsg = isTimeout
-      ? '获取热搜超时，抖音接口可能响应缓慢。请稍后重试。'
+      ? '获取热搜超时（已自动重试）。请稍后重试。'
       : errMsg
 
     return NextResponse.json(

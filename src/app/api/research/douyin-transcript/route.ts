@@ -13,6 +13,8 @@ const transcriptSchema = z.object({
   mode: z.enum(['auto', 'local', 'cloud']).optional(),
   quality: z.enum(['standard', 'high', 'maximum']).optional(),
   providerPreference: z.string().optional(),
+  /** 是否跳过 LLM 纠错，默认 true */
+  skipCorrection: z.boolean().optional(),
 })
 
 export async function POST(req: NextRequest) {
@@ -50,15 +52,21 @@ export async function POST(req: NextRequest) {
       mode,
       quality: input.quality || 'high',
       providerPreference: input.providerPreference,
+      skipCorrection: input.skipCorrection ?? true,
     })
+
+    console.log(`[douyin-transcript] result: rawText=${result.rawText?.length} chars, correctedText=${result.correctedText?.length} chars, correctionCount=${result.correctionCount}, skipCorrection=${input.skipCorrection ?? true}, segments=${result.segments?.length}, videoId=${result.source?.videoId}`)
+
+    const skipped = input.skipCorrection ?? true
 
     return NextResponse.json({
       success: true,
       data: {
-        awemeId: result.source.videoId,
+        awemeId: result.source.videoId || (input.url ? input.url.match(/\/video\/(\d+)/)?.[1] : input.awemeId) || '',
         text: result.correctedText,
-        // 保留原始转写文本，供前端对比展示
-        rawText: result.correctionCount > 0 ? result.rawText : undefined,
+        // 跳过纠错时保留原始文本，供前端展示和后续手动纠错
+        // 未跳过时，仅在有帮助错时保留对比
+        rawText: skipped || result.correctionCount > 0 ? result.rawText : undefined,
         language: result.language,
         duration: Math.round(result.durationMs / 1000),
         model: result.provider.model,
@@ -72,6 +80,8 @@ export async function POST(req: NextRequest) {
         // 纠错详情
         corrections: result.correctionCount > 0 ? result.corrections : undefined,
         correctionCount: result.correctionCount,
+        // 是否已纠错
+        corrected: !skipped && result.correctionCount >= 0,
         // 质量评分
         confidence: result.confidence,
         qualityLevel: result.quality.level,

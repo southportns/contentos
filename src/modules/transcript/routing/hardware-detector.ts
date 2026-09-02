@@ -7,7 +7,7 @@
  * 架构位置: Routing Layer
  */
 
-import { platform, totalmem, cpus } from 'node:os'
+import { platform, totalmem, cpus, arch } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -18,7 +18,21 @@ import type { HardwareProfile, CapabilityLevel } from '../domain/transcript.type
  * 检测本机硬件配置
  */
 export async function detectHardware(): Promise<HardwareProfile> {
-  const os = platform()
+  // platform() 返回 'win32' 即使在 64 位 Windows 上，
+  // 需要结合 arch() 构建更友好的 OS 标识
+  const osPlatform = platform()
+  const osArch = arch()
+  let os: string
+  switch (osPlatform) {
+    case 'win32':
+      os = osArch === 'x64' ? 'win64' : osArch === 'arm64' ? 'win-arm64' : 'win32'
+      break
+    case 'darwin':
+      os = osArch === 'arm64' ? 'macos-arm64' : `macos-${osArch}`
+      break
+    default:
+      os = `${osPlatform}-${osArch}`
+  }
   const ramGB = Math.round((totalmem() / (1024 ** 3)) * 10) / 10
   const cpuModel = cpus()[0]?.model || 'Unknown'
 

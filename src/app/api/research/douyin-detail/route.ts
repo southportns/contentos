@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { getVideoDetail, extractAwemeId, checkDouyinHealth } from '@/lib/tools/douyin-client'
 
 export const runtime = 'nodejs'
-export const maxDuration = 45
+export const maxDuration = 100 // getVideoDetail timeout 45s + 重试 1 次 + 缓冲
 
 const detailSchema = z.object({
   url: z.string().optional(),
@@ -67,11 +67,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const errMsg = error instanceof Error ? error.message : 'Unknown error'
+    const isTimeout = errMsg.includes('aborted') || errMsg.includes('timeout')
+    const userMsg = isTimeout
+      ? '获取视频详情超时（已自动重试）。抖音可能触发反爬虫，请稍等 30 秒后重试。'
+      : errMsg
+
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : 'Unknown error',
+        error: userMsg,
       },
       { status: 500 },
     )

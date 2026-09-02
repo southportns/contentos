@@ -43,6 +43,9 @@ export const conclusionModeSchema = z.enum([
   'echo',
   'question',
   'direct_takeaway',
+  'scene_return',
+  'self_aware',
+  'quiet_statement',
 ])
 
 export const thoughtStepSchema = z.object({
@@ -121,6 +124,8 @@ export const auditIssueTypeSchema = z.enum([
   'fake_specificity',
   'repetitive_pattern',
   'predictable_structure',
+  'conclusion_cliche',
+  'emotion_shift_excessive',
 ])
 
 export const auditSeveritySchema = z.enum(['low', 'medium', 'high'])
