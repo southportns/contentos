@@ -1,21 +1,45 @@
 {
-  "version": "2.0",
+  "version": "2.1",
   "date": "2026-09-02",
-  "phase": "P0.2.2.1 Knowledge Cleanup & Validation",
+  "phase": "P0.2.2.1-FIX Knowledge Cleanup Consistency Repair",
   "total_knowledge_units": 24,
   "statistics": {
-    "validated": 17,
-    "candidate": 7,
-    "reclassified": 0,
+    "validated": 15,
+    "candidate": 9,
+    "reclassified": 6,
     "rejected": 0,
     "total_evidence_before": 80,
-    "total_evidence_after": 73,
-    "evidence_removed_invalid": 5,
-    "evidence_removed_duplicate": 1,
-    "evidence_removed_noise": 1,
+    "total_evidence_after": 75,
+    "evidence_valid": 58,
+    "evidence_weak": 17,
+    "evidence_caution": 18,
+    "evidence_excluded": 2,
+    "evidence_trusted": 55,
     "high_noise_risk": 2,
-    "medium_noise_risk": 3,
-    "low_noise_risk": 19
+    "medium_noise_risk": 5,
+    "low_noise_risk": 68,
+    "unique_content_ids": 23,
+    "knowledge_level_distribution": {
+      "strategic_pattern": 4,
+      "structural_pattern": 10,
+      "expression_principle": 5,
+      "surface_technique": 5
+    },
+    "category_distribution": {
+      "hook": 5,
+      "structure": 3,
+      "emotion": 2,
+      "perspective": 2,
+      "language": 2,
+      "cognition": 3,
+      "human_expression": 5,
+      "ending": 2
+    },
+    "human_expression": {
+      "confirmed": 3,
+      "unconfirmed": 1,
+      "suspect": 1
+    }
   },
   "knowledge_units": [
     {
@@ -35,7 +59,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_001_02",
@@ -44,7 +69,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_001_03",
@@ -53,7 +79,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_001_04",
@@ -62,13 +89,15 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 4
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_002",
@@ -87,7 +116,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_002_02",
@@ -97,13 +127,15 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "medium",
+            "evidence_trust": "caution",
             "note": "情绪宣泄为主，非刻意设计的争议性钩子"
           }
         ],
         "unique_content_count": 2
       },
       "confidence": "low",
-      "status": "candidate"
+      "status": "candidate",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_003",
@@ -122,7 +154,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_003_02",
@@ -131,7 +164,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_003_03",
@@ -140,7 +174,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_003_04",
@@ -149,13 +184,15 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 4
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_004",
@@ -174,7 +211,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_004_02",
@@ -183,13 +221,15 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 2
       },
       "confidence": "low",
-      "status": "candidate"
+      "status": "candidate",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_005",
@@ -208,7 +248,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_005_02",
@@ -217,7 +258,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_005_03",
@@ -227,13 +269,15 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "medium",
+            "evidence_trust": "caution",
             "note": "缺乏明确的'如果你...'结构，不够精准指向"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_006",
@@ -252,7 +296,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_006_02",
@@ -261,14 +306,16 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 2
       },
       "confidence": "low",
       "status": "candidate",
-      "note": "原第3条证据已移除（属认知重命名而非概念命名）"
+      "reclassified": false,
+      "note": "原第3条证据已移除（属认知重命名而非概念命名）。仅2条证据，<3 unique content，不满足validated条件"
     },
     {
       "knowledge_id": "KU_007",
@@ -287,7 +334,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_007_02",
@@ -297,6 +345,7 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "谚语/格言形式，非典型清单体"
           },
           {
@@ -306,13 +355,15 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_008",
@@ -331,7 +382,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_008_02",
@@ -340,7 +392,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_008_03",
@@ -350,13 +403,15 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "场景开场白，未展示遗憾到智慧的情感弧线"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_009",
@@ -375,7 +430,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_009_02",
@@ -385,6 +441,7 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "泛化陈述，未能精准描述共同体验"
           },
           {
@@ -395,13 +452,15 @@
             "validation": "valid",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "trusted",
             "note": "具体个人经历，可能触发群体共鸣"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_010",
@@ -420,7 +479,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_010_02",
@@ -429,7 +489,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_010_03",
@@ -438,7 +499,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_010_04",
@@ -447,13 +509,15 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 4
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_011",
@@ -472,7 +536,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_011_02",
@@ -481,7 +546,8 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_011_03",
@@ -490,14 +556,16 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
       "status": "validated",
-      "note": "原第4条证据（重复）已移除；原 content_ids 中无对应证据的条目已清理"
+      "reclassified": false,
+      "note": "原第4条重复证据已移除"
     },
     {
       "knowledge_id": "KU_012",
@@ -516,7 +584,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_012_02",
@@ -526,6 +595,7 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "反问+对比，非严格not-A-but-B结构"
           },
           {
@@ -536,13 +606,16 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "情境对比+反转，非严格not-A-but-B"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "candidate",
+      "reclassified": false,
+      "note": "状态由validated修正为candidate：3条evidence中仅1条trusted（2条caution），不满足>=2条trusted条件"
     },
     {
       "knowledge_id": "KU_013",
@@ -561,7 +634,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_013_02",
@@ -570,7 +644,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_013_03",
@@ -580,6 +655,7 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "排比描述为主，无直接命令"
           },
           {
@@ -589,13 +665,15 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 4
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_014",
@@ -614,7 +692,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_014_02",
@@ -623,7 +702,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_014_03",
@@ -633,6 +713,7 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "断言式观点，非典型的'一直以为...其实...'反转"
           },
           {
@@ -642,7 +723,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_014_05",
@@ -652,13 +734,15 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "断言式观点，非典型认知反转结构"
           }
         ],
         "unique_content_count": 5
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_015",
@@ -677,7 +761,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_015_02",
@@ -687,6 +772,7 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "简单数据陈述，缺乏论证力度"
           },
           {
@@ -696,13 +782,15 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_016",
@@ -712,14 +800,6 @@
       "description": "允许语言存在自然的思考和连接痕迹，避免过度工整、过度完整、过度书面。核心是表达背后的真实思维流动感。",
       "abstract_pattern": "Natural Connector → Processing Signal → Authentic Flow",
       "function": "让表达更像真实思考而非排练过的稿子，降低AI味",
-      "principle": "写作时不必追求完美流畅。允许出现自然的思考连接词（其实、怎么说呢、就是、我后来发现），这些'不完美'恰恰是真人感的来源。",
-      "surface_forms": [
-        "其实...",
-        "怎么说呢...",
-        "就是...",
-        "我后来发现...",
-        "嗯..."
-      ],
       "evidence": {
         "items": [
           {
@@ -729,7 +809,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_016_02",
@@ -739,6 +820,7 @@
             "validation": "valid",
             "evidence_quality": "medium",
             "noise_risk": "medium",
+            "evidence_trust": "caution",
             "note": "'嗯'可能是口语填充词，也可能是ASR噪音"
           },
           {
@@ -748,7 +830,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_016_04",
@@ -758,6 +841,7 @@
             "validation": "valid",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "trusted",
             "note": "口语化列举，思维自然流动"
           },
           {
@@ -768,13 +852,25 @@
             "validation": "weak",
             "evidence_quality": "low",
             "noise_risk": "high",
-            "note": "疑似ASR句子粘连，多个独立分句被连在一起"
+            "evidence_trust": "excluded",
+            "note": "疑似ASR句子粘连，多个独立分句被连在一起。此证据evidence_trust=excluded，不参与Knowledge Learning"
           }
         ],
         "unique_content_count": 5
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "candidate",
+      "reclassified": true,
+      "human_expression_verdict": "confirmed",
+      "note": "状态由validated修正为candidate：包含1条HIGH noise_risk证据（EV_016_05 ASR句子粘连），按规则不能作为validated",
+      "principle": "写作时不必追求完美流畅。允许出现自然的思考连接词（其实、怎么说呢、就是、我后来发现），这些'不完美'恰恰是真人感的来源。",
+      "surface_forms": [
+        "其实...",
+        "怎么说呢...",
+        "就是...",
+        "我后来发现...",
+        "嗯..."
+      ]
     },
     {
       "knowledge_id": "KU_017",
@@ -793,14 +889,17 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 1
       },
       "confidence": "low",
       "status": "candidate",
-      "note": "原第2、3条证据移除（非自我修正，仅为叙事）。仅1条有效证据，需更多数据验证"
+      "reclassified": false,
+      "human_expression_verdict": "unconfirmed",
+      "note": "原第2、3条证据移除（非自我修正，仅为叙事）。仅1条有效证据，<3 unique content，不满足validated条件"
     },
     {
       "knowledge_id": "KU_018",
@@ -820,6 +919,7 @@
             "validation": "weak",
             "evidence_quality": "low",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "孤立语句，需原视频上下文确认情绪突转"
           },
           {
@@ -829,7 +929,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_018_03",
@@ -838,13 +939,16 @@
             "location": "ending",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": true,
+      "human_expression_verdict": "confirmed"
     },
     {
       "knowledge_id": "KU_019",
@@ -864,6 +968,7 @@
             "validation": "valid",
             "evidence_quality": "medium",
             "noise_risk": "medium",
+            "evidence_trust": "caution",
             "note": "'你要你要'可能是口头自我修正，也可能是ASR重复"
           },
           {
@@ -874,7 +979,8 @@
             "validation": "weak",
             "evidence_quality": "low",
             "noise_risk": "high",
-            "note": "疑似ASR句子粘连，无法确认是否刻意为之的碎片化表达"
+            "evidence_trust": "excluded",
+            "note": "疑似ASR句子粘连，无法确认是否刻意为之的碎片化表达。evidence_trust=excluded，不参与Knowledge Learning"
           },
           {
             "evidence_id": "EV_019_03",
@@ -884,6 +990,7 @@
             "validation": "valid",
             "evidence_quality": "medium",
             "noise_risk": "medium",
+            "evidence_trust": "caution",
             "note": "'成绩成绩成绩'是刻意重复，但整句较长可能有ASR影响"
           },
           {
@@ -893,14 +1000,17 @@
             "location": "opening",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 4
       },
       "confidence": "low",
       "status": "candidate",
-      "note": "存在高ASR噪音风险证据；部分证据（#2、#3）难以确认是真人表达还是ASR产物"
+      "reclassified": true,
+      "human_expression_verdict": "suspect",
+      "note": "存在高ASR噪音风险证据（excluded）；核心结论部分依赖suspect证据，无法确认真人表达vs ASR产物"
     },
     {
       "knowledge_id": "KU_020",
@@ -919,7 +1029,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_020_02",
@@ -928,7 +1039,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_020_03",
@@ -937,13 +1049,16 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
       "status": "validated",
+      "reclassified": true,
+      "human_expression_verdict": "confirmed",
       "note": "原第2条证据（与KU_019共享的高ASR噪音句）已移除"
     },
     {
@@ -963,7 +1078,8 @@
             "location": "ending",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_021_02",
@@ -973,13 +1089,16 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "一般性结束语，非典型情绪回环"
           }
         ],
         "unique_content_count": 2
       },
       "confidence": "low",
-      "status": "candidate"
+      "status": "candidate",
+      "reclassified": true,
+      "note": "仅2条证据（<3），且仅1条trusted，不满足validated条件"
     },
     {
       "knowledge_id": "KU_022",
@@ -998,7 +1117,8 @@
             "location": "ending",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_022_02",
@@ -1008,6 +1128,7 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "软性建议，非强烈行动号召"
           },
           {
@@ -1017,7 +1138,8 @@
             "location": "ending",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_022_04",
@@ -1026,13 +1148,15 @@
             "location": "ending",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 4
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": true
     },
     {
       "knowledge_id": "KU_023",
@@ -1051,7 +1175,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_023_02",
@@ -1061,6 +1186,7 @@
             "validation": "weak",
             "evidence_quality": "medium",
             "noise_risk": "low",
+            "evidence_trust": "caution",
             "note": "描述性对比，非严格正反对照结构"
           },
           {
@@ -1070,13 +1196,15 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 3
       },
       "confidence": "medium",
-      "status": "validated"
+      "status": "validated",
+      "reclassified": false
     },
     {
       "knowledge_id": "KU_024",
@@ -1095,7 +1223,8 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           },
           {
             "evidence_id": "EV_024_02",
@@ -1104,13 +1233,16 @@
             "location": "body",
             "validation": "valid",
             "evidence_quality": "high",
-            "noise_risk": "low"
+            "noise_risk": "low",
+            "evidence_trust": "trusted"
           }
         ],
         "unique_content_count": 2
       },
       "confidence": "low",
-      "status": "candidate"
+      "status": "candidate",
+      "reclassified": false,
+      "note": "仅2条证据（<3），不满足validated条件"
     }
   ]
 }
