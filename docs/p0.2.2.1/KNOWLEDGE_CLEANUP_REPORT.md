@@ -41,9 +41,9 @@
 
 | Trust Level | Count | Definition |
 |-------------|-------|------------|
-| **Trusted** | 55 | validation=valid AND noise_risk=low/medium AND quality=high/medium |
-| **Caution** | 18 | validation=weak OR noise_risk=medium OR quality=low |
-| **Excluded** | 2 | noise_risk=high — NOT used for Knowledge Learning |
+| **Trusted** | 55 | validation=valid AND noise_risk=low AND quality∈{high,medium} (i.e. NOT invalid/high AND NOT weak/medium/low) |
+| **Caution** | 18 | validation=weak OR noise_risk=medium OR quality=low (but not excluded) |
+| **Excluded** | 2 | validation=invalid OR noise_risk=high — NOT used for Knowledge Learning |
 
 ### 2.3 ASR Noise Risk
 
