@@ -7,6 +7,7 @@ import {
   Trash2,
   Loader2,
   Pencil,
+  Copy,
   AlertTriangle,
   Lightbulb,
   ChevronDown,
@@ -141,10 +142,12 @@ export function PersonaManager() {
   const [guideOpen, setGuideOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Persona | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [isCopyMode, setIsCopyMode] = useState(false)
 
   const handleOpenCreate = useCallback(() => {
     setForm(EMPTY_FORM)
     setEditingId(null)
+    setIsCopyMode(false)
     setSaveError(null)
     setDialogOpen(true)
   }, [])
@@ -155,6 +158,17 @@ export function PersonaManager() {
       description: persona.description || '',
     })
     setEditingId(persona.id)
+    setSaveError(null)
+    setDialogOpen(true)
+  }, [])
+
+  const handleOpenCopy = useCallback((persona: Persona) => {
+    setForm({
+      name: `${persona.name}（副本）`,
+      description: persona.description || '',
+    })
+    setEditingId(null)
+    setIsCopyMode(true)
     setSaveError(null)
     setDialogOpen(true)
   }, [])
@@ -188,6 +202,7 @@ export function PersonaManager() {
         setDialogOpen(false)
         setForm(EMPTY_FORM)
         setEditingId(null)
+        setIsCopyMode(false)
         setGuideOpen(false)
       } else {
         setSaveError(result.error || '保存失败，请检查网络或数据库连接后重试')
@@ -267,6 +282,15 @@ export function PersonaManager() {
                     variant="ghost"
                     size="icon"
                     className="size-8 text-muted-foreground hover:text-foreground"
+                    onClick={() => handleOpenCopy(persona)}
+                    aria-label="复制人设"
+                  >
+                    <Copy className="size-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-foreground"
                     onClick={() => handleOpenEdit(persona)}
                     aria-label="编辑人设"
                   >
@@ -289,10 +313,18 @@ export function PersonaManager() {
       </CardContent>
 
       {/* Create/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(v) => {
+          setDialogOpen(v)
+          if (!v) setIsCopyMode(false)
+        }}
+      >
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? '编辑人设' : '新建人设'}</DialogTitle>
+            <DialogTitle>
+              {editingId ? '编辑人设' : isCopyMode ? '从副本新建人设' : '新建人设'}
+            </DialogTitle>
             <DialogDescription>
               人设将在创作时影响内容策略和写作风格，请按照固定结构如实填写
             </DialogDescription>
