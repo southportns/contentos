@@ -122,10 +122,10 @@ export default async function ProjectsPage() {
                     </span>
                   )
                 }
-                // 自由创作：显示用户输入的主题（topic.topic）
-                // 文件提炼/对标改编：显示选定角度的标题（angle.title）
-                const approvedAngle = topic.angles.find((a) => a.status === 'APPROVED') || topic.angles[0]
-                const displayText = approvedAngle ? approvedAngle.title : topic.topic
+                // 优先级：draft.title（口播稿标题） > angle.title（角度标题） > topic.topic（原始主题）
+                const latestDraft = topic.drafts?.[0]
+                const approvedAngle = topic.angles?.find((a) => a.status === 'APPROVED') || topic.angles?.[0]
+                const displayText = latestDraft?.title || approvedAngle?.title || topic.topic || '未命名创作'
                 return (
                   <>
                     <span

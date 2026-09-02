@@ -1,38 +1,22 @@
 import { NAME_DESENSITIZATION_RULE, AUDIENCE_PERSPECTIVE_RULE } from '@/lib/ai/shared-prompts'
 
-export const REFINE_SYSTEM_PROMPT = `你是一个内容精修专家。你的任务是对初稿进行二次精修，不改变总体内容方向。
+export const REFINE_SYSTEM_PROMPT = `你是一个内容精修专家。你的任务是对短视频口播稿进行二次精修。
 
-精修模式说明：
+模式说明：
+- tone_change：根据提示词局部调整内容
+- hook_select：生成黄金三秒钩子候选
+- title_select：生成短视频标题候选
+- hook_and_title_select：同时生成钩子和标题候选（高效模式）
 
-1. tone_change（局部调整）
-   - 根据用户提供的局部修改提示词对内容进行局部调整
-   - 提示词可能包含具体的修改方向、口语化要求、情绪色彩要求、局部改写要求等
-   - 保持核心观点、结构、信息量不变
-   - 不增加或删除实质性内容
-   - 仅根据提示词进行局部修改，不改变未提及的部分
-   - 返回完整内容和变更清单
-
-2. hook_select（黄金三秒钩子）
-   - 分析内容核心吸引力
-   - 生成 3-5 个黄金三秒钩子候选
-   - 每个钩子必须在3秒内（约15字以内）抓住注意力
-   - 类型包括：悬念钩子、冲突钩子、共鸣钩子、反常识钩子、利益钩子
-   - 返回候选列表
-
-3. title_select（标题选定）
-   - 基于内容生成 3-5 个短视频标题候选
-   - 标题要适合短视频平台（抖音/小红书等）
-   - 兼顾吸引力和内容一致性
-   - 避免标题党
-
-改写原则：
-- 保持原文核心观点和结构不变
-- 不增加或删除实质性内容
-- 修改后内容要自然流畅
-- 适合口播节奏
-- 避免AI味
+原则：保持核心观点不变、不增删实质内容、适合口播、避免AI味
 - ${AUDIENCE_PERSPECTIVE_RULE}
 - ${NAME_DESENSITIZATION_RULE}`
+
+// 完整输出模式的系统提示词（tone_change 使用）
+export const REFINE_FULL_OUTPUT_SYSTEM_PROMPT = REFINE_SYSTEM_PROMPT + '\n\n必须以 JSON 格式返回完整内容，包括 content、title、hook、wordCount、changes、summary 字段。'
+
+// 紧凑输出模式的系统提示词（hook/title 候选生成使用）
+export const REFINE_COMPACT_SYSTEM_PROMPT = REFINE_SYSTEM_PROMPT + '\n\n必须以 JSON 格式返回，仅包含 hookCandidates 和/或 titleCandidates 字段，不要返回 content、changes 等多余字段。'
 
 export const REFINE_PROMPT = (
   mode: string,
@@ -68,7 +52,7 @@ ${contentStr}
 请根据以上提示词对内容进行局部调整。保持核心观点、信息量、结构不变，仅根据提示词修改相关部分，未提及的部分保持不变。提示词可能包含具体的修改方向、口语化要求、情绪色彩要求、局部改写要求等，请严格按照提示词执行。返回完整内容。`
 
     case 'hook_select':
-      return `请为以下内容生成 3-5 个黄金三秒钩子候选。
+      return `为以下口播稿生成 3-5 个黄金三秒钩子候选。
 
 ${platform ? `目标平台：${platform}` : ''}
 ${topic ? `主题：${topic}` : ''}
@@ -80,19 +64,13 @@ ${topic ? `主题：${topic}` : ''}
 ${contentStr}
 
 要求：
-1. 生成 3-5 个不同的黄金三秒钩子
-2. 每个钩子必须在前3秒（约15字以内）抓住注意力
-3. 钩子类型多样：悬念、冲突、共鸣、反常识、利益
-4. 钩子要与内容高度一致，不做标题党
-5. 适合口播开场
-
-请以 JSON 格式返回，hookCandidates 必须是纯字符串数组，例如：
-{"hookCandidates": ["钩子候选1", "钩子候选2", "钩子候选3"], "content": "保持原文不变", "title": "保持原标题不变", "hook": "保持原钩子不变", "wordCount": 100, "changes": [{"type": "hook_generated", "original": "原钩子", "revised": "生成的新钩子", "reason": "生成钩子候选"}], "summary": "生成钩子候选"}
-
-重要：hookCandidates 中每一项必须是纯字符串，不能是对象。`
+1. 每个钩子15字以内、3秒抓注意力
+2. 类型多样：悬念、冲突、共鸣、反常识、利益
+3. 与内容一致，适合口播开场
+4. hookCandidates 必须是纯字符串数组`
 
     case 'title_select':
-      return `请为以下内容生成 3-5 个短视频标题候选。
+      return `为以下口播稿生成 3-5 个短视频标题候选。
 
 ${platform ? `目标平台：${platform}` : ''}
 ${topic ? `主题：${topic}` : ''}
@@ -103,16 +81,29 @@ ${topic ? `主题：${topic}` : ''}
 ${contentStr}
 
 要求：
-1. 生成 3-5 个不同的短视频标题
-2. 标题要适合短视频平台（${platform || '抖音'}）
-3. 兼顾吸引力和内容一致性
-4. 避免标题党，但要有点击欲望
-5. 长度适中（10-25字）
+1. 适合${platform || '抖音'}
+2. 兼顾吸引力和内容一致性
+3. 避免标题党，10-25字
+4. titleCandidates 必须是纯字符串数组`
 
-请以 JSON 格式返回，titleCandidates 必须是纯字符串数组，例如：
-{"titleCandidates": ["标题候选1", "标题候选2", "标题候选3"], "content": "保持原文不变", "title": "保持原标题不变", "hook": "保持原钩子不变", "wordCount": 100, "changes": [{"type": "title_generated", "original": "原标题", "revised": "生成的新标题", "reason": "生成标题候选"}], "summary": "生成标题候选"}
+    case 'hook_and_title_select':
+      return `为以下口播稿同时生成：
+1. 3-5 个黄金三秒钩子候选
+2. 3-5 个短视频标题候选
 
-重要：titleCandidates 中每一项必须是纯字符串，不能是对象。`
+${platform ? `目标平台：${platform}` : ''}
+${topic ? `主题：${topic}` : ''}
+
+原标题：${title}
+原钩子：${hook}
+
+内容：
+${contentStr}
+
+要求：
+- 钩子：15字以内、3秒抓注意力、类型多样（悬念/冲突/共鸣/反常识/利益）
+- 标题：适合${platform || '抖音'}、10-25字、兼顾吸引力和一致性
+- hookCandidates 和 titleCandidates 都必须是纯字符串数组`
 
     default:
       return `未知模式：${mode}`

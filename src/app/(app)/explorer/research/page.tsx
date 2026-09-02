@@ -114,7 +114,10 @@ export default function ResearchPage() {
         {/* Search notice (搜索状态提示：网络错误、风控等) */}
         {douyin.researchNotice && !douyin.researchError && (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-600 dark:text-amber-400">
-            {douyin.researchNotice}
+            <p>{douyin.researchNotice}</p>
+            <p className="mt-2 text-xs text-amber-500/80 dark:text-amber-500/60">
+              💡 提示：视频链接方式不受搜索风控影响，可直接粘贴抖音分享链接获取详情。
+            </p>
           </div>
         )}
 

@@ -1,0 +1,79 @@
+{
+  "version": "1.0",
+  "date": "2026-09-02",
+  "phase": "P0.2.3 Knowledge Store Evaluation",
+  "description": "Evaluation dataset for keyword-based knowledge retrieval. Each query specifies expected relevant KU IDs. Systems should retrieve these through index matching and ranking, NOT through hardcoded rules.",
+  "metrics": ["Precision@5", "Recall@5", "HitRate@5"],
+  "queries": [
+    {
+      "query_id": "Q001",
+      "query": "爱自己",
+      "description": "Self-love topic — should match empowerment, self-worth related KUs",
+      "expected_knowledge_ids": ["KU_014"],
+      "accepted_knowledge_ids": ["KU_010", "KU_011", "KU_018", "KU_020", "KU_016"]
+    },
+    {
+      "query_id": "Q002",
+      "query": "职场边界",
+      "description": "Workplace boundaries — scarce direct match in current dataset",
+      "expected_knowledge_ids": [],
+      "accepted_knowledge_ids": ["KU_007"]
+    },
+    {
+      "query_id": "Q003",
+      "query": "女性成长",
+      "description": "Female growth — should match empowerment, perspective, vulnerability KUs",
+      "expected_knowledge_ids": ["KU_010", "KU_011"],
+      "accepted_knowledge_ids": ["KU_003", "KU_005", "KU_014", "KU_008", "KU_018"]
+    },
+    {
+      "query_id": "Q004",
+      "query": "被爱",
+      "description": "Being loved — should match expectation reversal, regret-to-wisdom KUs",
+      "expected_knowledge_ids": ["KU_014"],
+      "accepted_knowledge_ids": ["KU_008", "KU_009", "KU_018", "KU_010"]
+    },
+    {
+      "query_id": "Q005",
+      "query": "自我价值",
+      "description": "Self-worth — should match empowerment and not-A-but-B KUs",
+      "expected_knowledge_ids": ["KU_010", "KU_013"],
+      "accepted_knowledge_ids": ["KU_014", "KU_011", "KU_020"]
+    },
+    {
+      "query_id": "Q006",
+      "query": "开头技巧",
+      "description": "Hook techniques — should match hook category KUs",
+      "expected_knowledge_ids": ["KU_001", "KU_003", "KU_005"],
+      "accepted_knowledge_ids": ["KU_002", "KU_004", "KU_007"]
+    },
+    {
+      "query_id": "Q007",
+      "query": "认知反转",
+      "description": "Cognitive reversal — should match expectation reversal pattern",
+      "expected_knowledge_ids": ["KU_014"],
+      "accepted_knowledge_ids": ["KU_012", "KU_024", "KU_010"]
+    },
+    {
+      "query_id": "Q008",
+      "query": "结尾行动",
+      "description": "Action ending — should match action prompt ending",
+      "expected_knowledge_ids": ["KU_022"],
+      "accepted_knowledge_ids": ["KU_021"]
+    },
+    {
+      "query_id": "Q009",
+      "query": "真实自然表达",
+      "description": "Natural authentic expression — should match expression principles",
+      "expected_knowledge_ids": ["KU_018", "KU_020"],
+      "accepted_knowledge_ids": ["KU_016"]
+    },
+    {
+      "query_id": "Q010",
+      "query": "量子物理芯片技术",
+      "description": "Completely unrelated topic — should return empty or very low scores",
+      "expected_knowledge_ids": [],
+      "accepted_knowledge_ids": []
+    }
+  ]
+}

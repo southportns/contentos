@@ -8,7 +8,7 @@ export const refineInputSchema = z.object({
   wordCount: z.number(),
 
   // 精修模式
-  mode: z.enum(['tone_change', 'hook_select', 'title_select']),
+  mode: z.enum(['tone_change', 'hook_select', 'title_select', 'hook_and_title_select']),
 
   // 语气修改
   toneChange: z
@@ -55,6 +55,12 @@ export const refineOutputSchema = z.object({
   hookCandidates: z.array(z.string()).optional(),
   titleCandidates: z.array(z.string()).optional(),
   summary: z.string(),
+})
+
+// 紧凑输出模式 — 用于 hook/title 候选生成，不返回完整内容
+export const compactCandidateOutputSchema = z.object({
+  hookCandidates: z.array(z.string()).optional(),
+  titleCandidates: z.array(z.string()).optional(),
 })
 
 export type RefineInput = z.infer<typeof refineInputSchema>

@@ -20,6 +20,17 @@ import type {
   RiskAnalysisResult,
 } from '@/hooks/use-workflow'
 
+/** Pipeline phase tracking for multi-step generation */
+type PipelinePhase = 'idle' | 'strategy' | 'writing' | 'evaluation' | 'done'
+
+const PHASE_CONFIG: Record<PipelinePhase, { label: string; startPct: number; endPct: number }> = {
+  idle:        { label: '准备中...',      startPct: 0,   endPct: 0   },
+  strategy:    { label: '生成策略中...',   startPct: 5,   endPct: 25  },
+  writing:     { label: '写作中...',       startPct: 25,  endPct: 55  },
+  evaluation:  { label: '评估 & 风控中...', startPct: 55,  endPct: 95  },
+  done:        { label: '完成',           startPct: 100, endPct: 100 },
+}
+
 export default function GeneratePage() {
   const router = useRouter()
   const ws = useWorkflow()
@@ -31,6 +42,23 @@ export default function GeneratePage() {
   const riskAnalysisHook = useRiskAnalysis()
 
   const [duration, setDuration] = useState(120)
+  const [pipelinePhase, setPipelinePhase] = useState<PipelinePhase>('idle')
+
+  // Calculate current progress from phase + loading states
+  const currentPhaseConfig = PHASE_CONFIG[pipelinePhase]
+  let progressPercent = currentPhaseConfig.startPct
+  if (pipelinePhase === 'evaluation') {
+    // Within evaluation phase, track parallel task completion
+    const tasks = [evalHook, strategyEvalHook, riskAnalysisHook]
+    const completed = tasks.filter(t => !t.loading && t.result).length
+    const total = tasks.length
+    const evalProgress = total > 0 ? completed / total : 0
+    progressPercent = currentPhaseConfig.startPct + evalProgress * (currentPhaseConfig.endPct - currentPhaseConfig.startPct)
+  } else {
+    // For strategy/writing phases, use midpoint of the range as active progress
+    progressPercent = (currentPhaseConfig.startPct + currentPhaseConfig.endPct) / 2
+  }
+  const loadingLabel = currentPhaseConfig.label
 
   // Duration (seconds) → word count
   // Chinese spoken: ~4.5 chars/sec base rate, +20% to account for
@@ -49,6 +77,7 @@ export default function GeneratePage() {
     if (!ws.topicProfile || !ws.selectedAngle) return
 
     // Step A: Strategy
+    setPipelinePhase('strategy')
     const strategyResult = await strategyHook.generate({
       topic: ws.topicProfile.topic,
       selectedAngle: {
@@ -66,11 +95,15 @@ export default function GeneratePage() {
       wordCount,
       persona: ws.persona || undefined,
     })
-    if (!strategyResult) return
+    if (!strategyResult) {
+      setPipelinePhase('idle')
+      return
+    }
     const strategyData = strategyResult as unknown as ContentStrategy
     workflowActions.setStrategy(strategyData)
 
     // Step B: Writing
+    setPipelinePhase('writing')
     const writingResult = await writingHook.generate({
       topic: ws.topicProfile.topic,
       strategy: strategyData,
@@ -84,13 +117,17 @@ export default function GeneratePage() {
       wordCount,
       persona: ws.persona || undefined,
     })
-    if (!writingResult) return
+    if (!writingResult) {
+      setPipelinePhase('idle')
+      return
+    }
     const draftData = writingResult as unknown as WritingDraft
     workflowActions.setDraft(draftData)
 
     // Step C + D + E: Evaluation, Strategy Evaluation, and Risk Analysis in parallel
     // All three only depend on draft + strategy, so they can run concurrently
     // Using allSettled so one failure doesn't block the others
+    setPipelinePhase('evaluation')
     const platform = ws.topicProfile?.platform
     const [evalSettled, strategyEvalSettled, riskSettled] = await Promise.allSettled([
       evalHook.evaluate({
@@ -151,6 +188,8 @@ export default function GeneratePage() {
     if (riskSettled.status === 'fulfilled' && riskSettled.value) {
       workflowActions.setRiskAnalysis(riskSettled.value as unknown as RiskAnalysisResult)
     }
+
+    setPipelinePhase('done')
   }, [
     ws.topicProfile,
     ws.selectedAngle,
@@ -171,12 +210,7 @@ export default function GeneratePage() {
     return null
   }
 
-  const generating =
-    strategyHook.loading ||
-    writingHook.loading ||
-    evalHook.loading ||
-    strategyEvalHook.loading ||
-    riskAnalysisHook.loading
+  const generating = pipelinePhase !== 'idle' && pipelinePhase !== 'done'
 
   const anyError =
     strategyHook.error ||
@@ -184,18 +218,6 @@ export default function GeneratePage() {
     evalHook.error ||
     strategyEvalHook.error ||
     riskAnalysisHook.error
-
-  const loadingLabel = strategyHook.loading
-    ? '生成策略中...'
-    : writingHook.loading
-      ? '写作中...'
-      : evalHook.loading
-        ? '评估中...'
-        : strategyEvalHook.loading
-          ? '策略评分中...'
-          : riskAnalysisHook.loading
-            ? '风控分析中...'
-            : ''
 
   return (
     <div className="flex flex-col gap-4">
@@ -208,11 +230,12 @@ export default function GeneratePage() {
         riskAnalysis={ws.riskAnalysis}
         onGenerate={handleGenerate}
         generating={generating}
+        loadingLabel={loadingLabel}
+        progressPercent={generating ? progressPercent : undefined}
         duration={duration}
         setDuration={setDuration}
         wordCount={wordCount}
         error={anyError}
-        loadingLabel={loadingLabel}
         onUpdateDraft={handleUpdateDraft}
       />
       {ws.draft && (

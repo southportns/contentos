@@ -22,6 +22,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PersonaSelector } from '@/components/create/persona-selector'
 import { PlatformSelector } from '@/components/create/platform-selector'
+import { ProgressBar } from '@/components/ui/progress-bar'
 import { useDistillation } from '@/hooks/use-distillation'
 import { useWorkflow, workflowActions } from '@/hooks/use-workflow'
 import type { DistillationResult, ContentAngle, UploadedContent } from '@/hooks/use-workflow'
@@ -280,6 +281,23 @@ export function StepDistill() {
             value={ws.persona}
             onChange={workflowActions.setPersona}
           />
+
+          {/* Progress bar */}
+          {distillation.loading && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <BookOpen className="size-3.5 text-primary" />
+                  {distillation.progress.stage}
+                </span>
+                <span className="tabular-nums">{Math.round(distillation.progress.progress)}%</span>
+              </div>
+              <ProgressBar
+                progress={distillation.progress.progress}
+                variant="primary"
+              />
+            </div>
+          )}
 
           <div className="flex justify-end">
             <Button

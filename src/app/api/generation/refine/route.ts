@@ -10,7 +10,7 @@ const inputSchema = z.object({
   title: z.string(),
   hook: z.string(),
   wordCount: z.number(),
-  mode: z.enum(['tone_change', 'hook_select', 'title_select']),
+  mode: z.enum(['tone_change', 'hook_select', 'title_select', 'hook_and_title_select']),
   toneChange: z
     .object({
       newTone: z.string().min(1),

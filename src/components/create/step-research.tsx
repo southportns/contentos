@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+import { ProgressBar, useProgress } from '@/components/ui/progress-bar'
 import { StepHeader } from './step-header'
 import { cn } from '@/lib/utils'
 import type { TopicProfile } from '@/hooks/use-workflow'
@@ -38,6 +39,9 @@ export function StepResearch({
   const [newKeyword, setNewKeyword] = useState('')
   const [newQuestion, setNewQuestion] = useState('')
   const [newAngle, setNewAngle] = useState('')
+
+  // Progress for angle generation (estimated 60s)
+  const { progress, stage } = useProgress(generatingAngles, 60_000)
 
   const handleStartEdit = useCallback(() => {
     setEditCategory(topicProfile.category)
@@ -304,22 +308,27 @@ export function StepResearch({
 
         {/* Next step button */}
         <Separator />
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <LightbulbIcon className="size-4" />
-            确认研究结果，进入角度生成
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <LightbulbIcon className="size-4" />
+              {generatingAngles ? stage : '确认研究结果，进入角度生成'}
+            </div>
+            <Button
+              onClick={onContinue}
+              disabled={generatingAngles || editing}
+              size="sm"
+            >
+              {generatingAngles ? (
+                <><Loader2 className="size-4 animate-spin" />生成角度中...</>
+              ) : (
+                <>下一步<ArrowRight className="size-4" /></>
+              )}
+            </Button>
           </div>
-          <Button
-            onClick={onContinue}
-            disabled={generatingAngles || editing}
-            size="sm"
-          >
-            {generatingAngles ? (
-              <><Loader2 className="size-4 animate-spin" />生成角度中...</>
-            ) : (
-              <>下一步<ArrowRight className="size-4" /></>
-            )}
-          </Button>
+          {generatingAngles && (
+            <ProgressBar progress={progress} variant="primary" />
+          )}
         </div>
       </CardContent>
     </Card>

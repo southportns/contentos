@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, Suspense } from 'react'
+import { useState, useCallback, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Sparkles, Loader2, Wand2, FileText,
@@ -29,6 +29,91 @@ import { useContentLibrary } from '@/hooks/use-content-library'
 import { PersonaSelector } from '@/components/create/persona-selector'
 import { formatNumber } from '@/components/explorer/shared'
 
+interface ProjectLoadData {
+  projectId: string
+  projectName: string
+  topicProfile: TopicProfile | null
+  selectedAngle: {
+    id: string
+    title: string
+    angle: string
+    reasoning: string
+    targetEmotion: string
+    estimatedViralScore: number
+    difficulty: 'low' | 'medium' | 'high'
+    keyPoints: string[]
+    audienceAppeal: string
+  } | null
+  strategy: {
+    title: string
+    hook: string
+    structure: Array<{
+      section: string
+      purpose: string
+      keyArguments: string[]
+      estimatedWords: number
+    }>
+    keyArguments: string[]
+    emotionalArc: { start: string; middle: string; end: string }
+    callToAction: string
+    suggestedReferences: string[]
+    tone: string
+    estimatedWordCount: number
+  } | null
+  draft: {
+    title: string
+    content: string
+    hook: string
+    wordCount: number
+    sections: Array<{ section: string; content: string }>
+  } | null
+  evaluation: {
+    overallScore: number
+    scores: {
+      emotionalImpact: number
+      logicalClarity: number
+      novelty: number
+      readability: number
+      utility: number
+      platformFit: number
+    }
+    strengths: string[]
+    weaknesses: string[]
+    suggestions: Array<{
+      section: string
+      issue: string
+      suggestion: string
+      priority: 'high' | 'medium' | 'low'
+    }>
+    emotionalArcAnalysis: { achieved: boolean; analysis: string }
+    conclusion: string
+  } | null
+  strategyEvaluation: {
+    platform: string
+    overallScore: number
+    grade: 'exceptional' | 'strong' | 'good' | 'average' | 'poor'
+    scores: Record<string, number>
+    platformFit: number
+    strategyConsistency: number
+    strengths: string[]
+    weaknesses: string[]
+    criticalIssues: string[]
+    improvementPriorities: Array<{
+      priority: number
+      problem: string
+      reason: string
+      suggestion: string
+    }>
+    shareAnalysis: { motivation: string; target: string; context: string }
+    aiStyleRisk: number
+    authenticityScore: number
+    evidenceQuality: number
+    confidence: number
+    verdict: string
+  } | null
+  platform: string | null
+}
+
 type CreateMode = 'free' | 'adapt' | 'distill'
 
 function TopicPageInner() {
@@ -38,6 +123,88 @@ function TopicPageInner() {
   const topicResearch = useTopicResearch()
   const ws = useWorkflow()
   const library = useContentLibrary()
+
+  // 项目加载相关 state
+  const [projectLoading, setProjectLoading] = useState<boolean>(!!projectId)
+  const [projectLoaded, setProjectLoaded] = useState<string | null>(null)
+
+  // 从数据库加载已有项目数据
+  useEffect(() => {
+    if (!projectId || projectLoaded === projectId) return
+
+    let cancelled = false
+
+    async function loadProject() {
+      try {
+        const res = await fetch(`/api/projects/${projectId}`)
+        const json = await res.json()
+
+        if (cancelled) return
+
+        if (json.success && json.data) {
+          const data = json.data as ProjectLoadData
+
+          // 设置 projectId
+          workflowActions.setProjectId(data.projectId)
+
+          // 设置平台
+          if (data.platform) {
+            workflowActions.updateTopicProfile({ platform: data.platform })
+          }
+
+          // 设置主题和相关数据
+          if (data.topicProfile) {
+            workflowActions.setTopicProfile({
+              ...data.topicProfile,
+              platform: data.platform || data.topicProfile.platform,
+            })
+          }
+
+          // 设置选中的角度
+          if (data.selectedAngle) {
+            workflowActions.setAngles([data.selectedAngle])
+            workflowActions.setSelectedAngle(data.selectedAngle)
+          }
+
+          // 设置策略
+          if (data.strategy) {
+            workflowActions.setStrategy(data.strategy)
+          }
+
+          // 设置初稿
+          if (data.draft) {
+            workflowActions.setDraft(data.draft)
+          }
+
+          // 设置评估结果
+          if (data.evaluation) {
+            workflowActions.setEvaluation(data.evaluation)
+          }
+
+          // 设置策略评估
+          if (data.strategyEvaluation) {
+            workflowActions.setStrategyEvaluation(data.strategyEvaluation)
+          }
+
+          // 标记已加载
+          setProjectLoaded(data.projectId)
+        }
+      } catch (err) {
+        console.error('[TopicPage] Failed to load project:', err)
+      } finally {
+        if (!cancelled) {
+          setProjectLoading(false)
+        }
+      }
+    }
+
+    setProjectLoading(true)
+    loadProject()
+
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, projectLoaded])
 
   const [mode, setMode] = useState<CreateMode>(
     ws.referenceContent ? 'adapt' : ws.uploadedContent ? 'distill' : 'free',
@@ -118,6 +285,16 @@ function TopicPageInner() {
     router.push('/create/adapt')
   }, [library.contents, selectedContentUrl, router])
 
+  // 如果正在加载项目数据，显示加载状态
+  if (projectLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-12">
+        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">正在加载创作数据...</p>
+      </div>
+    )
+  }
+
   // Filter content library for adapt mode
   const filteredContents = library.contents.filter((c) => {
     const matchesQuery =
@@ -144,13 +321,8 @@ function TopicPageInner() {
           自由创作
         </button>
         <button
-          className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all ${
-            mode === 'distill'
-              ? 'bg-background text-foreground shadow-sm'
-              : 'text-muted-foreground hover:text-foreground'
-          }`
-          }
-          onClick={() => setMode('distill')}
+          className="flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all text-muted-foreground hover:text-foreground"
+          onClick={() => router.push('/create/distill')}
         >
           <BookOpen className="inline-block size-4 mr-1.5" />
           文件提炼
@@ -169,28 +341,7 @@ function TopicPageInner() {
         </button>
       </div>
 
-      {mode === 'distill' ? (
-        <Card
-          className="border-dashed cursor-pointer hover:border-primary/50 transition-colors"
-          onClick={() => router.push('/create/distill')}
-        >
-          <CardContent className="flex flex-col items-center justify-center gap-4 py-12">
-            <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-              <BookOpen className="size-6 text-muted-foreground" />
-            </div>
-            <div className="text-center">
-              <p className="font-medium">上传文章、报道或书籍内容</p>
-              <p className="text-sm text-muted-foreground">
-                上传文件让系统自我学习提炼，从内容中创作口播稿
-              </p>
-            </div>
-            <Button size="sm">
-              <BookOpen className="size-4" />
-              进入文件提炼
-            </Button>
-          </CardContent>
-        </Card>
-      ) : mode === 'free' ? (
+      {mode === 'free' ? (
         <Card>
           <CardContent className="flex flex-col gap-4 p-6">
             <div className="flex flex-col gap-2">

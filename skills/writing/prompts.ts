@@ -43,7 +43,8 @@ export const WRITING_SYSTEM_PROMPT = `你是一个优秀的内容写手。你的
 
 输出格式：
 - 完整的正文内容（markdown 格式）
-- 每个段落用 ## 标记 section 名称`
+- 每个段落用 ## 标记 section 名称
+- 不要输出任何前缀确认语句（如"好的"、"没问题"、"我将遵循..."等），直接输出正文内容`
 
 export const WRITING_PROMPT = (
   topic: string,

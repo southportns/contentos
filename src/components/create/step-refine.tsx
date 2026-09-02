@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { ProgressBar, useProgress } from '@/components/ui/progress-bar'
 import { StepHeader } from './step-header'
 import { MarkdownRenderer } from './markdown-renderer'
 import { cn } from '@/lib/utils'
@@ -122,6 +123,17 @@ export function StepRefine({
   // 标记是否已自动运行过（防止 StrictMode 双调用重复请求）
   const autoRunStarted = useRef(false)
 
+  // 进度条：钩子+标题合并生成（预估 2.5 分钟）
+  const { progress: combinedProgress, stage: combinedStage, reset: resetCombinedProgress, complete: completeCombinedProgress } = useProgress(
+    autoHookLoading && !autoTitleLoading,
+    150_000,
+  )
+  // 进度条：单独标题生成（预估 1.5 分钟）
+  const { progress: titleProgress, stage: titleStage, reset: resetTitleProgress, complete: completeTitleProgress } = useProgress(
+    autoTitleLoading,
+    90_000,
+  )
+
   // 折叠状态：应用选中的标题/钩子后折叠收起
   const [hookCollapsed, setHookCollapsed] = useState(false)
   const [titleCollapsed, setTitleCollapsed] = useState(false)
@@ -151,10 +163,11 @@ export function StepRefine({
   )
 
   // ── Auto-run: 进入精修后自动生成钩子和标题候选 ──
-  // 独立 fetch 调用，不通过 onRefine 回调，避免互相覆盖
+  // 使用合并模式单次调用，大幅减少等待时间
   const autoGenerateHooks = useCallback(async () => {
     setAutoHookLoading(true)
     setAutoHookError(null)
+    resetCombinedProgress()
     try {
       const res = await fetch('/api/generation/refine', {
         method: 'POST',
@@ -164,26 +177,36 @@ export function StepRefine({
           title: appliedTitle,
           hook: appliedHook,
           wordCount: appliedContent.length,
-          mode: 'hook_select',
+          mode: 'hook_and_title_select',
           platform,
           topic,
           selectedAngleTitle,
         }),
       })
       const data = await res.json()
-      if (!data.success) throw new Error(data.error || '生成钩子失败')
-      const candidates = (data.data?.hookCandidates ?? []).map(safeString).filter((s: string) => s.length > 0)
-      setAutoHookCandidates(candidates)
+      if (!data.success) throw new Error(data.error || '生成失败')
+      // 标记进度完成
+      completeCombinedProgress()
+      // 同时设置钩子和标题候选项
+      const hooks = (data.data?.hookCandidates ?? []).map(safeString).filter((s: string) => s.length > 0)
+      const titles = (data.data?.titleCandidates ?? []).map(safeString).filter((s: string) => s.length > 0)
+      setAutoHookCandidates(hooks)
+      setAutoTitleCandidates(titles)
+      // 标题生成完成
+      setAutoTitleLoading(false)
     } catch (err) {
       setAutoHookError(err instanceof Error ? err.message : '未知错误')
+      setAutoTitleError(err instanceof Error ? err.message : '未知错误')
     } finally {
       setAutoHookLoading(false)
     }
-  }, [appliedContent, appliedTitle, appliedHook, platform, topic, selectedAngleTitle])
+  }, [appliedContent, appliedTitle, appliedHook, platform, topic, selectedAngleTitle, resetCombinedProgress, completeCombinedProgress])
 
+  // 保留单独生成标题的函数（用于"重新生成"按钮）
   const autoGenerateTitles = useCallback(async () => {
     setAutoTitleLoading(true)
     setAutoTitleError(null)
+    resetTitleProgress()
     try {
       const res = await fetch('/api/generation/refine', {
         method: 'POST',
@@ -201,6 +224,8 @@ export function StepRefine({
       })
       const data = await res.json()
       if (!data.success) throw new Error(data.error || '生成标题失败')
+      // 标记进度完成
+      completeTitleProgress()
       const candidates = (data.data?.titleCandidates ?? []).map(safeString).filter((s: string) => s.length > 0)
       setAutoTitleCandidates(candidates)
     } catch (err) {
@@ -208,9 +233,10 @@ export function StepRefine({
     } finally {
       setAutoTitleLoading(false)
     }
-  }, [appliedContent, appliedTitle, appliedHook, platform, topic, selectedAngleTitle])
+  }, [appliedContent, appliedTitle, appliedHook, platform, topic, selectedAngleTitle, resetTitleProgress, completeTitleProgress])
 
   // 自动运行：组件挂载时且没有已存在的候选项时触发
+  // 使用合并模式单次调用生成钩子和标题，避免两次 LLM 调用
   useEffect(() => {
     if (autoRunStarted.current) return
     // 如果已经有候选项（从 refineData 恢复），不需要自动生成
@@ -218,10 +244,9 @@ export function StepRefine({
     const hasExistingTitles = (refineData?.titleCandidates ?? []).length > 0
     if (hasExistingHooks && hasExistingTitles) return
     autoRunStarted.current = true
-    // 并行触发两个请求
-    if (!hasExistingHooks) autoGenerateHooks()
-    if (!hasExistingTitles) autoGenerateTitles()
-  }, [autoGenerateHooks, autoGenerateTitles, refineData?.hookCandidates, refineData?.titleCandidates])
+    // 单次调用同时生成钩子和标题
+    autoGenerateHooks()
+  }, [autoGenerateHooks, refineData?.hookCandidates, refineData?.titleCandidates])
 
   const autoLoading = autoHookLoading || autoTitleLoading
 
@@ -347,19 +372,38 @@ export function StepRefine({
         {/* Auto-generated results: 标题选定 + 黄金三秒 */}
         {(autoLoading || hookCandidates.length > 0 || titleCandidates.length > 0 || autoHookError || autoTitleError) && (
           <div className="flex flex-col gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
-            <div className="flex items-center gap-2">
-              <ArrowUp className="size-4 text-primary" />
-              <span className="text-sm font-medium">AI 智能推荐</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <ArrowUp className="size-4 text-primary" />
+                <span className="text-sm font-medium">AI 智能推荐</span>
+                {autoLoading && (
+                  <Badge variant="secondary" className="text-xs">
+                    <Loader2 className="mr-1 size-3 animate-spin" />
+                    生成中...
+                  </Badge>
+                )}
+              </div>
+              {/* 总进度条 */}
               {autoLoading && (
-                <Badge variant="secondary" className="text-xs">
-                  <Loader2 className="mr-1 size-3 animate-spin" />
-                  生成中...
-                </Badge>
+                <ProgressBar
+                  progress={autoTitleLoading ? titleProgress : combinedProgress}
+                  stage={autoTitleLoading ? titleStage : combinedStage}
+                  variant="primary"
+                />
               )}
             </div>
 
             {/* 标题候选 */}
             <div className="flex flex-col gap-2">
+              {/* 单独生成标题时的进度条 */}
+              {autoTitleLoading && (
+                <ProgressBar
+                  progress={titleProgress}
+                  stage={titleStage}
+                  variant="primary"
+                  className="pb-1"
+                />
+              )}
               {titleCollapsed ? (
                 <div className="flex items-center justify-between rounded-lg border border-border bg-background p-2.5">
                   <div className="flex items-center gap-2">
@@ -451,6 +495,15 @@ export function StepRefine({
 
             {/* 钩子候选 */}
             <div className="flex flex-col gap-2">
+              {/* 钩子+标题合并生成时的进度条（仅在合并模式加载钩子时显示） */}
+              {autoHookLoading && !autoTitleLoading && (
+                <ProgressBar
+                  progress={combinedProgress}
+                  stage={combinedStage}
+                  variant="primary"
+                  className="pb-1"
+                />
+              )}
               {hookCollapsed ? (
                 <div className="flex items-center justify-between rounded-lg border border-border bg-background p-2.5">
                   <div className="flex items-center gap-2">

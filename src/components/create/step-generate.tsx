@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { ProgressBar } from '@/components/ui/progress-bar'
 import { StepHeader } from './step-header'
 import { cn } from '@/lib/utils'
 import type {
@@ -79,6 +80,8 @@ interface StepGenerateProps {
   onGenerate: () => void
   generating: boolean
   loadingLabel: string
+  /** Progress 0-100, used to show progress bar during generation */
+  progressPercent?: number
   duration: number
   setDuration: (v: number) => void
   wordCount: number
@@ -88,7 +91,7 @@ interface StepGenerateProps {
 
 export function StepGenerate({
   selectedAngle, strategy, draft, evaluation, strategyEvaluation, riskAnalysis,
-  onGenerate, generating, loadingLabel,
+  onGenerate, generating, loadingLabel, progressPercent,
   duration, setDuration, wordCount, error, onUpdateDraft,
 }: StepGenerateProps) {
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null)
@@ -131,6 +134,23 @@ export function StepGenerate({
                 <><Rocket className="size-4" />一键生成 + 评估</>
               )}
             </Button>
+          </div>
+        )}
+
+        {/* Progress bar */}
+        {generating && progressPercent != null && (
+          <div className="flex flex-col gap-1.5 rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <Rocket className="size-3.5 text-primary" />
+                {loadingLabel}
+              </span>
+              <span className="tabular-nums">{Math.round(progressPercent)}%</span>
+            </div>
+            <ProgressBar
+              progress={progressPercent}
+              variant="primary"
+            />
           </div>
         )}
 
