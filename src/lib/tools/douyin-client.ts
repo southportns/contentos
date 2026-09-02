@@ -29,6 +29,84 @@ const DOUYIN_API_BASE =
 
 const DOUYIN_TIMEOUT_MS = 15_000
 
+// ─── Search fast-fail config ────────────────────────────
+// 抖音搜索是风控最严格的端点。微服务内部有 3 次重试（1s+2s+5s），
+// 被风控时重试无意义，浪费 ~50s。通过 4s 超时快速失败，
+// 避免用户等待过久。
+// 诊断数据：风控判定是即时的（< 1s），3s 未返回则等 8s 也不会回来。
+const SEARCH_TIMEOUT_MS = 4_000
+
+// Search result cache — 相同关键词 5 分钟内复用，减少 API 调用
+interface SearchCacheEntry {
+  timestamp: number
+  data: DouyinSearchResult[]
+}
+const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000 // 5 min
+const searchCache = new Map<string, SearchCacheEntry>()
+
+// Search cooldown — 关键词被风控后 30s 内不再请求，直接返回空结果
+// 避免连续触发风控导致更严格的拦截
+interface SearchCooldownEntry {
+  timestamp: number
+  reason: 'timeout' | 'error'
+}
+const SEARCH_COOLDOWN_TTL_MS = 30 * 1000 // 30s
+const searchCooldownMap = new Map<string, SearchCooldownEntry>()
+
+function isSearchInCooldown(keyword: string): SearchCooldownEntry | null {
+  const entry = searchCooldownMap.get(keyword)
+  if (entry && Date.now() - entry.timestamp < SEARCH_COOLDOWN_TTL_MS) {
+    return entry
+  }
+  // Expired — clean up
+  if (entry) searchCooldownMap.delete(keyword)
+  return null
+}
+
+function setSearchCooldown(keyword: string, reason: 'timeout' | 'error'): void {
+  searchCooldownMap.set(keyword, { timestamp: Date.now(), reason })
+  // Simple cleanup: limit to 20 entries
+  if (searchCooldownMap.size > 20) {
+    const oldest = searchCooldownMap.keys().next().value
+    if (oldest !== undefined) searchCooldownMap.delete(oldest)
+  }
+}
+
+function getSearchCache(keyword: string, publishTime: PublishTimeFilter): DouyinSearchResult[] | null {
+  const key = `${keyword}::${publishTime}`
+  const entry = searchCache.get(key)
+  if (entry && Date.now() - entry.timestamp < SEARCH_CACHE_TTL_MS) {
+    return entry.data
+  }
+  // Expired — clean up
+  if (entry) searchCache.delete(key)
+  return null
+}
+
+function setSearchCache(keyword: string, publishTime: PublishTimeFilter, data: DouyinSearchResult[]): void {
+  const key = `${keyword}::${publishTime}`
+  searchCache.set(key, { timestamp: Date.now(), data })
+  // Simple cleanup: limit cache to 50 entries
+  if (searchCache.size > 50) {
+    const oldest = searchCache.keys().next().value
+    if (oldest !== undefined) searchCache.delete(oldest)
+  }
+}
+
+// Request spacing — avoid triggering rate limits
+// 注意：多关键词并行搜索时应跳过 spacing（由调用方控制）
+let lastSearchRequestTime = 0
+const MIN_SEARCH_INTERVAL_MS = 1000 // 1s between search requests
+
+async function searchRequestSpacing(): Promise<void> {
+  const now = Date.now()
+  const elapsed = now - lastSearchRequestTime
+  if (elapsed < MIN_SEARCH_INTERVAL_MS) {
+    await new Promise((resolve) => setTimeout(resolve, MIN_SEARCH_INTERVAL_MS - elapsed))
+  }
+  lastSearchRequestTime = Date.now()
+}
+
 // ─── Types ─────────────────────────────────────────────
 
 export interface DouyinVideoDetail {
@@ -331,21 +409,82 @@ export async function getComments(
   return parsed
 }
 
+export interface SearchDouyinOptions {
+  /** 跳过请求间隔（多关键词并行搜索时使用，避免串行化） */
+  skipSpacing?: boolean
+}
+
 export async function searchDouyin(
   keyword: string,
   count = 20,
   publishTime: PublishTimeFilter = 'none',
+  options?: SearchDouyinOptions,
 ): Promise<DouyinSearchResult[]> {
-  const data = await douyinFetch<{
-    count: number
-    items: DouyinSearchResult[]
-    source: string
-  }>('/api/v1/search', {
-    method: 'POST',
-    body: { keyword, count, publish_time: publishTime },
-    timeoutMs: 60_000, // API 搜索 + 浏览器降级搜索，Playwright 搜索可能较慢
-  })
-  return searchSchema.parse(data).items
+  // Check cache first
+  const cached = getSearchCache(keyword, publishTime)
+  if (cached) {
+    return cached
+  }
+
+  // Check cooldown — 该关键词刚被风控，不再请求
+  const cooldown = isSearchInCooldown(keyword)
+  if (cooldown) {
+    const remainingSec = Math.ceil((SEARCH_COOLDOWN_TTL_MS - (Date.now() - cooldown.timestamp)) / 1000)
+    console.warn(`[douyin-client] Keyword "${keyword}" in cooldown (${remainingSec}s remaining, reason: ${cooldown.reason})`)
+    return []
+  }
+
+  // Request spacing to avoid rate limiting
+  // 多关键词并行搜索时跳过 spacing，避免串行化增加延迟
+  if (!options?.skipSpacing) {
+    await searchRequestSpacing()
+  }
+
+  try {
+    const data = await douyinFetch<{
+      count: number
+      items: DouyinSearchResult[]
+      source: string
+    }>('/api/v1/search', {
+      method: 'POST',
+      body: { keyword, count, publish_time: publishTime },
+      timeoutMs: SEARCH_TIMEOUT_MS, // 4s 快速失败，避免被风控时浪费 ~50s
+    })
+    const items = searchSchema.parse(data).items
+
+    // Cache results
+    setSearchCache(keyword, publishTime, items)
+    return items
+  } catch (error) {
+    // Set cooldown on failure — 避免连续触发风控
+    const msg = error instanceof Error ? error.message : String(error)
+    const reason = msg.includes('aborted') || msg.includes('timeout') ? 'timeout' : 'error'
+    setSearchCooldown(keyword, reason)
+    throw error
+  }
+}
+
+/** Clear search cache and cooldown — useful after cookie refresh */
+export function clearSearchCache(): void {
+  searchCache.clear()
+  searchCooldownMap.clear()
+}
+
+/** Clear search cooldown — useful for manual retry after cooldown expires */
+export function clearSearchCooldown(): void {
+  searchCooldownMap.clear()
+}
+
+/** Get cooldown status — useful for UI display */
+export function getSearchCooldownStatus(keyword: string): { inCooldown: boolean; remainingSec: number } {
+  const entry = searchCooldownMap.get(keyword)
+  if (!entry) return { inCooldown: false, remainingSec: 0 }
+  const elapsed = Date.now() - entry.timestamp
+  if (elapsed >= SEARCH_COOLDOWN_TTL_MS) {
+    searchCooldownMap.delete(keyword)
+    return { inCooldown: false, remainingSec: 0 }
+  }
+  return { inCooldown: true, remainingSec: Math.ceil((SEARCH_COOLDOWN_TTL_MS - elapsed) / 1000) }
 }
 
 /**
