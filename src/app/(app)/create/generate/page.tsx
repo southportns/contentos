@@ -76,6 +76,24 @@ export default function GeneratePage() {
   const handleGenerate = useCallback(async () => {
     if (!ws.topicProfile || !ws.selectedAngle) return
 
+    // 提取原始素材内容（来自上传文件或提取的洞察）
+    // 优先级：distillationResult > uploadedContent > adaptationResult
+    let sourceContent: { content?: string; keyInsights?: string[]; memorableQuotes?: string[] } | undefined
+    if (ws.distillationResult) {
+      sourceContent = {
+        keyInsights: ws.distillationResult.sourceAnalysis.keyInsights,
+        memorableQuotes: ws.distillationResult.sourceAnalysis.memorableQuotes,
+      }
+    } else if (ws.uploadedContent?.content) {
+      sourceContent = {
+        content: ws.uploadedContent.content,
+      }
+    } else if (ws.adaptationResult) {
+      sourceContent = {
+        keyInsights: ws.adaptationResult.referenceAnalysis.keyPoints,
+      }
+    }
+
     // Step A: Strategy
     setPipelinePhase('strategy')
     const strategyResult = await strategyHook.generate({
@@ -94,6 +112,7 @@ export default function GeneratePage() {
       platform: ws.topicProfile?.platform || undefined,
       wordCount,
       persona: ws.persona || undefined,
+      sourceContent,
     })
     if (!strategyResult) {
       setPipelinePhase('idle')
@@ -116,6 +135,7 @@ export default function GeneratePage() {
       platform: ws.topicProfile?.platform || undefined,
       wordCount,
       persona: ws.persona || undefined,
+      originalContent: sourceContent,
     })
     if (!writingResult) {
       setPipelinePhase('idle')
@@ -194,6 +214,9 @@ export default function GeneratePage() {
     ws.topicProfile,
     ws.selectedAngle,
     ws.persona,
+    ws.uploadedContent,
+    ws.distillationResult,
+    ws.adaptationResult,
     wordCount,
     strategyHook,
     writingHook,

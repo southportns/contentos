@@ -56,6 +56,7 @@ export async function runContentStrategy(
       validated.tone,
       validated.wordCount,
       validated.persona,
+      validated.sourceContent,
     ),
   })
 

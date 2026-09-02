@@ -32,6 +32,15 @@ interface WritingInput {
     name: string
     description: string | null
   }
+  /**
+   * 原始素材内容（来自上传文件或提取的洞察）。
+   * 提供时，文案必须基于这些事实，不得虚构数据、人物或细节。
+   */
+  originalContent?: {
+    content?: string
+    keyInsights?: string[]
+    memorableQuotes?: string[]
+  }
 }
 
 interface WritingOutput {

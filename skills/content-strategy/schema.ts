@@ -15,6 +15,17 @@ export const contentStrategyInputSchema = z.object({
       coreQuestions: z.array(z.string()),
     })
     .optional(),
+  /**
+   * 原始素材内容（来自上传文件或提取的洞察）。
+   * 提供时，策略必须基于这些事实，不得虚构数据。
+   */
+  sourceContent: z
+    .object({
+      content: z.string().optional(),
+      keyInsights: z.array(z.string()).optional(),
+      memorableQuotes: z.array(z.string()).optional(),
+    })
+    .optional(),
   audienceInsights: z
     .object({
       needs: z.array(z.string()),

@@ -20,7 +20,8 @@ export const CONTENT_STRATEGY_SYSTEM_PROMPT = `你是一个内容策略师。你
 - 不虚构引用和数据
 - 结构要符合逻辑
 - 适合目标平台
-- 如果提供了创作人设，策略中的语调、钩子风格、结构选择必须符合人设设定`
+- 如果提供了创作人设，策略中的语调、钩子风格、结构选择必须符合人设设定
+- 如果提供了原始素材（sourceContent），策略必须基于其中的事实，不得编造素材中不存在的信息`
 
 export const CONTENT_STRATEGY_PROMPT = (
   topic: string,
@@ -40,6 +41,11 @@ export const CONTENT_STRATEGY_PROMPT = (
   persona?: {
     name: string
     description: string | null
+  },
+  sourceContent?: {
+    content?: string
+    keyInsights?: string[]
+    memorableQuotes?: string[]
   },
 ): string => {
   const profileStr = topicProfile
@@ -61,6 +67,39 @@ export const CONTENT_STRATEGY_PROMPT = (
 ${persona.description ? `- 描述：${persona.description}` : ''}`
     : ''
 
+  // 原始素材信息 — 这是事实依据，策略必须基于这些内容
+  let sourceStr = ''
+  if (sourceContent) {
+    const sourceParts: string[] = []
+
+    if (sourceContent.keyInsights && sourceContent.keyInsights.length > 0) {
+      sourceParts.push(`### 关键洞察（必须基于这些事实）
+${sourceContent.keyInsights.map((insight, i) => `${i + 1}. ${insight}`).join('\n')}`)
+    }
+
+    if (sourceContent.memorableQuotes && sourceContent.memorableQuotes.length > 0) {
+      sourceParts.push(`### 原文金句（可直接引用）
+${sourceContent.memorableQuotes.map((q) => `> ${q}`).join('\n')}`)
+    }
+
+    if (sourceContent.content && sourceContent.content.length > 0) {
+      // 截断过长的内容
+      const truncated = sourceContent.content.length > 3000
+        ? sourceContent.content.slice(0, 3000) + '\n\n[内容已截断]'
+        : sourceContent.content
+      sourceParts.push(`### 原文内容
+${truncated}`)
+    }
+
+    if (sourceParts.length > 0) {
+      sourceStr = `
+## 原始素材（策略必须基于以下事实，不得虚构数据）
+
+${sourceParts.join('\n\n')}
+`
+    }
+  }
+
   return `主题：${topic}
 
 选定角度：
@@ -69,11 +108,12 @@ ${persona.description ? `- 描述：${persona.description}` : ''}`
 - 目标情绪：${selectedAngle.targetEmotion}
 - 关键要点：${selectedAngle.keyPoints.join('\n')}
 ${profileStr}${audienceStr}${personaStr}
-
+${sourceStr}
 ${platform ? `目标平台：${platform}` : ''}
 ${contentType ? `内容类型：${contentType}` : ''}
 ${tone ? `期望语调：${tone}` : ''}
 ${wordCount ? `目标字数：${wordCount}` : ''}
+${sourceStr ? '\n⚠️ 重要：内容策略必须严格基于原始素材中的事实（数字、事件、人物关系等），不得编造原文不存在的信息。' : ''}
 
 ${persona ? '请严格按照创作人设的设定生成内容策略，确保语调、风格、结构都符合人设要求。' : ''}请生成完整的内容策略。`
 }

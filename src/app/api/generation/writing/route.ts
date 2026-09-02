@@ -50,6 +50,17 @@ const inputSchema = z.object({
   audience: z.string().optional(),
   // Expression Engine — optional ExpressionPlan
   expressionPlan: z.any().optional(),
+  /**
+   * 原始素材内容（来自上传文件或提取的洞察）。
+   * 提供时，文案必须基于这些事实，不得虚构数据、人物或细节。
+   */
+  originalContent: z
+    .object({
+      content: z.string().optional(),
+      keyInsights: z.array(z.string()).optional(),
+      memorableQuotes: z.array(z.string()).optional(),
+    })
+    .optional(),
 })
 
 export async function POST(req: NextRequest) {

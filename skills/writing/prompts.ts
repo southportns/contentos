@@ -38,8 +38,11 @@ export const WRITING_SYSTEM_PROMPT = `你是一个优秀的内容写手。你的
 7. 适合目标平台的内容风格
 8. 标题要吸引人但不要标题党
 9. 如果提供了创作人设，写作语气、用词风格、表达习惯必须符合人设的设定
-10. ${AUDIENCE_PERSPECTIVE_RULE}
-11. ${NAME_DESENSITIZATION_RULE}
+10. 如果提供了原始素材（originalContent），必须严格基于其中的事实（数字、事件、人物关系等），不得编造素材中不存在的信息
+11. 不得虚构原文中未提及的人物（如子女、配偶等）
+12. 不得编造与原文矛盾的金额数字
+13. ${AUDIENCE_PERSPECTIVE_RULE}
+14. ${NAME_DESENSITIZATION_RULE}
 
 输出格式：
 - 完整的正文内容（markdown 格式）
@@ -59,6 +62,11 @@ export const WRITING_PROMPT = (
   },
   expressionPlan?: ExpressionPlan,
   audience?: string,
+  originalContent?: {
+    content?: string
+    keyInsights?: string[]
+    memorableQuotes?: string[]
+  },
 ): string => {
   const structureStr = strategy.structure
     .map(
@@ -86,6 +94,39 @@ ${persona.description ? `- 描述：${persona.description}` : ''}`
     ? formatExpressionPlanForWriter(expressionPlan)
     : ''
 
+  // 原始素材信息 — 这是事实依据，文案必须基于这些内容
+  let originalStr = ''
+  if (originalContent) {
+    const originalParts: string[] = []
+
+    if (originalContent.keyInsights && originalContent.keyInsights.length > 0) {
+      originalParts.push(`### 关键洞察（文案必须基于这些事实）
+${originalContent.keyInsights.map((insight, i) => `${i + 1}. ${insight}`).join('\n')}`)
+    }
+
+    if (originalContent.memorableQuotes && originalContent.memorableQuotes.length > 0) {
+      originalParts.push(`### 原文金句（可直接引用）
+${originalContent.memorableQuotes.map((q) => `> ${q}`).join('\n')}`)
+    }
+
+    if (originalContent.content && originalContent.content.length > 0) {
+      // 截断过长的内容
+      const truncated = originalContent.content.length > 5000
+        ? originalContent.content.slice(0, 5000) + '\n\n[内容已截断]'
+        : originalContent.content
+      originalParts.push(`### 原文内容
+${truncated}`)
+    }
+
+    if (originalParts.length > 0) {
+      originalStr = `
+## 原始素材（文案必须基于以下事实，不得虚构数据、人物或细节）
+
+${originalParts.join('\n\n')}
+`
+    }
+  }
+
   return `主题：${topic}
 
 选定角度：${selectedAngle.title} — ${selectedAngle.angle}
@@ -104,8 +145,10 @@ ${persona.description ? `- 描述：${persona.description}` : ''}`
 ${structureStr}
 ${personaStr}${audienceStr}
 ${expressionPlanStr}
+${originalStr}
 ${platform ? `目标平台：${platform}` : ''}
 ${wordCount ? `目标字数：${wordCount}` : `预计总字数：${strategy.estimatedWordCount}`}
+${originalStr ? '\n⚠️ 重要约束：\n- 必须严格基于原始素材中的事实（数字、事件、人物关系等）\n- 不得编造原文中未提及的人物（如子女、配偶等）\n- 不得编造与原文矛盾的金额数字\n- 不得添加原文不存在的个人经历细节' : ''}
 
 ${persona ? '请按照创作人设的设定来写作，人设是隐式上下文——不要在文案中显式提及"作为一个..."，而是让语气、用词和表达习惯自然体现人设。' : ''}${expressionPlan ? '表达蓝图是你的隐式表达约束——不要显式输出思维路径标签，不要机械地按照 observation→association→contradiction→realization 逐项执行，而是让这些思考方式自然融入写作。不得为了满足 thoughtPath 强行增加场景，不得虚构第一人称经历，不得为了"真人感"制造错别字或机械添加"嗯""哈哈""就是"等口头禅。' : ''}请基于以上策略，写出完整的内容初稿。`
 }
