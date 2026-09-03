@@ -59,3 +59,18 @@ export {
   SemanticSearchEngine,
   createSemanticSearchEngine,
 } from './semantic-search';
+
+// ─── Cloud Embedding Providers (P0.3.2-1) ─────────────────────────────────
+
+export {
+  AlibabaEmbeddingProvider,
+  EmbeddingProviderError,
+  getEmbeddingProvider,
+  createProvider,
+  createProviderRegistry,
+} from './providers';
+
+export type {
+  EmbeddingProviderErrorDetails,
+  EmbeddingProviderType,
+} from './providers';

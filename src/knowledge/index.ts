@@ -93,6 +93,9 @@ export type {
   SemanticRetrievalResponse,
   KnowledgeRetriever,
   SemanticIndexBuilderOptions,
+  // P0.3.2-1 — Cloud Embedding Providers
+  EmbeddingProviderErrorDetails,
+  EmbeddingProviderType,
 } from './semantic';
 
 export {
@@ -112,4 +115,10 @@ export {
   createSemanticRetriever,
   SemanticSearchEngine,
   createSemanticSearchEngine,
+  // P0.3.2-1 — Cloud Embedding Providers
+  AlibabaEmbeddingProvider,
+  EmbeddingProviderError,
+  getEmbeddingProvider,
+  createProvider,
+  createProviderRegistry,
 } from './semantic';
