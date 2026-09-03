@@ -324,6 +324,39 @@ E2E Test
 
 > 不允许声称任务完成。
 
+## 17.1 Local Verification Report（本地验证报告）
+
+每次任务完成后，**必须**生成本地验证报告并推送到 GitHub：
+
+```bash
+# 生成报告（自动运行 4 项检查 + 生成 Markdown）
+npx tsx scripts/generate-report.ts <task-name>
+```
+
+报告输出位置：
+
+> `docs/reports/YYYY-MM-DD-<task-name>.md`
+
+报告内容：
+- 4 项检查的 PASS/FAIL 汇总
+- 失败的详细错误信息
+- 为云端审核 Agent 提供可追溯的本地验证证据
+
+命名规则：
+
+| Task | 报告文件名 |
+|------|-----------|
+| P0.3.2-1 功能 | `2026-09-03-p0_3_2_1.md` |
+| Bug fix | `2026-09-03-fix-typo-aiyun.md` |
+
+推送要求：
+
+```text
+1. 报告文件推送到 GitHub
+2. 云端的 ChatGPT / Agent 可以直接读取 docs/reports/
+3. 不要依赖 Agent 声称的"已通过"，以报告文件为准
+```
+
 ---
 
 # 18. Documentation
