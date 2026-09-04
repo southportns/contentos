@@ -13,11 +13,22 @@
  *
  * Output:
  *   docs/reports/YYYY-MM-DD-<task-name>.md
+ *
+ * Exit codes:
+ *   0 = PASS or PASS_WITH_BASELINE_ISSUES
+ *   1 = FAIL OR invalid configuration OR consistency violation
  */
 
 import { spawn, execSync } from 'node:child_process';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
+
+// ─── Constants ────────────────────────────────────────────────────────────
+
+const REPO_ROOT = process.cwd();
+const ANSI_ESCAPE_REGEX = /\x1B\[[0-9;]*[a-zA-Z]/g;
+const ABSOLUTE_WINDOWS_PATH_REGEX = /^[A-Za-z]:[\\/]/;
+const ABSOLUTE_UNIX_PATH_REGEX = /^\//;
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -40,6 +51,7 @@ interface BaselineIssue {
 
 interface Baseline {
   version: string;
+  path_format?: string;
   updated_at: string;
   source_commit: string;
   description?: string;
@@ -66,6 +78,7 @@ interface TestSummary {
   testsPassed: number;
   testsFailed: number;
   duration: string;
+  parseFailed: boolean;
 }
 
 interface LintSummary {
@@ -82,26 +95,129 @@ interface ChangedFiles {
 interface VerificationMatrix {
   check: string;
   status: 'PASS' | 'FAIL' | 'PASS_WITH_BASELINE' | 'SKIPPED' | 'WARNING';
+  current: number;
   baseline: number;
   new: number;
+  newErrors: number;
+  newWarnings: number;
+  resolved: number;
   blocks: boolean;
 }
 
-// ─── Issue Key ────────────────────────────────────────────────────────────
+// ─── Path Normalization ───────────────────────────────────────────────────
 
-function getIssueKey(issue: VerificationIssue): string {
-  const file = issue.file ?? '';
+/**
+ * Converts any file path to a repo-relative POSIX path.
+ * Handles:
+ * - Windows absolute: D:\Project\contextos\src\...\file.ts → src/.../file.ts
+ * - Unix absolute: /home/user/contextos/src/.../file.ts → src/.../file.ts
+ * - Already relative: src/.../file.ts → src/.../file.ts (normalized)
+ * - Mixed separators: src\\app\file.ts → src/app/file.ts
+ */
+function normalizeRepoPath(filePath: string): string {
+  if (!filePath) return '';
+
+  // First, normalize separators to forward slashes
+  const normalized = filePath.split(sep).join('/');
+
+  // If it's already a relative path (no drive letter, no leading slash)
+  if (!ABSOLUTE_WINDOWS_PATH_REGEX.test(normalized) && !ABSOLUTE_UNIX_PATH_REGEX.test(normalized)) {
+    // Still normalize through path.resolve to handle ./ and ../ segments
+    const resolved = resolve(REPO_ROOT, normalized);
+    const rel = relative(REPO_ROOT, resolved);
+    return rel.split(sep).join('/');
+  }
+
+  // For absolute paths, resolve and make relative to repo root
+  const resolved = resolve(REPO_ROOT, normalized);
+  const rel = relative(REPO_ROOT, resolved);
+  return rel.split(sep).join('/');
+}
+
+// ─── Message Normalization ────────────────────────────────────────────────
+
+/**
+ * Normalizes issue messages for stable identity comparison.
+ * - Removes ANSI escape sequences
+ * - Trims whitespace
+ * - Collapses internal whitespace to single spaces
+ * - Removes trailing punctuation differences (period, colon)
+ * - Normalizes line breaks to spaces
+ */
+function normalizeIssueMessage(message: string): string {
+  return message
+    .replace(ANSI_ESCAPE_REGEX, '')     // Remove ANSI escape sequences
+    .replace(/\r?\n/g, ' ')              // Normalize line breaks to spaces
+    .replace(/\s+/g, ' ')                // Collapse whitespace
+    .trim()                               // Trim leading/trailing
+    .replace(/[.,;:]$/, '');             // Remove trailing punctuation
+}
+
+// ─── Issue Identity ──────────────────────────────────────────────────────
+
+/**
+ * Creates a stable identity key for any issue (current or baseline).
+ * Identity does NOT include line number (lines shift during development).
+ * Format: tool::relative_posix_file::rule::normalized_message
+ */
+function getIssueKey(issue: Pick<VerificationIssue, 'tool' | 'file' | 'rule' | 'message'>): string {
+  const file = normalizeRepoPath(issue.file ?? '');
   const rule = issue.rule ?? '';
-  // Normalize message: truncate, collapse whitespace, remove trailing period
-  const message = issue.message.slice(0, 100).replace(/\s+/g, ' ').trim().replace(/\.$/, '');
+  const message = normalizeIssueMessage(issue.message).slice(0, 120);
   return `${issue.tool}::${file}::${rule}::${message}`;
 }
 
-function getBaselineKey(issue: BaselineIssue): string {
-  const file = issue.file;
-  const rule = issue.rule;
-  const message = issue.message.slice(0, 100).replace(/\s+/g, ' ').trim().replace(/\.$/, '');
-  return `lint::${file}::${rule}::${message}`;
+// ─── Baseline Validation ──────────────────────────────────────────────────
+
+interface BaselineValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+/**
+ * Validates baseline structure and path format.
+ * Fails hard on any violation — never silently continues.
+ */
+function validateBaseline(baseline: Baseline): BaselineValidationResult {
+  const errors: string[] = [];
+
+  // Check required top-level fields
+  if (!baseline.version) {
+    errors.push('Missing baseline.version');
+  }
+  if (!baseline.source_commit) {
+    errors.push('Missing baseline.source_commit');
+  }
+  if (!baseline.path_format) {
+    errors.push('Missing baseline.path_format');
+  } else if (baseline.path_format !== 'repo-relative-posix') {
+    errors.push(`Invalid baseline.path_format: "${baseline.path_format}" (expected "repo-relative-posix")`);
+  }
+
+  // Validate all lint issue paths are repo-relative
+  const lintIssues = baseline.known_issues?.lint ?? [];
+  for (let i = 0; i < lintIssues.length; i++) {
+    const issue = lintIssues[i];
+    const file = issue.file;
+
+    if (ABSOLUTE_WINDOWS_PATH_REGEX.test(file)) {
+      errors.push(`Lint issue [${i}] has absolute Windows path: "${file}"`);
+    } else if (ABSOLUTE_UNIX_PATH_REGEX.test(file)) {
+      errors.push(`Lint issue [${i}] has absolute Unix path: "${file}"`);
+    }
+
+    if (!issue.rule) {
+      errors.push(`Lint issue [${i}] missing rule`);
+    }
+    if (!issue.message) {
+      errors.push(`Lint issue [${i}] missing message`);
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
 }
 
 // ─── Parsers ──────────────────────────────────────────────────────────────
@@ -132,11 +248,10 @@ function parseLintOutput(output: string): VerificationIssue[] {
     for (const fileResult of jsonData) {
       for (const msg of fileResult.messages) {
         if (!msg.ruleId) continue;
-        // Use only the first line of the message for comparison (before detailed explanation)
         const firstLine = msg.message.split('\n')[0].trim();
         issues.push({
           tool: 'lint',
-          file: fileResult.filePath,
+          file: normalizeRepoPath(fileResult.filePath),
           line: msg.line,
           rule: msg.ruleId,
           message: firstLine,
@@ -147,7 +262,7 @@ function parseLintOutput(output: string): VerificationIssue[] {
 
     return issues;
   } catch {
-    // Fallback: parse human-readable format (for older ESLint versions)
+    // Fallback: parse human-readable format
   }
 
   // Fallback: parse human-readable ESLint output
@@ -163,7 +278,7 @@ function parseLintOutput(output: string): VerificationIssue[] {
     // Match file path line (Windows or Unix style, no spaces)
     const fileMatch = line.match(/^([A-Za-z]:\\[^\s]+|[^\s]+)$/);
     if (fileMatch && !line.includes(' ') && !line.match(/^\s+\d+:\d+/)) {
-      currentFile = fileMatch[1];
+      currentFile = normalizeRepoPath(fileMatch[1]);
       continue;
     }
 
@@ -205,7 +320,7 @@ function parseTypeCheckOutput(output: string): VerificationIssue[] {
     if (match) {
       issues.push({
         tool: 'typecheck',
-        file: match[1],
+        file: normalizeRepoPath(match[1]),
         line: parseInt(match[2], 10),
         rule: match[4],
         message: match[5],
@@ -217,8 +332,8 @@ function parseTypeCheckOutput(output: string): VerificationIssue[] {
 }
 
 function extractTestSummary(output: string): TestSummary {
-  // Strip ANSI color codes (vitest outputs colors even when piped)
-  const cleanOutput = output.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+  // Strip ANSI color codes
+  const cleanOutput = output.replace(ANSI_ESCAPE_REGEX, '');
 
   // Match: "Test Files  16 passed (16)" or "Test Files  1 failed | 15 passed (16)"
   const filesMatch = cleanOutput.match(/Test Files\s+(?:(\d+)\s+failed\s+\|\s+)?(\d+)\s+passed\s+\((\d+)\)/);
@@ -233,6 +348,10 @@ function extractTestSummary(output: string): TestSummary {
   const testsPassed = testsMatch ? parseInt(testsMatch[2], 10) : 0;
   const testsFailed = testsMatch?.[1] ? parseInt(testsMatch[1], 10) : 0;
 
+  // Detect parse failure: output exists but we couldn't extract any test data
+  const outputHasTestIndicators = cleanOutput.includes('Test Files') || cleanOutput.includes('Tests') || cleanOutput.includes('passed');
+  const parseFailed = outputHasTestIndicators && filesTotal === 0 && testsTotal === 0;
+
   return {
     filesTotal,
     filesPassed,
@@ -241,13 +360,14 @@ function extractTestSummary(output: string): TestSummary {
     testsPassed,
     testsFailed,
     duration: durationMatch?.[1] ?? 'unknown',
+    parseFailed,
   };
 }
 
 // ─── Baseline ──────────────────────────────────────────────────────────────
 
 function loadBaseline(): Baseline | null {
-  const baselinePath = join(process.cwd(), 'docs', 'reports', 'baseline.json');
+  const baselinePath = join(REPO_ROOT, 'docs', 'reports', 'baseline.json');
   if (!existsSync(baselinePath)) {
     return null;
   }
@@ -261,14 +381,16 @@ function loadBaseline(): Baseline | null {
 
 // ─── Comparison ────────────────────────────────────────────────────────────
 
-function compareLintIssues(
+function compareIssues(
   current: VerificationIssue[],
   baseline: Baseline | null
 ): { newIssues: VerificationIssue[]; baselineIssues: VerificationIssue[]; resolvedIssues: BaselineIssue[] } {
   const baselineIssues: BaselineIssue[] = baseline?.known_issues?.lint ?? [];
 
+  // Use unified identity function for both current and baseline
+  // Baseline issues are always lint tool, so we construct the key with tool='lint'
   const currentKeys = new Set(current.map(getIssueKey));
-  const baselineKeys = new Map(baselineIssues.map(b => [getBaselineKey(b), b]));
+  const baselineKeys = new Map(baselineIssues.map(b => [getIssueKey({ tool: 'lint', file: b.file, rule: b.rule, message: b.message }), b]));
 
   const newIssues: VerificationIssue[] = [];
   const matchedBaseline: VerificationIssue[] = [];
@@ -284,7 +406,8 @@ function compareLintIssues(
 
   const resolvedIssues: BaselineIssue[] = [];
   for (const bIssue of baselineIssues) {
-    const key = getBaselineKey(bIssue);
+    // Baseline issues are always lint tool — must include tool='lint' for key match
+    const key = getIssueKey({ tool: 'lint', file: bIssue.file, rule: bIssue.rule, message: bIssue.message });
     if (!currentKeys.has(key)) {
       resolvedIssues.push(bIssue);
     }
@@ -299,35 +422,108 @@ type Verdict = 'PASS' | 'PASS_WITH_BASELINE_ISSUES' | 'FAIL';
 
 interface VerdictInput {
   testFailed: boolean;
+  testSummaryParseFailed: boolean;
   newTypeCheckErrors: number;
   newLintErrors: number;
   buildFailed: boolean;
-  baselineLintErrors: number;
+  baselineLintMatched: number;
   newWarnings: number;
   newBuildWarningBlocks: boolean;
 }
 
+/**
+ * Computes verdict based on blocking rules.
+ * Pure function: no I/O, no side effects.
+ */
 function computeVerdict(input: VerdictInput): Verdict {
-  // Any blocking issue → FAIL
+  // Rule 1: Test failure → FAIL
   if (input.testFailed) return 'FAIL';
+
+  // Rule 2: Test summary parse failure → FAIL (can't verify tests passed)
+  if (input.testSummaryParseFailed) return 'FAIL';
+
+  // Rule 3: New typecheck errors → FAIL
   if (input.newTypeCheckErrors > 0) return 'FAIL';
+
+  // Rule 4: New lint errors → FAIL
   if (input.newLintErrors > 0) return 'FAIL';
+
+  // Rule 5: Build failure → FAIL
   if (input.buildFailed) return 'FAIL';
 
-  // Otherwise if baseline issues exist → PASS_WITH_BASELINE_ISSUES
-  if (input.baselineLintErrors > 0) return 'PASS_WITH_BASELINE_ISSUES';
+  // Rule 6: No blocking issues but baseline issues exist → PASS_WITH_BASELINE_ISSUES
+  if (input.baselineLintMatched > 0) return 'PASS_WITH_BASELINE_ISSUES';
 
-  // Otherwise → PASS
+  // Rule 7: No issues at all → PASS
   return 'PASS';
+}
+
+/**
+ * Validates that verdict is consistent with the verification matrix.
+ * Throws Error if inconsistent — never returns false silently.
+ */
+function validateReportConsistency(
+  verdict: Verdict,
+  matrix: VerificationMatrix[],
+  testSummaryParseFailed: boolean
+): void {
+  const errors: string[] = [];
+
+  // Collect blocking failures from matrix
+  const blockingFailures: string[] = [];
+  for (const m of matrix) {
+    if (m.blocks && m.status === 'FAIL') {
+      blockingFailures.push(m.check);
+    }
+  }
+
+  // Check verdict matches blocking failures
+  if (blockingFailures.length > 0 && verdict !== 'FAIL') {
+    errors.push(`Verdict is "${verdict}" but matrix has blocking failures: [${blockingFailures.join(', ')}]`);
+  }
+
+  if (blockingFailures.length === 0 && verdict === 'FAIL') {
+    errors.push(`Verdict is "FAIL" but matrix has no blocking failures`);
+  }
+
+  // Check lint matrix internal consistency
+  const lintMatrix = matrix.find(m => m.check === 'Lint');
+  if (lintMatrix) {
+    const hasNewLintErrors = lintMatrix.newErrors > 0;
+    if (hasNewLintErrors && verdict !== 'FAIL') {
+      errors.push(`Lint has ${lintMatrix.newErrors} new errors but verdict is "${verdict}"`);
+    }
+  }
+
+  // Check test matrix internal consistency
+  const testMatrix = matrix.find(m => m.check === 'Tests');
+  if (testMatrix && testMatrix.status === 'FAIL' && verdict !== 'FAIL') {
+    errors.push(`Tests status is FAIL but verdict is "${verdict}"`);
+  }
+
+  // Check test summary parse failure
+  if (testSummaryParseFailed && verdict !== 'FAIL') {
+    errors.push(`Test summary parse failed but verdict is "${verdict}"`);
+  }
+
+  if (errors.length > 0) {
+    throw new Error(
+      `Report consistency validation failed:\n${errors.map(e => `  - ${e}`).join('\n')}`
+    );
+  }
 }
 
 // ─── Git Info ─────────────────────────────────────────────────────────────
 
 function getGitInfo(): { branch: string; commit: string; parentCommit: string } {
-  const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
-  const commit = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
-  const parentCommit = execSync('git rev-parse HEAD~1', { encoding: 'utf-8' }).trim();
-  return { branch, commit, parentCommit };
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+    const commit = execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+    const parentCommit = execSync('git rev-parse HEAD~1', { encoding: 'utf-8' }).trim();
+    return { branch, commit, parentCommit };
+  } catch (error) {
+    throw new Error(`Failed to get git info: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function getChangedFiles(parentCommit: string): ChangedFiles {
@@ -380,8 +576,6 @@ function getUncommittedFiles(): ChangedFiles {
   return changed;
 }
 
-// (execSync used directly for git commands)
-
 // ─── File Naming ──────────────────────────────────────────────────────────
 
 function findUniqueReportPath(dir: string, date: string, taskName: string): string {
@@ -405,7 +599,7 @@ function findUniqueReportPath(dir: string, date: string, taskName: string): stri
 function runCommand(command: string, args: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const proc = spawn(command, args, {
-      cwd: process.cwd(),
+      cwd: REPO_ROOT,
       shell: true,
       env: { ...process.env },
     });
@@ -454,14 +648,14 @@ function buildReport(
       case 'WARNING':
         return '⚠️ WARNING';
       case 'SKIPPED':
-        return 'SKIPPED';
+        return '⬜ SKIPPED';
       default:
         return status;
     }
   };
 
   const matrixRows = verificationMatrix.map(
-    (m) => `| ${m.check} | ${statusBadge(m.status)} | ${m.baseline} | ${m.new} | ${m.blocks ? 'YES' : 'NO'} |`
+    (m) => `| ${m.check} | ${statusBadge(m.status)} | ${m.current} | ${m.baseline} | ${m.new} | ${m.newErrors}+${m.newWarnings} | ${m.resolved} | ${m.blocks ? 'YES' : 'NO'} |`
   ).join('\n');
 
   const newIssuesSection = newIssues.length > 0
@@ -486,6 +680,11 @@ function buildReport(
     ? changedFiles.deleted.map((f) => `- ${f}`).join('\n')
     : 'None.';
 
+  // Test summary parse warning
+  const testSummarySection = testSummary.parseFailed
+    ? `- ⚠️ **TEST SUMMARY PARSE FAILED** — Test output exists but could not be parsed. Treated as FAIL.`
+    : `- **Test Files**: ${testSummary.filesPassed} passed / ${testSummary.filesTotal} total ${testSummary.filesFailed > 0 ? `(${testSummary.filesFailed} failed)` : ''}\n- **Tests**: ${testSummary.testsPassed} passed / ${testSummary.testsTotal} total ${testSummary.testsFailed > 0 ? `(${testSummary.testsFailed} failed)` : ''}\n- **Duration**: ${testSummary.duration}`;
+
   // Find full output sections
   const testOutput = checkResults.find(r => r.name === 'Test')?.stdout ?? '';
   const typecheckOutput = checkResults.find(r => r.name === 'TypeCheck')?.stdout ?? '';
@@ -498,23 +697,25 @@ function buildReport(
 
 **${verdict}**
 
+${verdict === 'FAIL' ? '> ❌ Verification failed. New issues detected or parse failure.' : ''}
+${verdict === 'PASS_WITH_BASELINE_ISSUES' ? '> ⚠️ No new issues, but baseline issues still exist.' : ''}
+${verdict === 'PASS' ? '> ✅ All checks passed cleanly.' : ''}
+
 ## Verification Matrix
 
-| Check | Status | Baseline | New | Blocks |
-|-------|--------|----------|-----|--------|
+| Check | Status | Current | Baseline Matched | New | Errors+Warnings | Resolved | Blocks |
+|-------|--------|---------|------------------|-----|-----------------|----------|--------|
 ${matrixRows}
 
-## Test Results
+## Test Summary Parse
 
-- **Test Files**: ${testSummary.filesPassed} passed / ${testSummary.filesTotal} total ${testSummary.filesFailed > 0 ? `(${testSummary.filesFailed} failed)` : ''}
-- **Tests**: ${testSummary.testsPassed} passed / ${testSummary.testsTotal} total ${testSummary.testsFailed > 0 ? `(${testSummary.testsFailed} failed)` : ''}
-- **Duration**: ${testSummary.duration}
+${testSummarySection}
 
 ## New Issues
 
 ${newIssuesSection}
 
-## Baseline Issues
+## Baseline Issues (Matched)
 
 ${baselineIssuesSection}
 
@@ -540,6 +741,8 @@ ${deletedFiles}
 - **Branch**: ${gitInfo.branch}
 - **Commit**: ${gitInfo.commit}
 - **Parent Commit**: ${gitInfo.parentCommit}
+- **Baseline Source Commit**: ${loadBaseline()?.source_commit ?? 'none'}
+- **Baseline Path Format**: ${loadBaseline()?.path_format ?? 'none'}
 
 ## Detailed Outputs
 
@@ -616,6 +819,17 @@ async function main() {
   const baseline = loadBaseline();
   if (baseline) {
     console.log(`Baseline loaded: ${baseline.known_issues?.lint?.length ?? 0} known lint issues`);
+
+    // Validate baseline
+    const validation = validateBaseline(baseline);
+    if (!validation.valid) {
+      console.error('BASELINE VALIDATION FAILED:');
+      for (const error of validation.errors) {
+        console.error(`  - ${error}`);
+      }
+      process.exit(1);
+    }
+    console.log(`Baseline validation: PASS (path_format: ${baseline.path_format})`);
   } else {
     console.log('No baseline.json found — all issues will be treated as new');
   }
@@ -634,7 +848,6 @@ async function main() {
   console.log(`  Exit code: ${typecheckResult.exitCode}`);
 
   console.log('→ Running: lint...');
-  // Use JSON format for reliable parsing
   const lintResult = await runCommand('npx', ['eslint', '--format', 'json', 'src', 'scripts', 'skills', 'electron']);
   checkResults.push({ name: 'Lint', command: 'npx eslint --format json', ...lintResult });
   console.log(`  Exit code: ${lintResult.exitCode}`);
@@ -646,6 +859,12 @@ async function main() {
 
   // Parse results
   const testSummary = extractTestSummary(testResult.stdout);
+  if (testSummary.parseFailed) {
+    console.error('\n⚠️  TEST SUMMARY PARSE FAILED');
+    console.error('Test output exists but could not extract test counts.');
+    console.error('This is treated as a blocking FAIL.');
+  }
+
   const lintIssues = parseLintOutput(lintResult.stdout);
   const lintSummary: LintSummary = {
     errors: lintIssues.filter(i => i.severity === 'error').length,
@@ -653,35 +872,43 @@ async function main() {
   };
   const typecheckIssues = parseTypeCheckOutput(typecheckResult.stdout);
 
-  // Compare with baseline
+  // Compare with baseline using unified identity function
   const { newIssues: newLintIssues, baselineIssues: baselineLintIssues, resolvedIssues } =
-    compareLintIssues(lintIssues, baseline);
+    compareIssues(lintIssues, baseline);
 
-  const newTypeCheckIssues = typecheckIssues; // No typecheck baseline support yet
+  const newTypeCheckIssues = typecheckIssues;
   const newTestFailed = testSummary.testsFailed > 0 || testSummary.filesFailed > 0;
   const buildFailed = buildResult.exitCode !== 0;
 
   // Compute verdict
   const verdict = computeVerdict({
     testFailed: newTestFailed,
+    testSummaryParseFailed: testSummary.parseFailed,
     newTypeCheckErrors: newTypeCheckIssues.length,
     newLintErrors: newLintIssues.filter(i => i.severity === 'error').length,
     buildFailed,
-    baselineLintErrors: baselineLintIssues.length,
+    baselineLintMatched: baselineLintIssues.length,
     newWarnings: newLintIssues.filter(i => i.severity === 'warning').length,
     newBuildWarningBlocks: baseline?.new_build_warning_blocks ?? false,
   });
 
-  // Build verification matrix
+  // Build verification matrix with all 5 columns
   const verificationMatrix: VerificationMatrix[] = [];
 
+  const newLintErrorCount = newLintIssues.filter(i => i.severity === 'error').length;
+  const newLintWarningCount = newLintIssues.filter(i => i.severity === 'warning').length;
+
   // Tests
-  const testStatus: VerificationMatrix['status'] = newTestFailed ? 'FAIL' : 'PASS';
+  const testStatus: VerificationMatrix['status'] = newTestFailed || testSummary.parseFailed ? 'FAIL' : 'PASS';
   verificationMatrix.push({
     check: 'Tests',
     status: testStatus,
+    current: testSummary.testsTotal,
     baseline: 0,
     new: testSummary.testsFailed,
+    newErrors: testSummary.testsFailed,
+    newWarnings: 0,
+    resolved: 0,
     blocks: true,
   });
 
@@ -690,13 +917,17 @@ async function main() {
   verificationMatrix.push({
     check: 'TypeCheck',
     status: tcStatus,
+    current: newTypeCheckIssues.length,
     baseline: 0,
     new: newTypeCheckIssues.length,
+    newErrors: newTypeCheckIssues.length,
+    newWarnings: 0,
+    resolved: 0,
     blocks: true,
   });
 
   // Lint
-  const hasNewLintErrors = newLintIssues.filter(i => i.severity === 'error').length > 0;
+  const hasNewLintErrors = newLintErrorCount > 0;
   const lintStatus: VerificationMatrix['status'] = hasNewLintErrors
     ? 'FAIL'
     : baselineLintIssues.length > 0
@@ -705,8 +936,12 @@ async function main() {
   verificationMatrix.push({
     check: 'Lint',
     status: lintStatus,
+    current: lintIssues.length,
     baseline: baselineLintIssues.length,
     new: newLintIssues.length,
+    newErrors: newLintErrorCount,
+    newWarnings: newLintWarningCount,
+    resolved: resolvedIssues.length,
     blocks: false,
   });
 
@@ -715,14 +950,44 @@ async function main() {
   verificationMatrix.push({
     check: 'Build',
     status: buildStatus,
+    current: buildFailed ? 1 : 0,
     baseline: 0,
-    new: 0,
+    new: buildFailed ? 1 : 0,
+    newErrors: buildFailed ? 1 : 0,
+    newWarnings: 0,
+    resolved: 0,
     blocks: true,
   });
 
+  // Validate consistency BEFORE building report
+  try {
+    validateReportConsistency(verdict, verificationMatrix, testSummary.parseFailed);
+    console.log('\nVerdict consistency: PASS');
+  } catch (error) {
+    console.error('\n🚨 REPORT CONSISTENCY VIOLATION:');
+    console.error(error instanceof Error ? error.message : String(error));
+    // Write debug info but exit with failure
+    console.error('\nVerdict:', verdict);
+    console.error('Matrix:', JSON.stringify(verificationMatrix, null, 2));
+    process.exit(1);
+  }
+
   // Git info
-  const gitInfo = getGitInfo();
-  const committedChanges = getChangedFiles(gitInfo.parentCommit);
+  let gitInfo: { branch: string; commit: string; parentCommit: string };
+  try {
+    gitInfo = getGitInfo();
+  } catch (error) {
+    console.error('Failed to get git info:', error);
+    process.exit(1);
+  }
+
+  let committedChanges: ChangedFiles;
+  try {
+    committedChanges = getChangedFiles(gitInfo.parentCommit);
+  } catch {
+    committedChanges = { added: [], modified: [], deleted: [] };
+  }
+
   const uncommittedChanges = getUncommittedFiles();
 
   // Merge committed + uncommitted
@@ -749,7 +1014,7 @@ async function main() {
   );
 
   // Write report
-  const reportDir = join(process.cwd(), 'docs', 'reports');
+  const reportDir = join(REPO_ROOT, 'docs', 'reports');
   mkdirSync(reportDir, { recursive: true });
   const reportPath = findUniqueReportPath(reportDir, date, taskName);
 
@@ -758,8 +1023,9 @@ async function main() {
   const basename = reportPath.split(/[/\\]/).pop();
   console.log(`\n=== Report saved: docs/reports/${basename} ===`);
   console.log(`Verdict: ${verdict}`);
+  console.log(`Current Lint Issues: ${lintIssues.length}`);
+  console.log(`Baseline Matched: ${baselineLintIssues.length}`);
   console.log(`New Issues: ${newLintIssues.length}`);
-  console.log(`Baseline Issues: ${baselineLintIssues.length}`);
   console.log(`Resolved Issues: ${resolvedIssues.length}`);
 
   // Exit code based on verdict

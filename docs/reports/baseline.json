@@ -1,84 +1,85 @@
 {
-  "version": "1.0",
-  "updated_at": "2026-09-03T20:30:00+08:00",
+  "version": "1.1",
+  "path_format": "repo-relative-posix",
+  "updated_at": "2026-09-04T00:00:00+08:00",
   "source_commit": "652ea31",
-  "description": "Baseline established before report-system-upgrade task. Reflects confirmed pre-existing issues at commit 652ea31 (feat(P0.3.1): semantic retrieval foundation). All 11 errors verified as pre-existing in prior development.",
+  "description": "Baseline established before report-system-upgrade task. Reflects confirmed pre-existing issues at commit 652ea31 (feat(P0.3.1): semantic retrieval foundation). All 11 errors verified as pre-existing in prior development. Paths normalized to repo-relative POSIX format (REPORT-FIX-1).",
   "allow_test_baseline": false,
   "new_build_warning_blocks": false,
   "known_issues": {
     "lint": [
       {
-        "file": "D:\\Project\\contextos\\src\\app\\(app)\\create\\topic\\page.tsx",
+        "file": "src/app/(app)/create/topic/page.tsx",
         "line": 202,
         "rule": "react-hooks/set-state-in-effect",
         "message": "Error: Calling setState synchronously within an effect can trigger cascading renders",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\app\\(app)\\diagnostics\\page.tsx",
+        "file": "src/app/(app)/diagnostics/page.tsx",
         "line": 460,
         "rule": "react-hooks/set-state-in-effect",
         "message": "Error: Calling setState synchronously within an effect can trigger cascading renders",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\app\\(app)\\guide\\deployment\\page.tsx",
+        "file": "src/app/(app)/guide/deployment/page.tsx",
         "line": 144,
         "rule": "react/no-unescaped-entities",
         "message": "`\"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\app\\(app)\\settings\\page.tsx",
+        "file": "src/app/(app)/settings/page.tsx",
         "line": 132,
         "rule": "react-hooks/set-state-in-effect",
         "message": "Error: Calling setState synchronously within an effect can trigger cascading renders",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\app\\(app)\\settings\\page.tsx",
+        "file": "src/app/(app)/settings/page.tsx",
         "line": 180,
         "rule": "react-hooks/set-state-in-effect",
         "message": "Error: Calling setState synchronously within an effect can trigger cascading renders",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\components\\create\\step-refine.tsx",
+        "file": "src/components/create/step-refine.tsx",
         "line": 248,
         "rule": "react-hooks/set-state-in-effect",
         "message": "Error: Calling setState synchronously within an effect can trigger cascading renders",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\hooks\\use-asr-settings.ts",
+        "file": "src/hooks/use-asr-settings.ts",
         "line": 72,
         "rule": "react-hooks/set-state-in-effect",
         "message": "Error: Calling setState synchronously within an effect can trigger cascading renders",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\hooks\\use-llm-settings.ts",
+        "file": "src/hooks/use-llm-settings.ts",
         "line": 79,
         "rule": "react-hooks/set-state-in-effect",
         "message": "Error: Calling setState synchronously within an effect can trigger cascading renders",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\modules\\transcript\\providers\\cloud\\cloud-alibaba.provider.ts",
+        "file": "src/modules/transcript/providers/cloud/cloud-alibaba.provider.ts",
         "line": 444,
         "rule": "prefer-const",
         "message": "'audioPath' is never reassigned. Use 'const' instead",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\modules\\transcript\\providers\\cloud\\cloud-alibaba.provider.ts",
+        "file": "src/modules/transcript/providers/cloud/cloud-alibaba.provider.ts",
         "line": 444,
         "rule": "@typescript-eslint/no-unused-vars",
         "message": "'audioPath' is assigned a value but never used",
         "status": "known"
       },
       {
-        "file": "D:\\Project\\contextos\\src\\modules\\transcript\\providers\\cloud\\cloud-xiaomi.provider.ts",
+        "file": "src/modules/transcript/providers/cloud/cloud-xiaomi.provider.ts",
         "line": 196,
         "rule": "prefer-const",
         "message": "'shouldCleanup' is never reassigned. Use 'const' instead",
