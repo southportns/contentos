@@ -4,12 +4,14 @@
  * Knowledge Store search endpoint.
  *
  * Query parameters:
- *   - q: Topic string for keyword-based retrieval
+ *   - q: Search query string
+ *   - method: Retrieval method ('keyword' | 'semantic'), default 'keyword'
  *   - category: Filter by category (can be repeated)
  *   - knowledge_level: Filter by knowledge level (can be repeated)
  *   - confidence: Minimum confidence (high | medium | low)
  *   - include_candidates: Include candidate KUs (true | false)
  *   - limit: Max results to return (default 8)
+ *   - min_similarity: Minimum similarity threshold (semantic only)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,11 +20,14 @@ import {
   knowledgeStore,
   KnowledgeRetrievalResponse,
 } from '@/knowledge';
+import { getSemanticSearchInstance } from '@/knowledge/semantic/semantic-search-instance';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 
 const querySchema = z.object({
   q: z.string().optional(),
+  method: z.enum(['keyword', 'semantic']).optional().default('keyword'),
   category: z
     .union([z.string(), z.array(z.string())])
     .optional(),
@@ -35,6 +40,7 @@ const querySchema = z.object({
     .transform((v) => v === 'true')
     .optional(),
   limit: z.coerce.number().int().positive().max(50).optional(),
+  min_similarity: z.coerce.number().min(-1).max(1).optional(),
 });
 
 function normalizeQueryParam(
@@ -51,6 +57,7 @@ export async function GET(req: NextRequest) {
 
     const parsed = querySchema.safeParse({
       q: searchParams.get('q') ?? undefined,
+      method: searchParams.get('method') ?? 'keyword',
       category: normalizeQueryParam(searchParams.get('category') ?? undefined),
       knowledge_level: normalizeQueryParam(
         searchParams.get('knowledge_level') ?? undefined
@@ -59,6 +66,7 @@ export async function GET(req: NextRequest) {
       include_candidates:
         searchParams.get('include_candidates') ?? undefined,
       limit: searchParams.get('limit') ?? undefined,
+      min_similarity: searchParams.get('min_similarity') ?? undefined,
     });
 
     if (!parsed.success) {
@@ -75,13 +83,44 @@ export async function GET(req: NextRequest) {
     }
 
     const {
-      q: topic,
+      q: query,
+      method,
       category,
       knowledge_level,
       confidence,
       include_candidates,
       limit,
+      min_similarity,
     } = parsed.data;
+
+    if (method === 'semantic') {
+      const semanticSearch = await getSemanticSearchInstance();
+
+      const response = await semanticSearch.search({
+        query: query ?? '',
+        limit: limit ?? 5,
+        min_similarity,
+        category: category as never,
+        knowledge_level: knowledge_level as never,
+        confidence,
+        include_candidates,
+      });
+
+      return NextResponse.json({
+        query: response.query,
+        method: 'semantic',
+        results: response.results.map((r) => ({
+          knowledge_id: r.knowledge_id,
+          similarity: r.similarity,
+          name: r.knowledge.name,
+          category: r.knowledge.category,
+          knowledge_level: r.knowledge.knowledge_level,
+          retrieval_method: r.retrieval_method,
+          retrieval_reason: r.retrieval_reason,
+        })),
+        total: response.total,
+      });
+    }
 
     const categoryArr = Array.isArray(category) ? category : category ? [category] : [];
     const validCategories = categoryArr.filter((c: string) =>
@@ -94,7 +133,7 @@ export async function GET(req: NextRequest) {
     );
 
     const response: KnowledgeRetrievalResponse = knowledgeStore.search({
-      topic,
+      topic: query,
       category: validCategories as never,
       knowledge_level: validLevels as never,
       confidence,
