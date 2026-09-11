@@ -1,0 +1,369 @@
+{
+  "task": "P0.3.3",
+  "date": "2026-09-09T06:47:19.764Z",
+  "knowledge_count": 24,
+  "knowledge_validated": 15,
+  "evaluation_queries": 10,
+  "keyword": {
+    "strict_precision_at_5": 0.08888888888888889,
+    "strict_recall_at_5": 0.4444444444444444,
+    "strict_hit_rate_at_5": 0.3333333333333333,
+    "relaxed_precision_at_5": 0.1111111111111111,
+    "relaxed_recall_at_5": 0.17592592592592593,
+    "relaxed_hit_rate_at_5": 0.4444444444444444,
+    "irrelevant_rejection": 1
+  },
+  "semantic": {
+    "strict_precision_at_5": 0.19999999999999998,
+    "strict_recall_at_5": 0.6851851851851851,
+    "strict_hit_rate_at_5": 0.6666666666666666,
+    "relaxed_precision_at_5": 0.4,
+    "relaxed_recall_at_5": 0.4328042328042328,
+    "relaxed_hit_rate_at_5": 0.8888888888888888,
+    "irrelevant_rejection": 0
+  },
+  "comparison": {
+    "semantic_better": 4,
+    "keyword_better": 0,
+    "tie": 4,
+    "both_fail": 2
+  },
+  "threshold_calibration": [
+    {
+      "threshold": 0.3,
+      "precision_at_5": 0.19999999999999998,
+      "recall_at_5": 0.6851851851851851,
+      "hit_rate_at_5": 0.6666666666666666,
+      "avg_results_count": 4.5,
+      "empty_result_rate": 0.1,
+      "irrelevant_rejection": 1
+    },
+    {
+      "threshold": 0.4,
+      "precision_at_5": 0.13333333333333336,
+      "recall_at_5": 0.5185185185185185,
+      "hit_rate_at_5": 0.4444444444444444,
+      "avg_results_count": 2,
+      "empty_result_rate": 0.4,
+      "irrelevant_rejection": 1
+    },
+    {
+      "threshold": 0.45,
+      "precision_at_5": 0.06666666666666668,
+      "recall_at_5": 0.3888888888888889,
+      "hit_rate_at_5": 0.3333333333333333,
+      "avg_results_count": 1,
+      "empty_result_rate": 0.5,
+      "irrelevant_rejection": 1
+    },
+    {
+      "threshold": 0.5,
+      "precision_at_5": 0.044444444444444446,
+      "recall_at_5": 0.3333333333333333,
+      "hit_rate_at_5": 0.2222222222222222,
+      "avg_results_count": 0.2,
+      "empty_result_rate": 0.8,
+      "irrelevant_rejection": 1
+    },
+    {
+      "threshold": 0.55,
+      "precision_at_5": 0.044444444444444446,
+      "recall_at_5": 0.3333333333333333,
+      "hit_rate_at_5": 0.2222222222222222,
+      "avg_results_count": 0.2,
+      "empty_result_rate": 0.8,
+      "irrelevant_rejection": 1
+    },
+    {
+      "threshold": 0.6,
+      "precision_at_5": 0.044444444444444446,
+      "recall_at_5": 0.3333333333333333,
+      "hit_rate_at_5": 0.2222222222222222,
+      "avg_results_count": 0.2,
+      "empty_result_rate": 0.8,
+      "irrelevant_rejection": 1
+    },
+    {
+      "threshold": 0.65,
+      "precision_at_5": 0,
+      "recall_at_5": 0.1111111111111111,
+      "hit_rate_at_5": 0,
+      "avg_results_count": 0,
+      "empty_result_rate": 1,
+      "irrelevant_rejection": 1
+    },
+    {
+      "threshold": 0.7,
+      "precision_at_5": 0,
+      "recall_at_5": 0.1111111111111111,
+      "hit_rate_at_5": 0,
+      "avg_results_count": 0,
+      "empty_result_rate": 1,
+      "irrelevant_rejection": 1
+    }
+  ],
+  "topk_calibration": [
+    {
+      "topk": 3,
+      "precision": 0.18518518518518517,
+      "recall": 0.5,
+      "hit_rate": 0.4444444444444444,
+      "avg_results_count": 3
+    },
+    {
+      "topk": 5,
+      "precision": 0.19999999999999998,
+      "recall": 0.6851851851851851,
+      "hit_rate": 0.6666666666666666,
+      "avg_results_count": 5
+    },
+    {
+      "topk": 8,
+      "precision": 0.125,
+      "recall": 0.6851851851851851,
+      "hit_rate": 0.6666666666666666,
+      "avg_results_count": 8
+    },
+    {
+      "topk": 10,
+      "precision": 0.1111111111111111,
+      "recall": 0.7407407407407407,
+      "hit_rate": 0.6666666666666666,
+      "avg_results_count": 10
+    }
+  ],
+  "similarity_distribution": {
+    "all": {
+      "min": 0.19060747765586653,
+      "max": 0.6184979038747909,
+      "mean": 0.3793548154074924,
+      "median": 0.3804439653926024,
+      "p25": 0.3372240458265007,
+      "p75": 0.43582897784458263
+    },
+    "correct_hits": {
+      "min": 0.35098069162562545,
+      "max": 0.6184979038747909,
+      "mean": 0.45498313185117784,
+      "median": 0.4173785548733476,
+      "p25": 0.383337874517694,
+      "p75": 0.4901723592172548
+    },
+    "incorrect_hits": {
+      "min": 0.19060747765586653,
+      "max": 0.48009218964334827,
+      "mean": 0.3627534776515615,
+      "median": 0.3693613445364443,
+      "p25": 0.33124732190449885,
+      "p75": 0.42596939181871535
+    }
+  },
+  "latency": {
+    "mean": 178.8,
+    "median": 147.5,
+    "p95": 471,
+    "min": 134,
+    "max": 471
+  },
+  "api_efficiency": {
+    "query_count": 10,
+    "embedding_api_calls": 9,
+    "batch_api_calls": 0,
+    "knowledge_api_calls": 0
+  },
+  "irrelevant_query_analysis": {
+    "keyword_rejection": 1,
+    "semantic_rejection": 0,
+    "q010_keyword_top5": [],
+    "q010_semantic_top5": [
+      "KU_015",
+      "KU_014",
+      "KU_018",
+      "KU_001",
+      "KU_011"
+    ],
+    "q010_semantic_top1_similarity": 0.2079510934878789
+  },
+  "query_level": [
+    {
+      "query_id": "Q001",
+      "query": "爱自己",
+      "query_length": 3,
+      "expected": ["KU_014"],
+      "accepted": ["KU_010", "KU_011", "KU_018", "KU_020", "KU_016"],
+      "keyword_top5": ["KU_010"],
+      "semantic_top5": ["KU_009", "KU_011", "KU_020", "KU_010", "KU_013"],
+      "keyword_strict_hit": false,
+      "semantic_strict_hit": false,
+      "keyword_relaxed_hit": true,
+      "semantic_relaxed_hit": true,
+      "keyword_strict_rank": null,
+      "semantic_strict_rank": null,
+      "semantic_top1_similarity": 0.3850713333392079,
+      "semantic_top5_similarities": [0.3850713333392079, 0.3823757275738107, 0.37207828758598127, 0.3610691103372085, 0.35840053904724006],
+      "winner": "tie"
+    },
+    {
+      "query_id": "Q002",
+      "query": "职场边界",
+      "query_length": 4,
+      "expected": [],
+      "accepted": ["KU_007"],
+      "keyword_top5": [],
+      "semantic_top5": ["KU_009", "KU_010", "KU_003", "KU_013", "KU_001"],
+      "keyword_strict_hit": false,
+      "semantic_strict_hit": false,
+      "keyword_relaxed_hit": false,
+      "semantic_relaxed_hit": false,
+      "keyword_strict_rank": null,
+      "semantic_strict_rank": null,
+      "semantic_top1_similarity": 0.3551664813496261,
+      "semantic_top5_similarities": [0.3551664813496261, 0.3527065133204589, 0.3430940866595926, 0.3372240458265007, 0.32351840613909666],
+      "winner": "both_fail"
+    },
+    {
+      "query_id": "Q003",
+      "query": "女性成长",
+      "query_length": 4,
+      "expected": ["KU_010", "KU_011"],
+      "accepted": ["KU_003", "KU_005", "KU_014", "KU_008", "KU_018"],
+      "keyword_top5": [],
+      "semantic_top5": ["KU_003", "KU_010", "KU_011", "KU_009", "KU_001"],
+      "keyword_strict_hit": false,
+      "semantic_strict_hit": true,
+      "keyword_relaxed_hit": false,
+      "semantic_relaxed_hit": true,
+      "keyword_strict_rank": null,
+      "semantic_strict_rank": 2,
+      "semantic_top1_similarity": 0.4070516101535249,
+      "semantic_top5_similarities": [0.4070516101535249, 0.383337874517694, 0.35098069162562545, 0.3399833030356628, 0.33124732190449885],
+      "winner": "semantic"
+    },
+    {
+      "query_id": "Q004",
+      "query": "被爱",
+      "query_length": 2,
+      "expected": ["KU_014"],
+      "accepted": ["KU_008", "KU_009", "KU_018", "KU_010"],
+      "keyword_top5": [],
+      "semantic_top5": ["KU_009", "KU_020", "KU_010", "KU_013", "KU_011"],
+      "keyword_strict_hit": false,
+      "semantic_strict_hit": false,
+      "keyword_relaxed_hit": false,
+      "semantic_relaxed_hit": true,
+      "keyword_strict_rank": null,
+      "semantic_strict_rank": null,
+      "semantic_top1_similarity": 0.3798606492339457,
+      "semantic_top5_similarities": [0.3798606492339457, 0.3249317939400104, 0.30974507536686513, 0.3091906327794341, 0.3039479963841922],
+      "winner": "semantic"
+    },
+    {
+      "query_id": "Q005",
+      "query": "自我价值",
+      "query_length": 4,
+      "expected": ["KU_010", "KU_013"],
+      "accepted": ["KU_014", "KU_011", "KU_020"],
+      "keyword_top5": [],
+      "semantic_top5": ["KU_011", "KU_009", "KU_005", "KU_008", "KU_010"],
+      "keyword_strict_hit": false,
+      "semantic_strict_hit": true,
+      "keyword_relaxed_hit": false,
+      "semantic_relaxed_hit": true,
+      "keyword_strict_rank": null,
+      "semantic_strict_rank": 5,
+      "semantic_top1_similarity": 0.4584172143271862,
+      "semantic_top5_similarities": [0.4584172143271862, 0.4030850226771929, 0.39438979429078175, 0.38102728155125914, 0.37897255375833555],
+      "winner": "semantic"
+    },
+    {
+      "query_id": "Q006",
+      "query": "开头技巧",
+      "query_length": 4,
+      "expected": ["KU_001", "KU_003", "KU_005"],
+      "accepted": ["KU_002", "KU_004", "KU_007"],
+      "keyword_top5": [],
+      "semantic_top5": ["KU_022", "KU_007", "KU_011", "KU_005", "KU_001"],
+      "keyword_strict_hit": false,
+      "semantic_strict_hit": true,
+      "keyword_relaxed_hit": false,
+      "semantic_relaxed_hit": true,
+      "keyword_strict_rank": null,
+      "semantic_strict_rank": 4,
+      "semantic_top1_similarity": 0.45392998176712596,
+      "semantic_top5_similarities": [0.45392998176712596, 0.43582897784458263, 0.42596939181871535, 0.4173785548733476, 0.4164405896564483],
+      "winner": "semantic"
+    },
+    {
+      "query_id": "Q007",
+      "query": "认知反转",
+      "query_length": 4,
+      "expected": ["KU_014"],
+      "accepted": ["KU_012", "KU_024", "KU_010"],
+      "keyword_top5": ["KU_014"],
+      "semantic_top5": ["KU_014", "KU_018", "KU_023", "KU_010", "KU_008"],
+      "keyword_strict_hit": true,
+      "semantic_strict_hit": true,
+      "keyword_relaxed_hit": true,
+      "semantic_relaxed_hit": true,
+      "keyword_strict_rank": 1,
+      "semantic_strict_rank": 1,
+      "semantic_top1_similarity": 0.6046619512053776,
+      "semantic_top5_similarities": [0.6046619512053776, 0.4521276777980004, 0.45203767170117765, 0.4503201717419795, 0.43859557519323855],
+      "winner": "tie"
+    },
+    {
+      "query_id": "Q008",
+      "query": "结尾行动",
+      "query_length": 4,
+      "expected": ["KU_022"],
+      "accepted": ["KU_021"],
+      "keyword_top5": ["KU_022"],
+      "semantic_top5": ["KU_022", "KU_008", "KU_020", "KU_010", "KU_001"],
+      "keyword_strict_hit": true,
+      "semantic_strict_hit": true,
+      "keyword_relaxed_hit": true,
+      "semantic_relaxed_hit": true,
+      "keyword_strict_rank": 1,
+      "semantic_strict_rank": 1,
+      "semantic_top1_similarity": 0.6184979038747909,
+      "semantic_top5_similarities": [0.6184979038747909, 0.41009895008746183, 0.3693613445364443, 0.3651469183713485, 0.3357438756130689],
+      "winner": "tie"
+    },
+    {
+      "query_id": "Q009",
+      "query": "真实自然表达",
+      "query_length": 6,
+      "expected": ["KU_018", "KU_020"],
+      "accepted": ["KU_016"],
+      "keyword_top5": ["KU_020", "KU_018", "KU_013", "KU_011", "KU_007"],
+      "semantic_top5": ["KU_018", "KU_011", "KU_009", "KU_010", "KU_020"],
+      "keyword_strict_hit": true,
+      "semantic_strict_hit": true,
+      "keyword_relaxed_hit": true,
+      "semantic_relaxed_hit": true,
+      "keyword_strict_rank": 1,
+      "semantic_strict_rank": 1,
+      "semantic_top1_similarity": 0.4901723592172548,
+      "semantic_top5_similarities": [0.4901723592172548, 0.48009218964334827, 0.4508958521637911, 0.4463763862577069, 0.43440570793172606],
+      "winner": "tie"
+    },
+    {
+      "query_id": "Q010",
+      "query": "量子物理芯片技术",
+      "query_length": 8,
+      "expected": [],
+      "accepted": [],
+      "keyword_top5": [],
+      "semantic_top5": ["KU_015", "KU_014", "KU_018", "KU_001", "KU_011"],
+      "keyword_strict_hit": false,
+      "semantic_strict_hit": false,
+      "keyword_relaxed_hit": false,
+      "semantic_relaxed_hit": false,
+      "keyword_strict_rank": null,
+      "semantic_strict_rank": null,
+      "semantic_top1_similarity": 0.2079510934878789,
+      "semantic_top5_similarities": [0.2079510934878789, 0.2018816828365396, 0.19638415545640026, 0.19596098291606973, 0.19060747765586653],
+      "winner": "both_fail"
+    }
+  ]
+}
