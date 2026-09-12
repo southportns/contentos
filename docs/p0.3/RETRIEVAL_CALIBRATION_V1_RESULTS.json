@@ -1,0 +1,67 @@
+{
+  "task": "P0.3.6",
+  "date": "2026-09-12T08:38:58.740Z",
+  "status": "PASS",
+  "reason": "Full semantic calibration completed",
+  "knowledge_count": 24,
+  "knowledge_validated": 15,
+  "evaluation_queries": 90,
+  "positive_queries": 74,
+  "negative_queries": 16,
+  "configurations_tested": 44,
+  "threshold_values": [0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7],
+  "topk_values": [3, 5, 7, 10],
+  "calibration_score_weights": {
+    "strict_hit_rate": 0.3,
+    "strict_recall": 0.25,
+    "strict_precision": 0.2,
+    "negative_rejection": 0.15,
+    "relaxed_hit_rate": 0.1
+  },
+  "current_production": {
+    "threshold": 0.3,
+    "topK": 5,
+    "metrics": {
+      "threshold": 0.3,
+      "topK": 5,
+      "strict_precision": 0.14864864864864863,
+      "strict_recall": 0.6441441441441441,
+      "strict_hit_rate": 0.6081081081081081,
+      "relaxed_precision": 0.3054054054054052,
+      "relaxed_recall": 0.458944658944659,
+      "relaxed_hit_rate": 0.8918918918918919,
+      "negative_rejection_rate": 0.875,
+      "false_positive_count": 2,
+      "avg_results_count": 5,
+      "calibration_score": 0.5936373873873874
+    }
+  },
+  "best_configurations": {
+    "best_strict_hit_rate": {
+      "threshold": 0.2,
+      "topK": 7,
+      "value": 0.6891891891891891
+    },
+    "best_strict_recall": {
+      "threshold": 0.2,
+      "topK": 10,
+      "value": 0.7454954954954954
+    },
+    "best_strict_precision": {
+      "threshold": 0.2,
+      "topK": 3,
+      "value": 0.21171171171171171
+    },
+    "best_negative_rejection": {
+      "threshold": 0.35,
+      "topK": 3,
+      "value": 1
+    },
+    "best_calibration_score": {
+      "threshold": 0.35,
+      "topK": 7,
+      "value": 0.6546653796653796
+    }
+  },
+  "calibration_matrix": "(44 configurations - see full file in repo)"
+}
