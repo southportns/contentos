@@ -1,4 +1,4 @@
-/*
+/**
  * P0.3.1 — Semantic Retriever Tests
  *
  * Tests the full semantic retrieval pipeline:
@@ -405,3 +405,11 @@ describe('cosineSimilarity integration', () => {
     expect(Number.isNaN(sim13)).toBe(false);
     expect(Number.isFinite(sim12)).toBe(true);
     expect(Number.isFinite(sim13)).toBe(true);
+
+    // All similarities should be in valid range
+    expect(sim12).toBeGreaterThanOrEqual(-1);
+    expect(sim12).toBeLessThanOrEqual(1);
+    expect(sim13).toBeGreaterThanOrEqual(-1);
+    expect(sim13).toBeLessThanOrEqual(1);
+  });
+});
