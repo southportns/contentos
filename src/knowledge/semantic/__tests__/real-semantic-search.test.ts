@@ -14,6 +14,13 @@ import { MockEmbeddingProvider } from '../embedding-provider';
 import { RealSemanticSearch } from '../real-semantic-search';
 import { MemoryEmbeddingStore } from '../persistence/embedding-store';
 
+// ─── Call-Counting Mock Provider ─────────────────────────────────────────
+
+/**
+ * Extended mock provider that tracks embed() call count.
+ * This is the critical test infrastructure for P0.3.2-3:
+ * we must verify embed() is called exactly ONCE per search.
+ */
 class CountingMockProvider extends MockEmbeddingProvider {
   embedCallCount = 0;
   embedBatchCallCount = 0;
@@ -33,6 +40,8 @@ class CountingMockProvider extends MockEmbeddingProvider {
     this.embedBatchCallCount = 0;
   }
 }
+
+// ─── Test Fixtures ────────────────────────────────────────────────────────
 
 function createMockKU(overrides: Partial<CanonicalKnowledgeUnit> = {}): CanonicalKnowledgeUnit {
   return {
@@ -104,6 +113,8 @@ const testUnits: CanonicalKnowledgeUnit[] = [
   }),
 ];
 
+// ─── Helper: Create RealSemanticSearch with counting provider ────────────
+
 async function createRealSearchWithCountingProvider(includeCandidates = false): Promise<{
   search: RealSemanticSearch;
   provider: CountingMockProvider;
@@ -112,12 +123,14 @@ async function createRealSearchWithCountingProvider(includeCandidates = false): 
   const provider = new CountingMockProvider(64);
   const store = new MemoryEmbeddingStore();
 
+  // Pre-populate store with embeddings (simulating persisted embeddings)
   const { syncKnowledgeEmbeddings } = await import('../persistence/embedding-sync');
   await syncKnowledgeEmbeddings(testUnits, provider, {
     include_candidates: includeCandidates,
     store,
   });
 
+  // Reset counts after initialization (sync uses embedBatch)
   provider.reset();
 
   const search = new RealSemanticSearch({
@@ -129,10 +142,13 @@ async function createRealSearchWithCountingProvider(includeCandidates = false): 
   return { search, provider, store };
 }
 
+// ─── Tests ────────────────────────────────────────────────────────────────
+
 describe('RealSemanticSearch', () => {
   describe('Initialization', () => {
     it('should load from persistence (no API calls)', async () => {
       const { search, provider } = await createRealSearchWithCountingProvider();
+
       const result = await search.initialize();
 
       expect(result.source).toBe('persistence');
@@ -140,6 +156,7 @@ describe('RealSemanticSearch', () => {
       expect(result.apiCalls).toBe(0);
       expect(search.isReady).toBe(true);
 
+      // No embed/batch calls during initialization from persistence
       expect(provider.embedCallCount).toBe(0);
       expect(provider.embedBatchCallCount).toBe(0);
     });
@@ -160,13 +177,20 @@ describe('RealSemanticSearch', () => {
     it('should call embed() exactly ONCE per search', async () => {
       const { search, provider } = await createRealSearchWithCountingProvider();
       await search.initialize();
+
+      // Reset after init sync
       provider.reset();
 
-      const response = await search.search({ query: '女性成长自我价值' });
+      // Execute search
+      // Note: min_similarity=-1.0 because mock vectors are random (cosine ~0.0)
+      const response = await search.search({ query: '女性成长自我价值', min_similarity: -1.0 });
 
+      // CRITICAL: embed() called exactly once (for the query)
       expect(provider.embedCallCount).toBe(1);
+      // embedBatch() NOT called during search (vectors from persistence)
       expect(provider.embedBatchCallCount).toBe(0);
 
+      // Results should be returned
       expect(response.retrieval_method).toBe('semantic');
       expect(response.total).toBeGreaterThan(0);
     });
@@ -176,12 +200,15 @@ describe('RealSemanticSearch', () => {
       await search.initialize();
       provider.reset();
 
+      // First search
       await search.search({ query: '自我价值' });
       expect(provider.embedCallCount).toBe(1);
 
+      // Second search
       await search.search({ query: '认知反转' });
       expect(provider.embedCallCount).toBe(2);
 
+      // Third search
       await search.search({ query: '表达技巧' });
       expect(provider.embedCallCount).toBe(3);
     });
@@ -191,11 +218,14 @@ describe('RealSemanticSearch', () => {
       await search.initialize();
       provider.reset();
 
+      // Search multiple times
       await search.search({ query: '测试查询1' });
       await search.search({ query: '测试查询2' });
       await search.search({ query: '测试查询3' });
 
+      // embed() called 3 times (once per query)
       expect(provider.embedCallCount).toBe(3);
+      // embedBatch() NEVER called during search
       expect(provider.embedBatchCallCount).toBe(0);
     });
   });
@@ -280,6 +310,7 @@ describe('RealSemanticSearch', () => {
       const { search } = await createRealSearchWithCountingProvider(false);
       await search.initialize();
 
+      // With default (no candidates), only validated KUs should appear
       const response = await search.search({
         query: '测试',
         limit: 10,
@@ -300,7 +331,7 @@ describe('RealSemanticSearch', () => {
         query: '测试',
         category: ['cognition'],
         limit: 10,
-        min_similarity: -1.0,
+        min_similarity: -1.0, // Allow negative similarities (mock vectors)
       });
 
       for (const result of response.results) {
@@ -365,20 +396,26 @@ describe('SemanticRetriever with persisted index', () => {
     const provider = new CountingMockProvider(64);
     const store = new MemoryEmbeddingStore();
 
+    // Create embeddings via sync
     const { syncKnowledgeEmbeddings, buildSemanticIndexFromStoredEmbeddings } = await import('../persistence/embedding-sync');
     await syncKnowledgeEmbeddings(testUnits, provider, { store });
-    provider.reset();
+    provider.reset(); // Reset after sync
 
+    // Build index from store (no API calls)
     const index = await buildSemanticIndexFromStoredEmbeddings(store, testUnits, provider);
     expect(index).not.toBeNull();
     expect(provider.embedCallCount).toBe(0);
     expect(provider.embedBatchCallCount).toBe(0);
 
+    // Create retriever
     const { SemanticRetriever } = await import('../semantic-retriever');
     const retriever = new SemanticRetriever(index!, provider, testUnits);
 
-    const response = await retriever.retrieve({ query: '女性成长' });
+    // Search
+    // Note: min_similarity=-1.0 because mock vectors are random (cosine ~0.0)
+    const response = await retriever.retrieve({ query: '女性成长', min_similarity: -1.0 });
 
+    // embed() called exactly once
     expect(provider.embedCallCount).toBe(1);
     expect(provider.embedBatchCallCount).toBe(0);
     expect(response.total).toBeGreaterThan(0);
