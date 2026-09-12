@@ -1,4 +1,4 @@
-/*
+/**
  * P0.3.1 — Semantic Retrieval Types
  *
  * Defines the core interfaces for the Semantic Retrieval Foundation.

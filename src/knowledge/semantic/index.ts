@@ -1,4 +1,4 @@
-/*
+/**
  * P0.3.1 — Semantic Retrieval Public API
  *
  * Main entry point for the Semantic Retrieval module.

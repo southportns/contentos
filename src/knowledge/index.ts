@@ -1,4 +1,4 @@
-/*
+/**
  * P0.2.3 — Knowledge Store Public API
  *
  * Main entry point for the Knowledge Store module.
@@ -77,7 +77,7 @@ export { rankEntries } from './knowledge-ranker';
 
 export { retrieve, searchEntries } from './knowledge-retriever';
 
-// ─── Data ───────────────────────────────────────────────────────────────────
+// ─── Data ──────────────────────────────────────────────────────────────────
 
 export { KNOWLEDGE_UNITS, DATASET_META } from './knowledge-data';
 

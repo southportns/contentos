@@ -1,4 +1,4 @@
-/*
+/**
  * P0.3.1 — Semantic Retriever
  *
  * Implements semantic retrieval against a pre-built semantic index.
