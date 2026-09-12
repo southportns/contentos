@@ -432,10 +432,13 @@ async function main() {
     return r.keyword_relaxed_hit;
   }).length;
 
-  const keywordIrrelevantRejection = negativeQueries.every((q) => {
+  const keywordCorrectlyRejectedCount = negativeQueries.filter((q) => {
     const r = results.find((r) => r.query_id === q.query_id)!;
     return r.keyword_top5.length === 0;
-  }) ? 1.0 : 0.0;
+  }).length;
+  const keywordIrrelevantRejection = negativeQueries.length > 0
+    ? keywordCorrectlyRejectedCount / negativeQueries.length
+    : 0;
 
   const keywordMetrics: RetrievalMetrics = {
     strict_precision_at_5: avg(keywordStrictPrecisions),
@@ -455,7 +458,7 @@ async function main() {
   console.log(`  Relaxed P@5: ${keywordMetrics.relaxed_precision_at_5.toFixed(4)}`);
   console.log(`  Relaxed Recall@5: ${keywordMetrics.relaxed_recall_at_5.toFixed(4)}`);
   console.log(`  Relaxed HitRate@5: ${keywordMetrics.relaxed_hit_rate_at_5.toFixed(4)}`);
-  console.log(`  Irrelevant Rejection: ${keywordMetrics.irrelevant_rejection.toFixed(4)}`);
+  console.log(`  Irrelevant Rejection: ${keywordMetrics.irrelevant_rejection.toFixed(4)} (${keywordCorrectlyRejectedCount}/${negativeQueries.length})`);
 
   // Semantic metrics (if available)
   let semanticMetrics: RetrievalMetrics | null = null;
@@ -494,10 +497,13 @@ async function main() {
       return r.semantic_relaxed_hit;
     }).length;
 
-    const semanticIrrelevantRejection = negativeQueries.every((q) => {
+    const semanticCorrectlyRejectedCount = negativeQueries.filter((q) => {
       const r = results.find((r) => r.query_id === q.query_id)!;
       return r.semantic_top5.length === 0;
-    }) ? 1.0 : 0.0;
+    }).length;
+    const semanticIrrelevantRejection = negativeQueries.length > 0
+      ? semanticCorrectlyRejectedCount / negativeQueries.length
+      : 0;
 
     semanticMetrics = {
       strict_precision_at_5: avg(semanticStrictPrecisions),
@@ -517,7 +523,7 @@ async function main() {
     console.log(`  Relaxed P@5: ${semanticMetrics.relaxed_precision_at_5.toFixed(4)}`);
     console.log(`  Relaxed Recall@5: ${semanticMetrics.relaxed_recall_at_5.toFixed(4)}`);
     console.log(`  Relaxed HitRate@5: ${semanticMetrics.relaxed_hit_rate_at_5.toFixed(4)}`);
-    console.log(`  Irrelevant Rejection: ${semanticMetrics.irrelevant_rejection.toFixed(4)}`);
+    console.log(`  Irrelevant Rejection: ${semanticMetrics.irrelevant_rejection.toFixed(4)} (${semanticCorrectlyRejectedCount}/${negativeQueries.length})`);
   }
 
   // ─── Phase 5: Query Type Breakdown ─────────────────────────────────────
@@ -571,13 +577,18 @@ async function main() {
 
   const negativeResults = negativeQueries.map((q) => results.find((r) => r.query_id === q.query_id)!);
   const negativeCorrectlyRejected = negativeResults.filter((r) => r.keyword_top5.length === 0).length;
+  const keywordFalsePositives = negativeQueries.length - negativeCorrectlyRejected;
 
   console.log(`  Negative Queries: ${negativeQueries.length}`);
   console.log(`  Keyword Correctly Rejected: ${negativeCorrectlyRejected}/${negativeQueries.length}`);
+  console.log(`  Keyword False Positives: ${keywordFalsePositives}/${negativeQueries.length}`);
+  console.log(`  Keyword Negative Rejection Rate: ${negativeQueries.length > 0 ? (negativeCorrectlyRejected / negativeQueries.length * 100).toFixed(1) : 0}%`);
   if (search) {
     const semanticNegativeCorrect = negativeResults.filter((r) => r.semantic_top5.length === 0).length;
+    const semanticFalsePositives = negativeQueries.length - semanticNegativeCorrect;
     console.log(`  Semantic Correctly Rejected: ${semanticNegativeCorrect}/${negativeQueries.length}`);
-    console.log(`  Semantic False Positives: ${negativeQueries.length - semanticNegativeCorrect}/${negativeQueries.length}`);
+    console.log(`  Semantic False Positives: ${semanticFalsePositives}/${negativeQueries.length}`);
+    console.log(`  Semantic Negative Rejection Rate: ${negativeQueries.length > 0 ? (semanticNegativeCorrect / negativeQueries.length * 100).toFixed(1) : 0}%`);
   }
 
   // ─── Phase 7: Latency (if semantic) ────────────────────────────────────
@@ -661,11 +672,17 @@ async function main() {
     },
     type_breakdown: typeMetricsList,
     negative_rejection: {
-      negative_query_count: negativeQueries.length,
-      keyword_correct_rejection: negativeCorrectlyRejected,
-      keyword_rejection_rate: negativeQueries.length > 0 ? negativeCorrectlyRejected / negativeQueries.length : 1.0,
-      semantic_correct_rejection: search ? negativeResults.filter((r) => r.semantic_top5.length === 0).length : null,
-      semantic_rejection_rate: search ? (negativeResults.filter((r) => r.semantic_top5.length === 0).length / negativeQueries.length) : null,
+      negative_queries: negativeQueries.length,
+      keyword: {
+        correctly_rejected: negativeCorrectlyRejected,
+        false_positives: keywordFalsePositives,
+        rejection_rate: negativeQueries.length > 0 ? negativeCorrectlyRejected / negativeQueries.length : 0,
+      },
+      semantic: search ? {
+        correctly_rejected: negativeResults.filter((r) => r.semantic_top5.length === 0).length,
+        false_positives: negativeResults.filter((r) => r.semantic_top5.length > 0).length,
+        rejection_rate: negativeQueries.length > 0 ? negativeResults.filter((r) => r.semantic_top5.length === 0).length / negativeQueries.length : 0,
+      } : null,
     },
     similarity_distribution: similarityDistribution,
     latency: latencyStats,
