@@ -1,4 +1,4 @@
-/*
+/**
  * P0.3.4 — Production Retrieval Integration Tests
  *
  * Verifies that the calibrated parameters (TopK=5, Threshold=0.30)
@@ -8,7 +8,7 @@
  * to precisely test threshold and TopK behavior.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { SemanticRetriever } from '../semantic/semantic-retriever';
 import { DEFAULT_SIMILARITY_THRESHOLD, DEFAULT_TOP_K } from '../semantic/types';
 import type {
