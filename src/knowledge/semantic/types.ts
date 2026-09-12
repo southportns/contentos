@@ -1,4 +1,4 @@
-/**
+/*
  * P0.3.1 — Semantic Retrieval Types
  *
  * Defines the core interfaces for the Semantic Retrieval Foundation.
@@ -137,8 +137,25 @@ export interface SemanticIndexBuilderOptions {
 
 // ─── Default Values ────────────────────────────────────────────────────────
 
+/**
+ * P0.3.3 Calibration Result:
+ *   MVP similarity threshold = 0.30
+ *   (validated on 24 KUs / 10 evaluation queries)
+ *
+ * This is NOT a final production-optimal threshold.
+ * Future phases (P0.3.5+) may adjust based on expanded data.
+ */
+export const DEFAULT_SIMILARITY_THRESHOLD = 0.30;
+
+/**
+ * P0.3.3 Calibration Result:
+ *   MVP TopK = 5
+ *   (best precision-recall trade-off)
+ */
+export const DEFAULT_TOP_K = 5;
+
 export const DEFAULT_SEMANTIC_QUERY: Required<Omit<SemanticRetrievalQuery, 'query' | 'category' | 'knowledge_level' | 'confidence'>> = {
-  limit: 5,
-  min_similarity: 0.0,
+  limit: DEFAULT_TOP_K,
+  min_similarity: DEFAULT_SIMILARITY_THRESHOLD,
   include_candidates: false,
 };

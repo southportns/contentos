@@ -1,4 +1,4 @@
-/**
+/*
  * P0.3.1 — Semantic Retrieval Public API
  *
  * Main entry point for the Semantic Retrieval module.
@@ -18,7 +18,7 @@ export type {
   SemanticIndexBuilderOptions,
 } from './types';
 
-export { DEFAULT_SEMANTIC_QUERY } from './types';
+export { DEFAULT_SEMANTIC_QUERY, DEFAULT_SIMILARITY_THRESHOLD, DEFAULT_TOP_K } from './types';
 
 // ─── Embedding Providers ───────────────────────────────────────────────────
 
@@ -59,6 +59,15 @@ export {
   SemanticSearchEngine,
   createSemanticSearchEngine,
 } from './semantic-search';
+
+// ─── Real Semantic Search (P0.3.2-3) ─────────────────────────────────────
+
+export {
+  RealSemanticSearch,
+  createRealSemanticSearch,
+} from './real-semantic-search';
+
+export type { RealSemanticSearchConfig } from './real-semantic-search';
 
 // ─── Cloud Embedding Providers (P0.3.2-1) ─────────────────────────────────
 

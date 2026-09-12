@@ -1,4 +1,4 @@
-/**
+/*
  * P0.3.1 — Semantic Retriever
  *
  * Implements semantic retrieval against a pre-built semantic index.
@@ -21,6 +21,7 @@ import type {
   SemanticRetrievalResult,
   SemanticRetrievalResponse,
 } from './types';
+import { DEFAULT_SEMANTIC_QUERY } from './types';
 import { cosineSimilarity } from './similarity';
 import { entryMatchesFilters } from './semantic-index';
 
@@ -118,8 +119,8 @@ export class SemanticRetriever {
   async retrieve(
     query: SemanticRetrievalQuery
   ): Promise<SemanticRetrievalResponse> {
-    const limit = query.limit ?? 5;
-    const minSimilarity = query.min_similarity ?? 0.0;
+    const limit = query.limit ?? DEFAULT_SEMANTIC_QUERY.limit;
+    const minSimilarity = query.min_similarity ?? DEFAULT_SEMANTIC_QUERY.min_similarity;
 
     // 1. Embed the query
     const queryVector = await this.provider.embed(query.query);

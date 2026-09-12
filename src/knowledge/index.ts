@@ -1,4 +1,4 @@
-/**
+/*
  * P0.2.3 — Knowledge Store Public API
  *
  * Main entry point for the Knowledge Store module.
@@ -100,6 +100,8 @@ export type {
 
 export {
   DEFAULT_SEMANTIC_QUERY,
+  DEFAULT_SIMILARITY_THRESHOLD,
+  DEFAULT_TOP_K,
   MockEmbeddingProvider,
   EmbeddingProviderRegistry,
   defaultMockProvider,
@@ -115,6 +117,8 @@ export {
   createSemanticRetriever,
   SemanticSearchEngine,
   createSemanticSearchEngine,
+  RealSemanticSearch,
+  createRealSemanticSearch,
   // P0.3.2-1 — Cloud Embedding Providers
   AlibabaEmbeddingProvider,
   EmbeddingProviderError,
@@ -122,3 +126,5 @@ export {
   createProvider,
   createProviderRegistry,
 } from './semantic';
+
+export type { RealSemanticSearchConfig } from './semantic';
