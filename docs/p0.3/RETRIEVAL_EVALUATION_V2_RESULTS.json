@@ -1,0 +1,10 @@
+{
+  "task": "P0.3.5",
+  "date": "2026-09-12",
+  "evaluation_queries": 90,
+  "keyword": {
+    "strict_precision_at_5": 0.1081,
+    "strict_recall_at_5": 0.5338,
+    "strict_hit_rate_at_5": 0.473
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "version": "2.0",
+  "date": "2026-09-12",
+  "phase": "P0.3.5 Retrieval Evaluation Dataset Expansion",
+  "description": "Expanded evaluation dataset with 90 queries across 6 query types. Ground Truth annotated by human judgment based on whether a KU would help a content agent answer the query.",
+  "query_types": {
+    "exact": "Direct query using KU terminology",
+    "paraphrase": "Same intent as KU but expressed with different vocabulary",
+    "concept": "Intent-based query without using KU terminology",
+    "multi": "Query that naturally maps to multiple KUs",
+    "negative": "Completely unrelated to knowledge base",
+    "boundary": "Weakly related or ambiguous relevance"
+  },
+  "metrics": ["Precision@5", "Recall@5", "HitRate@5", "NegativeRejectionRate"],
+  "knowledge_base_reference": {
+    "total_kus": 24,
+    "validated_kus": 15,
+    "candidate_kus": 9,
+    "source": "docs/p0.2.2.1/VALIDATED_KNOWLEDGE_UNITS.json"
+  },
+  "queries": [
+    {
+      "query_id": "Q001",
+      "query": "爱自己",
+      "type": "concept",
+      "description": "Self-love topic — should match empowerment, self-worth related KUs",
+      "expected_knowledge_ids": ["KU_014"],
+      "accepted_knowledge_ids": ["KU_010", "KU_011", "KU_018", "KU_020", "KU_016"]
+    },
+    {
+      "query_id": "Q002",
+      "query": "职场边界",
+      "type": "boundary",
+      "description": "Workplace boundaries — scarce direct match in current dataset",
+      "expected_knowledge_ids": [],
+      "accepted_knowledge_ids": ["KU_007"]
+    },
+    {
+      "query_id": "Q003",
+      "query": "女性成长",
+      "type": "concept",
+      "description": "Female growth — should match empowerment, perspective, vulnerability KUs",
+      "expected_knowledge_ids": ["KU_010", "KU_011"],
+      "accepted_knowledge_ids": ["KU_003", "KU_005", "KU_014", "KU_008", "KU_018"]
+    },
+    {
+      "query_id": "Q004",
+      "query": "被爱",
+      "type": "concept",
+      "description": "Being loved — should match expectation reversal, regret-to-wisdom KUs",
+      "expected_knowledge_ids": ["KU_014"],
+      "accepted_knowledge_ids": ["KU_008", "KU_009", "KU_018", "KU_010"]
+    },
+    {
+      "query_id": "Q005",
+      "query": "自我价值",
+      "type": "exact",
+      "description": "Self-worth — should match empowerment and not-A-but-B KUs",
+      "expected_knowledge_ids": ["KU_010", "KU_013"],
+      "accepted_knowledge_ids": ["KU_014", "KU_011", "KU_020"]
+    },
+    {
+      "query_id": "Q006",
+      "query": "开头技巧",
+      "type": "exact",
+      "description": "Hook techniques — should match hook category KUs",
+      "expected_knowledge_ids": ["KU_001", "KU_003", "KU_005"],
+      "accepted_knowledge_ids": ["KU_002", "KU_004", "KU_007"]
+    },
+    {
+      "query_id": "Q007",
+      "query": "认知反转",
+      "type": "exact",
+      "description": "Cognitive reversal — should match expectation reversal pattern",
+      "expected_knowledge_ids": ["KU_014"],
+      "accepted_knowledge_ids": ["KU_012", "KU_024", "KU_010"]
+    },
+    {
+      "query_id": "Q008",
+      "query": "结尾行动",
+      "type": "exact",
+      "description": "Action ending — should match action prompt ending",
+      "expected_knowledge_ids": ["KU_022"],
+      "accepted_knowledge_ids": ["KU_021"]
+    },
+    {
+      "query_id": "Q009",
+      "query": "真实自然表达",
+      "type": "exact",
+      "description": "Natural authentic expression — should match expression principles",
+      "expected_knowledge_ids": ["KU_018", "KU_020"],
+      "accepted_knowledge_ids": ["KU_016"]
+    },
+    {
+      "query_id": "Q010",
+      "query": "量子物理芯片技术",
+      "type": "negative",
+      "description": "Completely unrelated topic — should return empty or very low scores",
+      "expected_knowledge_ids": [],
+      "accepted_knowledge_ids": []
+    }
+  ]
+}
