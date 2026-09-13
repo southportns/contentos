@@ -1,0 +1,31 @@
+{
+  "version": "2.0",
+  "date": "2026-09-12",
+  "phase": "P0.3.5 Retrieval Evaluation Dataset Expansion",
+  "description": "Expanded evaluation dataset with 90 queries across 6 query types. Ground Truth annotated by human judgment based on whether a KU would help a content agent answer the query.",
+  "query_types": {
+    "exact": "Direct query using KU terminology",
+    "paraphrase": "Same intent as KU but expressed with different vocabulary",
+    "concept": "Intent-based query without using KU terminology",
+    "multi": "Query that naturally maps to multiple KUs",
+    "negative": "Completely unrelated to knowledge base",
+    "boundary": "Weakly related or ambiguous relevance"
+  },
+  "metrics": ["Precision@5", "Recall@5", "HitRate@5", "NegativeRejectionRate"],
+  "knowledge_base_reference": {
+    "total_kus": 24,
+    "validated_kus": 15,
+    "candidate_kus": 9,
+    "source": "docs/p0.2.2.1/VALIDATED_KNOWLEDGE_UNITS.json"
+  },
+  "queries": [
+    {
+      "query_id": "Q001",
+      "query": "爱自己",
+      "type": "concept",
+      "description": "Self-love topic — should match empowerment, self-worth related KUs",
+      "expected_knowledge_ids": ["KU_014"],
+      "accepted_knowledge_ids": ["KU_010", "KU_011", "KU_018", "KU_020", "KU_016"]
+    }
+  ]
+}
