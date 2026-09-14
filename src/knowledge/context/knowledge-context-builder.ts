@@ -301,7 +301,9 @@ export function buildKnowledgeContext(
 
   // Step 7: Construct constraints
   const hasCandidates = truncatedItems.some((item) => item.status === 'candidate');
-  const wasTruncated = response.results.length > selectedCount;
+  // P0.3.7.3.1 Fix: wasTruncated must compare against filtered items (post-candidate-policy),
+  // not raw retrieval results. Candidate filtering is NOT truncation.
+  const wasTruncated = filteredItems.length > selectedCount;
 
   const constraints: KnowledgeContextConstraints = {
     hasCandidates,
