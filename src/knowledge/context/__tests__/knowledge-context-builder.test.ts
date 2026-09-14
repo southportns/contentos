@@ -24,6 +24,7 @@
  *   - Tie-breaker
  *   - No exception on empty knowledge
  *   - Candidate not converted to validated
+ *   - P0.3.7.3.1: wasTruncated semantics (5 boundary tests)
  */
 
 import { describe, it, expect } from 'vitest';
@@ -618,5 +619,108 @@ describe('Additional: Metadata format', () => {
     expect(context.metadata.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     expect(context.metadata.version).toBe('1.0.0');
     expect(context.metadata.source).toBe('p0.3.7');
+  });
+});
+
+// ─── P0.3.7.3.1: wasTruncated Boundary Tests ─────────────────────────────────
+
+describe('P0.3.7.3.1 Fix: wasTruncated semantics', () => {
+  // Case A: Normal maxItems truncation
+  it('Case A: wasTruncated=true when maxItems truncates eligible items', () => {
+    const kus = Array.from({ length: 5 }, (_, i) =>
+      createMockKU({ knowledge_id: `KU_A_${String(i + 1).padStart(2, '0')}` })
+    );
+    const results = kus.map((ku) => createMockResult(ku, 0.8));
+    const response = createMockResponse(results);
+
+    const context = buildKnowledgeContext(response, { maxItems: 3 });
+
+    // 5 validated eligible items, maxItems=3
+    // filteredItems=5, selectedCount=3 → wasTruncated=true
+    expect(context.selectedCount).toBe(3);
+    expect(context.constraints.wasTruncated).toBe(true);
+  });
+
+  // Case B: Candidate presence should NOT cause wasTruncated
+  it('Case B: candidate presence does not cause wasTruncated when maxItems not exceeded', () => {
+    const kuValidated1 = createMockKU({ knowledge_id: 'KU_V_01', status: 'validated' });
+    const kuValidated2 = createMockKU({ knowledge_id: 'KU_V_02', status: 'validated' });
+    const kuValidated3 = createMockKU({ knowledge_id: 'KU_V_03', status: 'validated' });
+    const kuCandidate1 = createMockKU({ knowledge_id: 'KU_C_01', status: 'candidate', confidence: 'medium' });
+    const kuCandidate2 = createMockKU({ knowledge_id: 'KU_C_02', status: 'candidate', confidence: 'medium' });
+
+    const response = createMockResponse([
+      createMockResult(kuValidated1, 0.95),
+      createMockResult(kuValidated2, 0.9),
+      createMockResult(kuValidated3, 0.85),
+      createMockResult(kuCandidate1, 0.8),
+      createMockResult(kuCandidate2, 0.75),
+    ]);
+
+    const context = buildKnowledgeContext(response, { maxItems: 5 });
+
+    // All 5 items fit (includeCandidates=true since candidates present)
+    // filteredItems=5, selectedCount=5 → wasTruncated=FALSE
+    expect(context.selectedCount).toBe(5);
+    expect(context.constraints.wasTruncated).toBe(false);
+    expect(context.constraints.hasCandidates).toBe(true);
+  });
+
+  // Case B-variant: Mixed with truncation only from maxItems
+  it('Case B-variant: wasTruncated=true only when maxItems causes truncation, not candidate presence', () => {
+    const kus = Array.from({ length: 7 }, (_, i) =>
+      createMockKU({
+        knowledge_id: `KU_MIX_${String(i + 1).padStart(2, '0')}`,
+        status: i < 3 ? 'candidate' as const : 'validated' as const,
+        confidence: i < 3 ? 'medium' as const : 'high' as const,
+      })
+    );
+    const results = kus.map((ku, i) => createMockResult(ku, 0.95 - i * 0.05));
+    const response = createMockResponse(results);
+
+    const context = buildKnowledgeContext(response, { maxItems: 4 });
+
+    // 7 total (3 candidate + 4 validated), includeCandidates=true → filteredItems=7
+    // maxItems=4 → selectedCount=4
+    // wasTruncated=true because maxItems truncated, NOT because of candidates
+    expect(context.selectedCount).toBe(4);
+    expect(context.constraints.wasTruncated).toBe(true);
+  });
+
+  // Case C: No truncation when all eligible items fit within maxItems
+  it('Case C: wasTruncated=false when all eligible items fit within maxItems', () => {
+    const ku1 = createMockKU({ knowledge_id: 'KU_C_01' });
+    const ku2 = createMockKU({ knowledge_id: 'KU_C_02' });
+    const ku3 = createMockKU({ knowledge_id: 'KU_C_03' });
+
+    const response = createMockResponse([
+      createMockResult(ku1, 0.9),
+      createMockResult(ku2, 0.85),
+      createMockResult(ku3, 0.8),
+    ]);
+
+    const context = buildKnowledgeContext(response, { maxItems: 5 });
+
+    // 3 eligible items, maxItems=5
+    // filteredItems=3, selectedCount=3 → wasTruncated=FALSE
+    expect(context.selectedCount).toBe(3);
+    expect(context.constraints.wasTruncated).toBe(false);
+  });
+
+  // Regression: Full results, no filtering, maxItems = default (5), results = 10
+  it('Regression: 10 validated + default maxItems(5) → wasTruncated=true', () => {
+    const kus = Array.from({ length: 10 }, (_, i) =>
+      createMockKU({ knowledge_id: `KU_REG_${String(i + 1).padStart(2, '0')}` })
+    );
+    const results = kus.map((ku) => createMockResult(ku, 0.8));
+    const response = createMockResponse(results);
+
+    const context = buildKnowledgeContext(response);
+
+    // 10 validated, default maxItems=5
+    // filteredItems=10, selectedCount=5 → wasTruncated=true
+    expect(context.selectedCount).toBe(5);
+    expect(context.constraints.wasTruncated).toBe(true);
+    expect(context.constraints.maxItems).toBe(5);
   });
 });
