@@ -24,6 +24,14 @@ export { buildKnowledgeContext } from './knowledge-context-builder';
 
 export { serializeKnowledgeContext } from './knowledge-context-serializer';
 
+// ─── Strategy Knowledge Contract (P0.3.8.1) ─────────────────────────────────
+
+export type {
+  StrategyKnowledgeContext,
+  StrategyKnowledgeItem,
+} from './strategy-knowledge-context';
+export { toStrategyKnowledgeContext } from './strategy-knowledge-context';
+
 // ─── Generation Orchestration (P0.3.7.5) ───────────────────────────────────
 
 export { retrieveKnowledgeContextForGeneration } from './generation-knowledge-context';
