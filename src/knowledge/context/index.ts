@@ -19,3 +19,7 @@ export type {
 
 export type { KnowledgeContextBuilderOptions } from './knowledge-context-builder';
 export { buildKnowledgeContext } from './knowledge-context-builder';
+
+// ─── Serializer (P0.3.7.4) ─────────────────────────────────────────────────
+
+export { serializeKnowledgeContext } from './knowledge-context-serializer';
