@@ -23,3 +23,7 @@ export { buildKnowledgeContext } from './knowledge-context-builder';
 // ─── Serializer (P0.3.7.4) ─────────────────────────────────────────────────
 
 export { serializeKnowledgeContext } from './knowledge-context-serializer';
+
+// ─── Generation Orchestration (P0.3.7.5) ───────────────────────────────────
+
+export { retrieveKnowledgeContextForGeneration } from './generation-knowledge-context';

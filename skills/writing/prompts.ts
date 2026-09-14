@@ -1,5 +1,7 @@
 import type { WritingInput } from './schema'
 import type { ExpressionPlan } from '@/lib/expression/types'
+import type { KnowledgeContext } from '@/knowledge/context'
+import { serializeKnowledgeContext } from '@/knowledge/context'
 import { NAME_DESENSITIZATION_RULE, AUDIENCE_PERSPECTIVE_RULE } from '@/lib/ai/shared-prompts'
 
 export const WRITING_SYSTEM_PROMPT = `你是一个优秀的内容写手。你的任务是基于内容策略，写出完整的内容初稿。
@@ -67,6 +69,7 @@ export const WRITING_PROMPT = (
     keyInsights?: string[]
     memorableQuotes?: string[]
   },
+  knowledgeContext?: KnowledgeContext,
 ): string => {
   const structureStr = strategy.structure
     .map(
@@ -127,6 +130,13 @@ ${originalParts.join('\n\n')}
     }
   }
 
+  // P0.3.7.5 — Knowledge Context Block（独立 prompt block）
+  // 由 P0.3.7.4 Serializer 生成，Generation Layer 不重新拼接知识格式。
+  // 空 context 时 serializer 返回稳定占位文本，prompt 仍正常组装。
+  const knowledgeStr = knowledgeContext
+    ? `\n${serializeKnowledgeContext(knowledgeContext)}`
+    : ''
+
   return `主题：${topic}
 
 选定角度：${selectedAngle.title} — ${selectedAngle.angle}
@@ -145,7 +155,7 @@ ${originalParts.join('\n\n')}
 ${structureStr}
 ${personaStr}${audienceStr}
 ${expressionPlanStr}
-${originalStr}
+${originalStr}${knowledgeStr}
 ${platform ? `目标平台：${platform}` : ''}
 ${wordCount ? `目标字数：${wordCount}` : `预计总字数：${strategy.estimatedWordCount}`}
 ${originalStr ? '\n⚠️ 重要约束：\n- 必须严格基于原始素材中的事实（数字、事件、人物关系等）\n- 不得编造原文中未提及的人物（如子女、配偶等）\n- 不得编造与原文矛盾的金额数字\n- 不得添加原文不存在的个人经历细节' : ''}

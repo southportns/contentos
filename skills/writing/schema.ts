@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { KnowledgeContext } from '@/knowledge/context'
 
 export const writingInputSchema = z.object({
   topic: z.string().min(1, '主题不能为空'),
@@ -53,6 +54,13 @@ export const writingInputSchema = z.object({
       memorableQuotes: z.array(z.string()).optional(),
     })
     .optional(),
+  /**
+   * P0.3.7.5 — Knowledge Context（由编排层构建）。
+   * 提供时，Prompt Assembly 会通过 serializeKnowledgeContext()
+   * 将其作为独立 Knowledge Context Block 注入 user prompt。
+   * 不提供时，行为与之前完全一致。
+   */
+  knowledgeContext: z.custom<KnowledgeContext>().optional(),
 })
 
 export const writingOutputSchema = z.object({

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { runWriting } from '@/skills/writing'
 import { contentService } from '@/lib/services/content-service'
 import { safeDb, isDatabaseConfigured } from '@/lib/utils/db-safe'
+import { retrieveKnowledgeContextForGeneration } from '@/knowledge/context'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -68,7 +69,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const input = inputSchema.parse(body)
 
-    const result = await runWriting(input)
+    // P0.3.7.5 — Knowledge Context orchestration:
+    // Semantic Retrieval → KnowledgeContextBuilder → KnowledgeContext.
+    // Retrieval failure degrades to null (pure LLM generation, never blocked).
+    const knowledgeContext = await retrieveKnowledgeContextForGeneration(
+      [input.topic, input.selectedAngle.title, input.selectedAngle.angle].join(' '),
+    )
+
+    const result = await runWriting({
+      ...input,
+      knowledgeContext: knowledgeContext ?? undefined,
+    })
 
     // Persist to database
     if (isDatabaseConfigured() && input.topicId) {

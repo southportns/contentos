@@ -86,6 +86,7 @@ export async function runWriting(
       validated.expressionPlan as ExpressionPlan | undefined,
       validated.audience,
       validated.originalContent,
+      validated.knowledgeContext,
     ),
   })
 
