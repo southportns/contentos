@@ -1,3 +1,6 @@
+import type { StrategyKnowledgeContext } from '@/knowledge/context'
+import { serializeStrategyKnowledgeContext } from './knowledge-serializer'
+
 export const CONTENT_STRATEGY_SYSTEM_PROMPT = `你是一个内容策略师。你的任务是基于选定的内容角度，生成完整的内容策略。
 
 要求：
@@ -47,6 +50,8 @@ export const CONTENT_STRATEGY_PROMPT = (
     keyInsights?: string[]
     memorableQuotes?: string[]
   },
+  /** P0.3.8.3 — Strategy Knowledge Context (optional, retrieval-augmented) */
+  strategyKnowledge?: StrategyKnowledgeContext | null,
 ): string => {
   const profileStr = topicProfile
     ? `
@@ -100,6 +105,14 @@ ${sourceParts.join('\n\n')}
     }
   }
 
+  // P0.3.8.3 — Strategy Knowledge Context Block
+  // null → retrieval failure / not available → no block injected
+  // empty context → placeholder block injected
+  // non-empty → serialized knowledge block injected
+  const knowledgeStr = strategyKnowledge
+    ? `\n${serializeStrategyKnowledgeContext(strategyKnowledge)}\n`
+    : ''
+
   return `主题：${topic}
 
 选定角度：
@@ -109,6 +122,7 @@ ${sourceParts.join('\n\n')}
 - 关键要点：${selectedAngle.keyPoints.join('\n')}
 ${profileStr}${audienceStr}${personaStr}
 ${sourceStr}
+${knowledgeStr}
 ${platform ? `目标平台：${platform}` : ''}
 ${contentType ? `内容类型：${contentType}` : ''}
 ${tone ? `期望语调：${tone}` : ''}

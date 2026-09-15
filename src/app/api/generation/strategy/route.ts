@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { runContentStrategy } from '@/skills/content-strategy'
+import { retrieveStrategyKnowledgeContext } from '@/knowledge/context'
 import { contentService } from '@/lib/services/content-service'
 import { safeDb, isDatabaseConfigured } from '@/lib/utils/db-safe'
 
@@ -58,7 +59,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const input = inputSchema.parse(body)
 
-    const result = await runContentStrategy(input)
+    // P0.3.8.3 — Strategy Knowledge Retrieval (graceful degradation)
+    // Retrieval failure → null → strategy proceeds as pure LLM, never blocked
+    const strategyQuery = [
+      input.topic,
+      input.selectedAngle.title,
+      input.selectedAngle.angle,
+    ].join(' ')
+
+    const strategyKnowledge = await retrieveStrategyKnowledgeContext(strategyQuery)
+
+    const result = await runContentStrategy({
+      ...input,
+      strategyKnowledge: strategyKnowledge ?? undefined,
+    })
 
     // Persist to database
     if (isDatabaseConfigured() && input.topicId) {

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { StrategyKnowledgeContext } from '@/knowledge/context'
 
 export const contentStrategyInputSchema = z.object({
   topic: z.string().min(1, '主题不能为空'),
@@ -42,6 +43,13 @@ export const contentStrategyInputSchema = z.object({
       description: z.string().nullable(),
     })
     .optional(),
+  /**
+   * P0.3.8.3 — Strategy Knowledge Context（由编排层通过 P0.3.8.2 检索构建）。
+   * 提供时，Prompt Assembly 会通过 serializeStrategyKnowledgeContext()
+   * 将其作为独立 Strategy Knowledge Context Block 注入 user prompt。
+   * 不提供时，行为与之前完全一致（纯 LLM 策略生成）。
+   */
+  strategyKnowledge: z.custom<StrategyKnowledgeContext>().optional(),
 })
 
 export const contentStrategyOutputSchema = z.object({
