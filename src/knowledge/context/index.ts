@@ -35,3 +35,7 @@ export { toStrategyKnowledgeContext } from './strategy-knowledge-context';
 // ─── Generation Orchestration (P0.3.7.5) ───────────────────────────────────
 
 export { retrieveKnowledgeContextForGeneration } from './generation-knowledge-context';
+
+// ─── Strategy Orchestration (P0.3.8.2) ──────────────────────────────────────
+
+export { retrieveStrategyKnowledgeContext } from './strategy-knowledge-retrieval';
