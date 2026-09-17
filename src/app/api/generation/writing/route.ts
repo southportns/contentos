@@ -8,9 +8,12 @@ import { retrieveKnowledgeContextForGeneration } from '@/knowledge/context'
 export const runtime = 'nodejs'
 export const maxDuration = 120
 
+// P0.3.8.4.1 — Writing API requires strategyId for approval gate.
+// The server loads the strategy from DB to verify approval status —
+// it NEVER trusts client-provided approval status.
 const inputSchema = z.object({
   topic: z.string().min(1),
-  topicId: z.string().optional(),
+  strategyId: z.string().min(1),
   strategy: z.object({
     title: z.string(),
     hook: z.string(),
@@ -69,6 +72,41 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const input = inputSchema.parse(body)
 
+    // ── P0.3.8.4.1 — Strategy Approval Gate (CRITICAL SECURITY CHECK) ──
+    // Server loads strategy from DB — NEVER trusts client-provided data.
+    // Cases: pending, rejected, missing strategy, tampered payload → ALL BLOCKED
+    if (isDatabaseConfigured()) {
+      const strategy = await safeDb(
+        () => contentService.getStrategyById(input.strategyId),
+        'writing-gate-check',
+      )
+
+      // Missing strategy → NOT APPROVED (missing = not approved, never default-approve)
+      if (!strategy) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'STRATEGY_NOT_APPROVED',
+            message: 'Strategy not found. Strategy must be generated and approved before writing.',
+          },
+          { status: 403 },
+        )
+      }
+
+      // Strategy exists but not approved → BLOCKED
+      if (strategy.approvalStatus !== 'approved') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'STRATEGY_NOT_APPROVED',
+            message: `Strategy is '${strategy.approvalStatus}'. Only 'approved' strategies can proceed to writing.`,
+            currentStatus: strategy.approvalStatus,
+          },
+          { status: 403 },
+        )
+      }
+    }
+
     // P0.3.7.5 — Knowledge Context orchestration:
     // Semantic Retrieval → KnowledgeContextBuilder → KnowledgeContext.
     // Retrieval failure degrades to null (pure LLM generation, never blocked).
@@ -81,20 +119,25 @@ export async function POST(req: NextRequest) {
       knowledgeContext: knowledgeContext ?? undefined,
     })
 
-    // Persist to database
-    if (isDatabaseConfigured() && input.topicId) {
+    // Persist to database (get topicId from the approved strategy)
+    if (isDatabaseConfigured()) {
       await safeDb(async () => {
-        const { id } = await contentService.saveDraft({
-          topicId: input.topicId!,
-          title: result.title,
-          content: result.content,
-          outline: result.sections,
-          wordCount: result.wordCount,
-          status: 'DRAFT',
-        })
-        await contentService.updateTopicStatus(input.topicId!, 'WRITING')
-        // Return draft ID in the response for evaluation to use
-        return id
+        // Get strategy to find topicId for draft persistence
+        const strategy = await contentService.getStrategyById(input.strategyId)
+        if (strategy) {
+          const { id } = await contentService.saveDraft({
+            topicId: strategy.topicId,
+            title: result.title,
+            content: result.content,
+            outline: result.sections,
+            wordCount: result.wordCount,
+            status: 'DRAFT',
+          })
+          await contentService.updateTopicStatus(strategy.topicId, 'WRITING')
+          // Return draft ID in the response for evaluation to use
+          return id
+        }
+        return null
       }, 'writing-save')
     }
 

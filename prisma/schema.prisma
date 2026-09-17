@@ -300,12 +300,18 @@ model ContentStrategy {
   suggestedReferences Json? // array of strings (stored as JSON for SQLite)
   tone             String?
   estimatedWordCount Int?
+  // P0.3.8.4.1 — Server-side Approval State (Source of Truth)
+  approvalStatus   String   @default("pending") // pending | approved | rejected
+  rejectionReason  String?
+  approvedAt       DateTime?
+  rejectedAt       DateTime?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   topic Topic @relation(fields: [topicId], references: [id], onDelete: Cascade)
 
   @@index([topicId])
+  @@index([approvalStatus])
 }
 
 // ─── Drafts ─────────────────────────────────────────────

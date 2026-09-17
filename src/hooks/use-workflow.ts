@@ -324,6 +324,9 @@ export interface WorkflowState {
   // Step 4: Strategy
   strategy: ContentStrategy | null
 
+  // P0.3.8.4.1 — Server-side strategy ID (for approval API calls)
+  strategyId: string | null
+
   // P0.3.8.4 — Strategy Approval Gate
   strategyApproval: StrategyApprovalState
 
@@ -360,6 +363,8 @@ const initialState: WorkflowState = {
   angles: [],
   selectedAngle: null,
   strategy: null,
+  // P0.3.8.4.1 — Server-side strategy ID
+  strategyId: null,
   // P0.3.8.4 — Strategy Approval Gate: initial state
   strategyApproval: {
     status: 'none',
@@ -481,6 +486,10 @@ export const workflowActions = {
   setStrategy: (strategy: ContentStrategy) =>
     setState((prev) => ({ ...prev, strategy })),
 
+  // P0.3.8.4.1 — Set server-side strategy ID (from API response)
+  setStrategyId: (id: string | null) =>
+    setState((prev) => ({ ...prev, strategyId: id })),
+
   // P0.3.8.4 — Strategy Approval Gate actions
 
   /** Mark strategy as pending approval after generation */
@@ -523,6 +532,8 @@ export const workflowActions = {
   resetStrategyApproval: () =>
     setState((prev) => ({
       ...prev,
+      // P0.3.8.4.1 — Reset strategyId on regenerate (new strategy = new ID)
+      strategyId: null,
       strategyApproval: {
         status: 'none',
         knowledgeAssisted: false,
@@ -567,6 +578,7 @@ export const workflowActions = {
       angles: [],
       selectedAngle: null,
       strategy: null,
+      strategyId: null,
       draft: null,
       evaluation: null,
       strategyEvaluation: null,

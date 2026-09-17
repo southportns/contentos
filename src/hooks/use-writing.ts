@@ -4,6 +4,8 @@ import { useState, useCallback } from 'react'
 
 interface WritingInput {
   topic: string
+  // P0.3.8.4.1 — strategyId for server-side approval gate verification
+  strategyId: string
   strategy: {
     title: string
     hook: string

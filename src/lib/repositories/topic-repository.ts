@@ -60,14 +60,15 @@ export const topicRepository = {
 
   async upsertStrategy(
     data: Omit<Prisma.ContentStrategyCreateInput, 'angle'> & { angleId?: string },
-  ): Promise<void> {
+  ): Promise<{ id: string }> {
     const topicId = (data.topic as { connect: { id: string } }).connect.id
     const { angleId, ...rest } = data
-    await prisma.contentStrategy.upsert({
+    const strategy = await prisma.contentStrategy.upsert({
       where: { topicId },
       create: {
         ...rest,
         angleId: angleId || null,
+        approvalStatus: 'pending',
       },
       update: {
         angleId: angleId || null,
@@ -81,8 +82,54 @@ export const topicRepository = {
         turningPoint: rest.turningPoint,
         endingStrategy: rest.endingStrategy,
         ctaStrategy: rest.ctaStrategy,
+        // P0.3.8.4.1 — Reset approval status on regenerate
+        approvalStatus: 'pending',
+        rejectionReason: null,
+        approvedAt: null,
+        rejectedAt: null,
       },
     })
+    return { id: strategy.id }
+  },
+
+  /**
+   * P0.3.8.4.1 — Approve strategy (conditional update for race safety).
+   * Only transitions from 'pending' → 'approved'.
+   * Returns true if the update was applied, false if state was already changed.
+   */
+  async approveStrategy(strategyId: string): Promise<boolean> {
+    const result = await prisma.contentStrategy.updateMany({
+      where: { id: strategyId, approvalStatus: 'pending' },
+      data: { approvalStatus: 'approved', approvedAt: new Date() },
+    })
+    return result.count > 0
+  },
+
+  /**
+   * P0.3.8.4.1 — Reject strategy (conditional update for race safety).
+   * Only transitions from 'pending' → 'rejected'.
+   * Returns true if the update was applied, false if state was already changed.
+   */
+  async rejectStrategy(strategyId: string, reason?: string): Promise<boolean> {
+    const result = await prisma.contentStrategy.updateMany({
+      where: { id: strategyId, approvalStatus: 'pending' },
+      data: { approvalStatus: 'rejected', rejectionReason: reason ?? null, rejectedAt: new Date() },
+    })
+    return result.count > 0
+  },
+
+  /**
+   * P0.3.8.4.1 — Find strategy by topic ID (for Writing API gate).
+   */
+  async findStrategyByTopicId(topicId: string): Promise<Prisma.ContentStrategyGetPayload<{}> | null> {
+    return prisma.contentStrategy.findUnique({ where: { topicId } })
+  },
+
+  /**
+   * P0.3.8.4.1 — Find strategy by strategy ID.
+   */
+  async findStrategyById(strategyId: string): Promise<Prisma.ContentStrategyGetPayload<{}> | null> {
+    return prisma.contentStrategy.findUnique({ where: { id: strategyId } })
   },
 
   // ── Draft ───────────────────────────────────────────

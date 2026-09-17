@@ -129,6 +129,9 @@ export default function GeneratePage() {
     const strategyData = strategyResult as unknown as ContentStrategy
     workflowActions.setStrategy(strategyData)
 
+    // P0.3.8.4.1 — Store server-side strategyId for approval API calls
+    workflowActions.setStrategyId(strategyHook.strategyId ?? null)
+
     // P0.3.8.4 — Mark strategy as pending approval
     // knowledgeAssisted=true because API route always attempts retrieval
     // (graceful degradation handles null context — user sees in strategy preview)
@@ -155,6 +158,7 @@ export default function GeneratePage() {
     setPipelinePhase('writing')
     const writingResult = await writingHook.generate({
       topic: ws.topicProfile.topic,
+      strategyId: ws.strategyId!,
       strategy: strategyData,
       selectedAngle: {
         title: ws.selectedAngle.title,
@@ -260,18 +264,58 @@ export default function GeneratePage() {
     handleGenerateStrategy()
   }, [ws.strategyApproval.status, handleGenerateStrategy])
 
-  // P0.3.8.4 — Approve handler
-  const handleApproveStrategy = useCallback(() => {
+  // P0.3.8.4.1 — Approve handler: call Approve API first, then proceed
+  const handleApproveStrategy = useCallback(async () => {
+    // P0.3.8.4.1 — Call server-side Approve API (source of truth)
+    if (ws.strategyId) {
+      try {
+        const res = await fetch('/api/generation/strategy/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ strategyId: ws.strategyId }),
+        })
+        const data = await res.json()
+        if (!data.success) {
+          console.error('[Approve] Server approval failed:', data.error)
+          return
+        }
+      } catch (err) {
+        console.error('[Approve] Network error:', err)
+        return
+      }
+    }
+
+    // P0.3.8.4 — Update client state after server confirms
     workflowActions.approveStrategy()
     // Stage 2: Continue to writing + evaluation
     handleContinueAfterApproval()
-  }, [handleContinueAfterApproval])
+  }, [ws.strategyId, handleContinueAfterApproval])
 
-  // P0.3.8.4 — Regenerate handler (reject + generate again)
-  const handleRegenerateStrategy = useCallback(() => {
+  // P0.3.8.4.1 — Regenerate handler: call Reject API, then generate again
+  const handleRegenerateStrategy = useCallback(async () => {
+    // P0.3.8.4.1 — Call server-side Reject API
+    if (ws.strategyId) {
+      try {
+        const res = await fetch('/api/generation/strategy/reject', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ strategyId: ws.strategyId }),
+        })
+        const data = await res.json()
+        if (!data.success) {
+          console.error('[Reject] Server reject failed:', data.error)
+          return
+        }
+      } catch (err) {
+        console.error('[Reject] Network error:', err)
+        return
+      }
+    }
+
+    // P0.3.8.4 — Update client state after server confirms
     workflowActions.rejectStrategy()
     handleGenerateStrategy()
-  }, [handleGenerateStrategy])
+  }, [ws.strategyId, handleGenerateStrategy])
 
   const handleUpdateDraft = useCallback((patch: Partial<WritingDraft>) => {
     workflowActions.updateDraft(patch)

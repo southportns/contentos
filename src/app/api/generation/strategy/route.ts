@@ -74,10 +74,13 @@ export async function POST(req: NextRequest) {
       strategyKnowledge: strategyKnowledge ?? undefined,
     })
 
-    // Persist to database
+    // Persist to database (with server-side approval state)
+    // P0.3.8.4.1 — Strategy is always created with approvalStatus = 'pending'
+    // The repository's upsertStrategy enforces this — client cannot override
+    let strategyId: string | null = null
     if (isDatabaseConfigured() && input.topicId) {
-      await safeDb(async () => {
-        await contentService.saveStrategy({
+      const saved = await safeDb(async () => {
+        const saveResult = await contentService.saveStrategy({
           topicId: input.topicId!,
           angleId: input.angleId,
           coreThesis: result.title,
@@ -88,12 +91,16 @@ export async function POST(req: NextRequest) {
           targetAudience: undefined,
         })
         await contentService.updateTopicStatus(input.topicId!, 'STRATEGY')
+        return saveResult
       }, 'content-strategy-save')
+      strategyId = saved?.id ?? null
     }
 
     return NextResponse.json({
       success: true,
       data: result,
+      // P0.3.8.4.1 — Return strategyId so client can reference it for approval
+      strategyId,
     })
   } catch (error) {
     if (error instanceof z.ZodError) {

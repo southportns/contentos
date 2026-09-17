@@ -67,11 +67,14 @@ export function useContentStrategy() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [strategy, setStrategy] = useState<ContentStrategyOutput | null>(null)
+  // P0.3.8.4.1 — strategyId from server (for approval API calls)
+  const [strategyId, setStrategyId] = useState<string | null>(null)
 
   const generate = useCallback(async (input: ContentStrategyInput) => {
     setLoading(true)
     setError(null)
     setStrategy(null)
+    setStrategyId(null)
 
     try {
       const res = await fetch('/api/generation/strategy', {
@@ -87,6 +90,10 @@ export function useContentStrategy() {
       }
 
       setStrategy(data.data as ContentStrategyOutput)
+      // P0.3.8.4.1 — Capture strategyId for server-side approval
+      if (data.strategyId) {
+        setStrategyId(data.strategyId)
+      }
       return data.data as ContentStrategyOutput
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
@@ -106,6 +113,7 @@ export function useContentStrategy() {
     loading,
     error,
     strategy,
+    strategyId,
     generate,
     reset,
   }

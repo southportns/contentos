@@ -247,8 +247,8 @@ export const contentService = {
 
   // ── Strategy ────────────────────────────────────────
 
-  async saveStrategy(input: SaveStrategyInput): Promise<void> {
-    await topicRepository.upsertStrategy({
+  async saveStrategy(input: SaveStrategyInput): Promise<{ id: string } | null> {
+    const result = await topicRepository.upsertStrategy({
       topic: { connect: { id: input.topicId } },
       angleId: input.angleId || undefined,
       coreThesis: input.coreThesis,
@@ -262,6 +262,37 @@ export const contentService = {
       endingStrategy: input.endingStrategy,
       ctaStrategy: input.ctaStrategy,
     })
+    return result ? { id: result.id } : null
+  },
+
+  /**
+   * P0.3.8.4.1 — Approve strategy (conditional update for race safety).
+   * Only transitions from 'pending' → 'approved'.
+   */
+  async approveStrategy(strategyId: string): Promise<boolean> {
+    return topicRepository.approveStrategy(strategyId)
+  },
+
+  /**
+   * P0.3.8.4.1 — Reject strategy (conditional update for race safety).
+   * Only transitions from 'pending' → 'rejected'.
+   */
+  async rejectStrategy(strategyId: string, reason?: string): Promise<boolean> {
+    return topicRepository.rejectStrategy(strategyId, reason)
+  },
+
+  /**
+   * P0.3.8.4.1 — Get strategy by topic ID (for Writing API gate).
+   */
+  async getStrategyByTopicId(topicId: string) {
+    return topicRepository.findStrategyByTopicId(topicId)
+  },
+
+  /**
+   * P0.3.8.4.1 — Get strategy by strategy ID.
+   */
+  async getStrategyById(strategyId: string) {
+    return topicRepository.findStrategyById(strategyId)
   },
 
   // ── Draft ───────────────────────────────────────────
