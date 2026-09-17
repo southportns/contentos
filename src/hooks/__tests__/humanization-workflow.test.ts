@@ -21,9 +21,9 @@ type HumanizationAction =
 function humanizationReducer(prev: HumanizationWorkflowLite, action: HumanizationAction): HumanizationWorkflowLite {
   switch (action.type) {
     case 'SET_STATUS':
-      return { ...prev, humanization: { ...prev.humanization, status: action.status } }
+      return { ...prev, humanization: { ...prev.humanization, status: action.status, adopted: false } }
     case 'SET_RESULT':
-      return { ...prev, humanization: { ...prev.humanization, status: 'success', result: action.result } }
+      return { ...prev, humanization: { ...prev.humanization, status: 'success', result: action.result, adopted: false } }
     case 'ADOPT': {
       const result = prev.humanization.result
       if (!result) return prev
@@ -160,6 +160,26 @@ describe('P0.3.9.3 - Humanization Integration Pipeline', () => {
     const beforeState = state
     state = humanizationReducer(state, { type: 'ADOPT' })
     expect(state).toEqual(beforeState)
+  })
+
+  it('INT-7. SET_STATUS resets adopted flag (adopted must be re-decided each time)', () => {
+    state = humanizationReducer(state, { type: 'SET_REFINE_DATA', data: makeRefineResult() })
+    state = humanizationReducer(state, { type: 'SET_RESULT', result: makeHumanizationResult() })
+    state = humanizationReducer(state, { type: 'ADOPT' })
+    expect(state.humanization.adopted).toBe(true)
+    state = humanizationReducer(state, { type: 'SET_STATUS', status: 'loading' })
+    expect(state.humanization.adopted).toBe(false)
+  })
+
+  it('INT-8. SET_RESULT resets adopted flag (new result = new decision required)', () => {
+    state = humanizationReducer(state, { type: 'SET_REFINE_DATA', data: makeRefineResult() })
+    state = humanizationReducer(state, { type: 'SET_RESULT', result: makeHumanizationResult() })
+    state = humanizationReducer(state, { type: 'ADOPT' })
+    expect(state.humanization.adopted).toBe(true)
+    const newResult = makeHumanizationResult({ content: '第二次真人化结果' })
+    state = humanizationReducer(state, { type: 'SET_RESULT', result: newResult })
+    expect(state.humanization.adopted).toBe(false)
+    expect(state.humanization.result?.content).toBe('第二次真人化结果')
   })
 
   it('INT-6. Empty manual fallback chain', () => {
