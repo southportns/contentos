@@ -218,6 +218,23 @@ export interface RefineResult {
   }>
 }
 
+// ─── P0.3.9.2: Evaluation → Refine Issue Feedback Loop ─────────────────────
+
+/**
+ * RefineIssue — structured representation of an evaluation suggestion
+ * for the Refine page's issue selection UI.
+ */
+export interface RefineIssue {
+  /** Stable ID: uses evaluation suggestion index as fallback */
+  id: string
+  section: string
+  issue: string
+  suggestion: string
+  priority: 'high' | 'medium' | 'low'
+  selected: boolean
+  resolved: boolean
+}
+
 export interface FinalOutput {
   title: string
   content: string
@@ -362,6 +379,9 @@ export interface WorkflowState {
   // Step 8: Refine
   refineData: RefineResult | null
 
+  // P0.3.9.2: Evaluation issues converted for Refine UI selection
+  refineIssues: RefineIssue[]
+
   // Step 9: Final Output
   finalOutput: FinalOutput | null
 }
@@ -394,6 +414,7 @@ const initialState: WorkflowState = {
   strategyEvaluation: null,
   riskAnalysis: null,
   refineData: null,
+  refineIssues: [],
   finalOutput: null,
 }
 
@@ -586,6 +607,44 @@ export const workflowActions = {
       refineData: prev.refineData ? { ...prev.refineData, ...patch } : null,
     })),
 
+  // P0.3.9.2: Refine Issue Feedback Loop actions
+
+  /** Set refine issues from evaluation adapter */
+  setRefineIssues: (issues: RefineIssue[]) =>
+    setState((prev) => ({ ...prev, refineIssues: issues })),
+
+  /** Toggle selection of a single issue by id */
+  toggleRefineIssue: (id: string) =>
+    setState((prev) => ({
+      ...prev,
+      refineIssues: prev.refineIssues.map((issue) =>
+        issue.id === id ? { ...issue, selected: !issue.selected } : issue,
+      ),
+    })),
+
+  /** Mark specified issues as resolved */
+  markRefineIssuesResolved: (resolvedIds: string[]) =>
+    setState((prev) => {
+      const resolvedSet = new Set(resolvedIds)
+      return {
+        ...prev,
+        refineIssues: prev.refineIssues.map((issue) =>
+          resolvedSet.has(issue.id) ? { ...issue, resolved: true } : issue,
+        ),
+      }
+    }),
+
+  /** Reset all issue selections to default (high priority selected) */
+  resetRefineIssueSelections: () =>
+    setState((prev) => ({
+      ...prev,
+      refineIssues: prev.refineIssues.map((issue) => ({
+        ...issue,
+        selected: issue.priority === 'high',
+        resolved: false,
+      })),
+    })),
+
   setFinalOutput: (output: FinalOutput) =>
     setState((prev) => ({ ...prev, finalOutput: output })),
 
@@ -601,6 +660,7 @@ export const workflowActions = {
       strategyEvaluation: null,
       riskAnalysis: null,
       refineData: null,
+      refineIssues: [],
       finalOutput: null,
       adaptationResult: null,
       distillationResult: null,
