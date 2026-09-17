@@ -10,6 +10,8 @@ import {
   REFINE_FULL_OUTPUT_SYSTEM_PROMPT,
   REFINE_COMPACT_SYSTEM_PROMPT,
   REFINE_PROMPT,
+  REFINE_ISSUE_FIX_PROMPT,
+  REFINE_HUMANIZE_PROMPT,
 } from './prompts'
 import type { RefineInput, RefineOutput } from './schema'
 
@@ -25,11 +27,33 @@ JSON 对象格式：
       "type": "修改类型",
       "original": "原文片段",
       "revised": "修改后片段",
-      "reason": "修改原因"
+      "reason": "修改原因",
+      "linkedIssueId": "关联的问题ID（可选）",
+      "confidence": 置信度 0-1（可选）
     }
   ],
   "hookCandidates": ["钩子候选1", "钩子候选2"],
   "titleCandidates": ["标题候选1", "标题候选2"],
+  "resolvedIssues": [
+    {
+      "issueId": "问题ID",
+      "resolution": "解决方案说明",
+      "changeId": "关联的change ID（可选）"
+    }
+  ],
+  "unresolvedIssues": [
+    {
+      "issueId": "问题ID",
+      "reason": "无法解决的原因",
+      "suggestion": "建议"
+    }
+  ],
+  "preservedElements": [
+    {
+      "element": "保留的元素",
+      "reason": "保留原因"
+    }
+  ],
   "summary": "本次精修的总结说明"
 }
 
@@ -179,6 +203,58 @@ export async function runRefine(
     }
   }
 
+  // ── P0.3.9.1: issue_fix mode — structured LLM rewrite ──
+  if (validated.mode === 'issue_fix') {
+    const { text } = await generateText({
+      model,
+      system: REFINE_FULL_OUTPUT_SYSTEM_PROMPT + JSON_INSTRUCTION,
+      prompt: REFINE_ISSUE_FIX_PROMPT({
+        content: validated.content,
+        title: validated.title,
+        hook: validated.hook,
+        evaluationContext: validated.evaluationContext,
+        riskContext: validated.riskContext,
+        approvedStrategy: validated.approvedStrategy,
+        platform: validated.platform,
+        topic: validated.topic,
+      }),
+    })
+
+    const json = extractJsonFromText(text)
+    const rawJson = json as Record<string, unknown>
+
+    // Defensive: normalize candidate arrays if present
+    normalizeCandidateArrays(rawJson)
+
+    const result = refineOutputSchema.parse(rawJson)
+    result.wordCount = result.content.length
+    return result
+  }
+
+  // ── P0.3.9.1: humanize mode — contract exists, uses LLM path ──
+  if (validated.mode === 'humanize') {
+    const { text } = await generateText({
+      model,
+      system: REFINE_FULL_OUTPUT_SYSTEM_PROMPT + JSON_INSTRUCTION,
+      prompt: REFINE_HUMANIZE_PROMPT({
+        content: validated.content,
+        title: validated.title,
+        hook: validated.hook,
+        platform: validated.platform,
+        persona: validated.persona,
+      }),
+    })
+
+    const json = extractJsonFromText(text)
+    const rawJson = json as Record<string, unknown>
+
+    normalizeCandidateArrays(rawJson)
+
+    const result = refineOutputSchema.parse(rawJson)
+    result.wordCount = result.content.length
+    return result
+  }
+
   // ── 完整模式：tone_change 需要返回完整内容 ──
   const { text } = await generateText({
     model,
@@ -201,6 +277,23 @@ export async function runRefine(
 
   // 防御性处理：LLM 可能返回对象数组而非字符串数组
   const rawJson = json as Record<string, unknown>
+  normalizeCandidateArrays(rawJson)
+
+  const result = refineOutputSchema.parse(rawJson)
+
+  // Recalculate word count
+  result.wordCount = result.content.length
+
+  return result
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Defensive normalization: LLM may return object arrays instead of string arrays.
+ * Converts hookCandidates / titleCandidates to plain string arrays.
+ */
+function normalizeCandidateArrays(rawJson: Record<string, unknown>): void {
   if (rawJson.hookCandidates && Array.isArray(rawJson.hookCandidates)) {
     rawJson.hookCandidates = (rawJson.hookCandidates as unknown[]).map((item) => {
       if (typeof item === 'string') return item
@@ -239,11 +332,4 @@ export async function runRefine(
       return String(item)
     })
   }
-
-  const result = refineOutputSchema.parse(rawJson)
-
-  // Recalculate word count
-  result.wordCount = result.content.length
-
-  return result
 }
