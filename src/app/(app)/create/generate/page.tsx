@@ -73,28 +73,36 @@ export default function GeneratePage() {
     }
   }, [ws.selectedAngle, router])
 
-  const handleGenerate = useCallback(async () => {
-    if (!ws.topicProfile || !ws.selectedAngle) return
-
-    // 提取原始素材内容（来自上传文件或提取的洞察）
+  // P0.3.8.4 — Extract source content for generation
+  const getSourceContent = useCallback(():
+    | { content?: string; keyInsights?: string[]; memorableQuotes?: string[] }
+    | undefined => {
     // 优先级：distillationResult > uploadedContent > adaptationResult
-    let sourceContent: { content?: string; keyInsights?: string[]; memorableQuotes?: string[] } | undefined
     if (ws.distillationResult) {
-      sourceContent = {
+      return {
         keyInsights: ws.distillationResult.sourceAnalysis.keyInsights,
         memorableQuotes: ws.distillationResult.sourceAnalysis.memorableQuotes,
       }
-    } else if (ws.uploadedContent?.content) {
-      sourceContent = {
-        content: ws.uploadedContent.content,
-      }
-    } else if (ws.adaptationResult) {
-      sourceContent = {
-        keyInsights: ws.adaptationResult.referenceAnalysis.keyPoints,
-      }
     }
+    if (ws.uploadedContent?.content) {
+      return { content: ws.uploadedContent.content }
+    }
+    if (ws.adaptationResult) {
+      return { keyInsights: ws.adaptationResult.referenceAnalysis.keyPoints }
+    }
+    return undefined
+  }, [ws.distillationResult, ws.uploadedContent, ws.adaptationResult])
 
-    // Step A: Strategy
+  // P0.3.8.4 — Strategy-only generation (Stage 1: stops at approval gate)
+  const handleGenerateStrategy = useCallback(async () => {
+    if (!ws.topicProfile || !ws.selectedAngle) return
+
+    const sourceContent = getSourceContent()
+
+    // Reset any previous approval state and downstream data
+    workflowActions.resetStrategyApproval()
+
+    // Generate strategy
     setPipelinePhase('strategy')
     const strategyResult = await strategyHook.generate({
       topic: ws.topicProfile.topic,
@@ -121,6 +129,28 @@ export default function GeneratePage() {
     const strategyData = strategyResult as unknown as ContentStrategy
     workflowActions.setStrategy(strategyData)
 
+    // P0.3.8.4 — Mark strategy as pending approval
+    // knowledgeAssisted=true because API route always attempts retrieval
+    // (graceful degradation handles null context — user sees in strategy preview)
+    workflowActions.setStrategyPending(true)
+
+    // Pipeline pauses at 'strategy' phase — waits for human review
+  }, [
+    ws.topicProfile,
+    ws.selectedAngle,
+    ws.persona,
+    wordCount,
+    strategyHook,
+    getSourceContent,
+  ])
+
+  // P0.3.8.4 — Stage 2: Writing + Evaluation (runs after approval)
+  const handleContinueAfterApproval = useCallback(async () => {
+    if (!ws.topicProfile || !ws.selectedAngle || !ws.strategy) return
+
+    const sourceContent = getSourceContent()
+    const strategyData = ws.strategy
+
     // Step B: Writing
     setPipelinePhase('writing')
     const writingResult = await writingHook.generate({
@@ -145,8 +175,6 @@ export default function GeneratePage() {
     workflowActions.setDraft(draftData)
 
     // Step C + D + E: Evaluation, Strategy Evaluation, and Risk Analysis in parallel
-    // All three only depend on draft + strategy, so they can run concurrently
-    // Using allSettled so one failure doesn't block the others
     setPipelinePhase('evaluation')
     const platform = ws.topicProfile?.platform
     const [evalSettled, strategyEvalSettled, riskSettled] = await Promise.allSettled([
@@ -198,7 +226,6 @@ export default function GeneratePage() {
       }),
     ])
 
-    // Each step is independent — a failure in one doesn't affect the others
     if (evalSettled.status === 'fulfilled' && evalSettled.value) {
       workflowActions.setEvaluation(evalSettled.value as unknown as EvaluationResult)
     }
@@ -214,16 +241,37 @@ export default function GeneratePage() {
     ws.topicProfile,
     ws.selectedAngle,
     ws.persona,
-    ws.uploadedContent,
-    ws.distillationResult,
-    ws.adaptationResult,
+    ws.strategy,
     wordCount,
-    strategyHook,
     writingHook,
     evalHook,
     strategyEvalHook,
     riskAnalysisHook,
+    getSourceContent,
   ])
+
+  // P0.3.8.4 — Generate handler: routes based on approval state
+  const handleGenerate = useCallback(() => {
+    // If strategy is pending approval or rejected, user must use approve/regenerate buttons
+    if (ws.strategyApproval.status === 'pending' || ws.strategyApproval.status === 'rejected') {
+      return
+    }
+    // Stage 1: Generate strategy only
+    handleGenerateStrategy()
+  }, [ws.strategyApproval.status, handleGenerateStrategy])
+
+  // P0.3.8.4 — Approve handler
+  const handleApproveStrategy = useCallback(() => {
+    workflowActions.approveStrategy()
+    // Stage 2: Continue to writing + evaluation
+    handleContinueAfterApproval()
+  }, [handleContinueAfterApproval])
+
+  // P0.3.8.4 — Regenerate handler (reject + generate again)
+  const handleRegenerateStrategy = useCallback(() => {
+    workflowActions.rejectStrategy()
+    handleGenerateStrategy()
+  }, [handleGenerateStrategy])
 
   const handleUpdateDraft = useCallback((patch: Partial<WritingDraft>) => {
     workflowActions.updateDraft(patch)
@@ -251,6 +299,7 @@ export default function GeneratePage() {
         evaluation={ws.evaluation}
         strategyEvaluation={ws.strategyEvaluation}
         riskAnalysis={ws.riskAnalysis}
+        strategyApproval={ws.strategyApproval}
         onGenerate={handleGenerate}
         generating={generating}
         loadingLabel={loadingLabel}
@@ -260,6 +309,9 @@ export default function GeneratePage() {
         wordCount={wordCount}
         error={anyError}
         onUpdateDraft={handleUpdateDraft}
+        // P0.3.8.4 — Approval gate handlers
+        onApproveStrategy={handleApproveStrategy}
+        onRegenerateStrategy={handleRegenerateStrategy}
       />
       {ws.draft && (
         <div className="flex items-center justify-end">
