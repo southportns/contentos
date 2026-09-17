@@ -4,7 +4,7 @@ import { useState } from 'react'
 import {
   Rocket, Loader2, CheckCircle2, AlertCircle, FileText,
   ClipboardCheck, ChevronDown, ChevronRight, Sparkles,
-  PenLine, ShieldAlert,
+  PenLine, ShieldAlert, RefreshCw, BookOpen,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import { StepHeader } from './step-header'
 import { cn } from '@/lib/utils'
 import type {
   ContentAngle, ContentStrategy, WritingDraft, EvaluationResult, StrategyEvaluationResult, RiskAnalysisResult,
+  StrategyApprovalState,
 } from '@/hooks/use-workflow'
 
 const scoreLabels: Record<string, string> = {
@@ -77,32 +78,37 @@ interface StepGenerateProps {
   evaluation: EvaluationResult | null
   strategyEvaluation?: StrategyEvaluationResult | null
   riskAnalysis?: RiskAnalysisResult | null
+  /** P0.3.8.4 - Strategy approval state for human review gate */
+  strategyApproval: StrategyApprovalState
   onGenerate: () => void
   generating: boolean
   loadingLabel: string
-  /** Progress 0-100, used to show progress bar during generation */
   progressPercent?: number
   duration: number
   setDuration: (v: number) => void
   wordCount: number
   error: string | null
   onUpdateDraft?: (patch: Partial<WritingDraft>) => void
+  onApproveStrategy: () => void
+  onRegenerateStrategy: () => void
 }
 
 export function StepGenerate({
   selectedAngle, strategy, draft, evaluation, strategyEvaluation, riskAnalysis,
+  strategyApproval,
   onGenerate, generating, loadingLabel, progressPercent,
   duration, setDuration, wordCount, error, onUpdateDraft,
+  onApproveStrategy, onRegenerateStrategy,
 }: StepGenerateProps) {
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null)
   const [expandedRisk, setExpandedRisk] = useState<string | null>(null)
   const done = !!evaluation
+  const showApprovalGate = strategy && strategyApproval.status === 'pending' && !draft
 
   return (
     <Card>
       <StepHeader step={4} title="生成内容 + 评估" active={!done} done={done} />
       <CardContent className="flex flex-col gap-3">
-        {/* Selected angle summary */}
         <div className="rounded-lg border bg-muted/30 p-3">
           <div className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary" />
@@ -111,7 +117,6 @@ export function StepGenerate({
           <p className="text-xs text-muted-foreground mt-1">{selectedAngle.angle}</p>
         </div>
 
-        {/* Options */}
         {!draft && (
           <div className="flex flex-col gap-2">
             <Label htmlFor="gen-duration" className="text-xs">目标时长（秒）</Label>
@@ -124,7 +129,6 @@ export function StepGenerate({
           </div>
         )}
 
-        {/* Action button */}
         {!draft && (
           <div className="flex justify-end">
             <Button onClick={onGenerate} disabled={generating}>
@@ -137,7 +141,6 @@ export function StepGenerate({
           </div>
         )}
 
-        {/* Progress bar */}
         {generating && progressPercent != null && (
           <div className="flex flex-col gap-1.5 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -147,10 +150,7 @@ export function StepGenerate({
               </span>
               <span className="tabular-nums">{Math.round(progressPercent)}%</span>
             </div>
-            <ProgressBar
-              progress={progressPercent}
-              variant="primary"
-            />
+            <ProgressBar progress={progressPercent} variant="primary" />
           </div>
         )}
 
@@ -160,7 +160,6 @@ export function StepGenerate({
           </div>
         )}
 
-        {/* Strategy preview */}
         {strategy && (
           <>
             <Separator />
@@ -184,7 +183,41 @@ export function StepGenerate({
           </>
         )}
 
-        {/* Draft */}
+        {showApprovalGate && (
+          <>
+            <Separator />
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="size-4 text-primary" />
+                  <span className="text-sm font-medium">策略已生成，请审阅确认</span>
+                </div>
+                {strategyApproval.knowledgeAssisted && (
+                  <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                    <Sparkles className="size-3" />
+                    Knowledge 辅助
+                  </Badge>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {strategyApproval.knowledgeAssisted
+                  ? '该策略在生成时参考了知识库中的相关知识。请审阅策略内容，确认后继续生成文案。'
+                  : '请审阅策略内容，确认后继续生成文案。'}
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={onRegenerateStrategy}>
+                  <RefreshCw className="size-3.5" />
+                  重新生成
+                </Button>
+                <Button size="sm" onClick={onApproveStrategy}>
+                  <CheckCircle2 className="size-3.5" />
+                  通过策略，继续生成文案
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+
         {draft && (
           <>
             <Separator />
@@ -202,7 +235,6 @@ export function StepGenerate({
           </>
         )}
 
-        {/* Evaluation */}
         {evaluation && (
           <>
             <Separator />
@@ -216,15 +248,11 @@ export function StepGenerate({
                 <span className="text-lg font-bold text-primary">{evaluation.overallScore}</span>
               </div>
             </div>
-
-            {/* Score bars */}
             <div className="grid grid-cols-2 gap-3">
               {Object.entries(evaluation.scores).map(([key, score]) => (
                 <ScoreBar key={key} label={scoreLabels[key] || key} score={score} />
               ))}
             </div>
-
-            {/* Emotional arc */}
             <div className="flex items-center gap-2">
               {evaluation.emotionalArcAnalysis.achieved ? (
                 <CheckCircle2 className="size-4 text-green-600" />
@@ -235,8 +263,6 @@ export function StepGenerate({
                 情感弧线{evaluation.emotionalArcAnalysis.achieved ? '已达成' : '未完全达成'} — {evaluation.emotionalArcAnalysis.analysis}
               </span>
             </div>
-
-            {/* Strengths & weaknesses */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-xs font-medium mb-1">✅ 优点</div>
@@ -251,22 +277,15 @@ export function StepGenerate({
                 </ul>
               </div>
             </div>
-
-            {/* Conclusion */}
             <div className="rounded-lg bg-muted/50 p-3 text-sm">
               <span className="font-medium">总结：</span> {evaluation.conclusion}
             </div>
-
-            {/* Suggestions */}
             {evaluation.suggestions.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <div className="text-xs font-medium">改进建议</div>
                 {evaluation.suggestions.map((sug, i) => (
                   <div key={`${sug.section}-${i}`} className="flex flex-col gap-1">
-                    <button
-                      className="flex items-center gap-2 text-left"
-                      onClick={() => setExpandedSuggestion(expandedSuggestion === `${sug.section}-${i}` ? null : `${sug.section}-${i}`)}
-                    >
+                    <button className="flex items-center gap-2 text-left" onClick={() => setExpandedSuggestion(expandedSuggestion === `${sug.section}-${i}` ? null : `${sug.section}-${i}`)}>
                       {expandedSuggestion === `${sug.section}-${i}` ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
                       <Badge variant="secondary" className={cn('text-xs', priorityColors[sug.priority])}>{priorityLabels[sug.priority]}</Badge>
                       <span className="text-sm">{sug.section}</span>
@@ -284,7 +303,6 @@ export function StepGenerate({
           </>
         )}
 
-        {/* Risk Analysis */}
         {riskAnalysis && (
           <>
             <Separator />
@@ -293,27 +311,14 @@ export function StepGenerate({
                 <ShieldAlert className="size-4 text-primary" />
                 <span className="text-sm font-medium">风险分析</span>
               </div>
-              <div className={cn(
-                'flex items-center gap-1 rounded-lg px-3 py-1',
-                riskAnalysis.overallRiskLevel === 'safe' ? 'bg-green-50' :
-                riskAnalysis.overallRiskLevel === 'low' ? 'bg-blue-50' :
-                riskAnalysis.overallRiskLevel === 'medium' ? 'bg-yellow-50' : 'bg-red-50',
-              )}>
-                <span className="text-xs">
-                  {riskLevelConfig[riskAnalysis.overallRiskLevel]?.icon}
-                </span>
-                <span className={cn('text-sm font-bold', riskLevelConfig[riskAnalysis.overallRiskLevel]?.color)}>
-                  {riskLevelConfig[riskAnalysis.overallRiskLevel]?.label}
-                </span>
+              <div className={cn('flex items-center gap-1 rounded-lg px-3 py-1', riskAnalysis.overallRiskLevel === 'safe' ? 'bg-green-50' : riskAnalysis.overallRiskLevel === 'low' ? 'bg-blue-50' : riskAnalysis.overallRiskLevel === 'medium' ? 'bg-yellow-50' : 'bg-red-50')}>
+                <span className="text-xs">{riskLevelConfig[riskAnalysis.overallRiskLevel]?.icon}</span>
+                <span className={cn('text-sm font-bold', riskLevelConfig[riskAnalysis.overallRiskLevel]?.color)}>{riskLevelConfig[riskAnalysis.overallRiskLevel]?.label}</span>
               </div>
             </div>
-
-            {/* Summary */}
             <div className="rounded-lg bg-muted/50 p-3 text-sm">
               <span className="font-medium">总结：</span> {riskAnalysis.summary}
             </div>
-
-            {/* Risk items */}
             {riskAnalysis.risks.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-green-600">
                 <CheckCircle2 className="size-4" />
@@ -323,26 +328,15 @@ export function StepGenerate({
               <div className="flex flex-col gap-1.5">
                 {riskAnalysis.risks.map((risk, i) => (
                   <div key={`risk-${i}`} className="flex flex-col gap-1">
-                    <button
-                      className="flex items-center gap-2 text-left"
-                      onClick={() => setExpandedRisk(expandedRisk === `risk-${i}` ? null : `risk-${i}`)}
-                    >
+                    <button className="flex items-center gap-2 text-left" onClick={() => setExpandedRisk(expandedRisk === `risk-${i}` ? null : `risk-${i}`)}>
                       {expandedRisk === `risk-${i}` ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                      <Badge variant="secondary" className={cn('text-xs', riskSeverityColors[risk.severity])}>
-                        {riskSeverityLabels[risk.severity]}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {riskCategoryLabels[risk.category] || risk.category}
-                      </Badge>
+                      <Badge variant="secondary" className={cn('text-xs', riskSeverityColors[risk.severity])}>{riskSeverityLabels[risk.severity]}</Badge>
+                      <Badge variant="outline" className="text-xs">{riskCategoryLabels[risk.category] || risk.category}</Badge>
                       <span className="text-sm line-clamp-1">{risk.description}</span>
                     </button>
                     {expandedRisk === `risk-${i}` && (
                       <div className="ml-6 flex flex-col gap-1 text-xs text-muted-foreground">
-                        {risk.quote && (
-                          <div className="rounded border-l-2 border-muted-foreground/30 bg-muted/30 p-2">
-                            <span className="font-medium text-foreground">原文：</span> {risk.quote}
-                          </div>
-                        )}
+                        {risk.quote && (<div className="rounded border-l-2 border-muted-foreground/30 bg-muted/30 p-2"><span className="font-medium text-foreground">原文：</span> {risk.quote}</div>)}
                         <div><span className="font-medium text-foreground">说明：</span> {risk.description}</div>
                         <div><span className="font-medium text-foreground">建议：</span> {risk.suggestion}</div>
                       </div>
