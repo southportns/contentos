@@ -1,3 +1,7 @@
+/**
+ * @file This file contains the workflow state and actions for content creation.
+ * It uses use-sync-external-share for subscription-based state updates.
+ */
 'use client'
 
 import { useSyncExternalStore } from 'react'
@@ -31,21 +35,18 @@ export interface SearchedContent {
     favorites: number | null
     views: number | null
   } | null
-  /** 口播文案（语音转文字） */
   transcript?: {
     text: string
     language: string
     duration: number
     model: string
   } | null
-  /** 采集的评论数据 */
   collectedComments?: {
     text: string
     nickname: string
     diggCount: number
     createTime: string | null
   }[] | null
-  /** 评论分析结果 */
   commentAnalysis?: {
     topComments: {
       text: string
@@ -201,7 +202,6 @@ export interface RefineResult {
   hookCandidates?: string[]
   titleCandidates?: string[]
   summary: string
-  // P0.3.9.1 New optional output fields
   resolvedIssues?: Array<{
     issueId: string
     resolution: string
@@ -220,12 +220,7 @@ export interface RefineResult {
 
 // ─── P0.3.9.2: Evaluation → Refine Issue Feedback Loop ─────────────────────
 
-/**
- * RefineIssue — structured representation of an evaluation suggestion
- * for the Refine page's issue selection UI.
- */
 export interface RefineIssue {
-  /** Stable ID: uses evaluation suggestion index as fallback */
   id: string
   section: string
   issue: string
@@ -279,7 +274,7 @@ export interface AdaptationResult {
 export interface UploadedContent {
   title: string | null
   content: string
-  sourceType: string // article | report | book | essay | other
+  sourceType: string
   fileName: string | null
 }
 
@@ -311,82 +306,52 @@ export interface DistillationResult {
   }
 }
 
-/**
- * P0.3.8.4 — Strategy Approval State
- *
- * Tracks human approval status of the generated strategy before
- * it proceeds to Writing phase. Knowledge-assisted strategies
- * are clearly marked to inform the reviewer.
- */
+// ─── P0.3.8.4: Strategy Approval State ────────────────────
+
 export type StrategyApprovalStatus = 'none' | 'pending' | 'approved' | 'rejected'
 
 export interface StrategyApprovalState {
   status: StrategyApprovalStatus
-  /** Whether the strategy was generated with Knowledge retrieval assistance */
   knowledgeAssisted: boolean
-  /** Timestamp of last approval/rejection action */
   reviewedAt: number | null
-  /** Strategy as approved (may differ from original if user edited) */
   approvedStrategy: ContentStrategy | null
 }
 
-export interface WorkflowState {
-  // Project association
-  projectId: string | null
+// ─── P0.3.9.3: Humanization State ────────────────────────
 
-  // Persona association
-  persona: Persona | null
+export type HumanizationStatus = 'idle' | 'loading' | 'success' | 'error'
 
-  // Adaptation: reference content from Explorer
-  referenceContent: SearchedContent | null
-  adaptationResult: AdaptationResult | null
-
-  // Distillation: uploaded content for self-learning
-  uploadedContent: UploadedContent | null
-  distillationResult: DistillationResult | null
-
-  // Step 1: Research
-  topicProfile: TopicProfile | null
-
-  // Step 2: Analysis
-  viralResult: ViralResult | null
-
-  // Step 3: Angles
-  angles: ContentAngle[]
-  selectedAngle: ContentAngle | null
-
-  // Step 4: Strategy
-  strategy: ContentStrategy | null
-
-  // P0.3.8.4.1 — Server-side strategy ID (for approval API calls)
-  strategyId: string | null
-
-  // P0.3.8.4 — Strategy Approval Gate
-  strategyApproval: StrategyApprovalState
-
-  // Step 5: Writing
-  draft: WritingDraft | null
-
-  // Step 6: Evaluation
-  evaluation: EvaluationResult | null
-
-  // Step 7: Strategy Evaluation
-  strategyEvaluation: StrategyEvaluationResult | null
-
-  // Step 7.5: Risk Analysis
-  riskAnalysis: RiskAnalysisResult | null
-
-  // Step 8: Refine
-  refineData: RefineResult | null
-
-  // P0.3.9.2: Evaluation issues converted for Refine UI selection
-  refineIssues: RefineIssue[]
-
-  // Step 9: Final Output
-  finalOutput: FinalOutput | null
+export interface HumanizationState {
+  status: HumanizationStatus
+  result: RefineResult | null
+  adopted: boolean
 }
 
-// ─── Store ─────────────────────────────────────────────
+// ─── Workflow State ─────────────────────────────────────
+
+export interface WorkflowState {
+  projectId: string | null
+  persona: Persona | null
+  referenceContent: SearchedContent | null
+  adaptationResult: AdaptationResult | null
+  uploadedContent: UploadedContent | null
+  distillationResult: DistillationResult | null
+  topicProfile: TopicProfile | null
+  viralResult: ViralResult | null
+  angles: ContentAngle[]
+  selectedAngle: ContentAngle | null
+  strategy: ContentStrategy | null
+  strategyId: string | null
+  strategyApproval: StrategyApprovalState
+  draft: WritingDraft | null
+  evaluation: EvaluationResult | null
+  strategyEvaluation: StrategyEvaluationResult | null
+  riskAnalysis: RiskAnalysisResult | null
+  refineData: RefineResult | null
+  refineIssues: RefineIssue[]
+  humanization: HumanizationState
+  finalOutput: FinalOutput | null
+}
 
 const initialState: WorkflowState = {
   projectId: null,
@@ -400,9 +365,7 @@ const initialState: WorkflowState = {
   angles: [],
   selectedAngle: null,
   strategy: null,
-  // P0.3.8.4.1 — Server-side strategy ID
   strategyId: null,
-  // P0.3.8.4 — Strategy Approval Gate: initial state
   strategyApproval: {
     status: 'none',
     knowledgeAssisted: false,
@@ -415,6 +378,11 @@ const initialState: WorkflowState = {
   riskAnalysis: null,
   refineData: null,
   refineIssues: [],
+  humanization: {
+    status: 'idle',
+    result: null,
+    adopted: false,
+  },
   finalOutput: null,
 }
 
@@ -429,7 +397,6 @@ function loadFromStorage(): WorkflowState {
     return {
       ...initialState,
       ...parsed,
-      // Ensure array fields are always arrays even if localStorage has null/garbage
       angles: Array.isArray(parsed.angles) ? parsed.angles : [],
     }
   } catch {
@@ -455,8 +422,6 @@ function setState(updater: (prev: WorkflowState) => WorkflowState) {
   listeners.forEach((l) => l())
 }
 
-// ─── External Store API ───────────────────────────────
-
 function getSnapshot(): WorkflowState {
   return state
 }
@@ -467,12 +432,8 @@ function getServerSnapshot(): WorkflowState {
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
+  return () => { listeners.delete(listener) }
 }
-
-// ─── Actions (stable references) ─────────────────────
 
 export const workflowActions = {
   setProjectId: (id: string | null) =>
@@ -512,10 +473,7 @@ export const workflowActions = {
     setState((prev) => ({
       ...prev,
       angles: prev.angles.map((a) => (a.id === id ? { ...a, ...patch } : a)),
-      selectedAngle:
-        prev.selectedAngle?.id === id
-          ? { ...prev.selectedAngle, ...patch }
-          : prev.selectedAngle,
+      selectedAngle: prev.selectedAngle?.id === id ? { ...prev.selectedAngle, ...patch } : prev.selectedAngle,
     })),
 
   setSelectedAngle: (angle: ContentAngle | null) =>
@@ -524,13 +482,9 @@ export const workflowActions = {
   setStrategy: (strategy: ContentStrategy) =>
     setState((prev) => ({ ...prev, strategy })),
 
-  // P0.3.8.4.1 — Set server-side strategy ID (from API response)
   setStrategyId: (id: string | null) =>
     setState((prev) => ({ ...prev, strategyId: id })),
 
-  // P0.3.8.4 — Strategy Approval Gate actions
-
-  /** Mark strategy as pending approval after generation */
   setStrategyPending: (knowledgeAssisted: boolean) =>
     setState((prev) => ({
       ...prev,
@@ -542,7 +496,6 @@ export const workflowActions = {
       },
     })),
 
-  /** Approve the strategy (optionally with edited content) */
   approveStrategy: (editedStrategy?: ContentStrategy) =>
     setState((prev) => ({
       ...prev,
@@ -555,7 +508,6 @@ export const workflowActions = {
       },
     })),
 
-  /** Reject the strategy — clear pending status, keep strategy visible */
   rejectStrategy: () =>
     setState((prev) => ({
       ...prev,
@@ -566,11 +518,9 @@ export const workflowActions = {
       },
     })),
 
-  /** Reset approval state (used when regenerating) */
   resetStrategyApproval: () =>
     setState((prev) => ({
       ...prev,
-      // P0.3.8.4.1 — Reset strategyId on regenerate (new strategy = new ID)
       strategyId: null,
       strategyApproval: {
         status: 'none',
@@ -607,13 +557,9 @@ export const workflowActions = {
       refineData: prev.refineData ? { ...prev.refineData, ...patch } : null,
     })),
 
-  // P0.3.9.2: Refine Issue Feedback Loop actions
-
-  /** Set refine issues from evaluation adapter */
   setRefineIssues: (issues: RefineIssue[]) =>
     setState((prev) => ({ ...prev, refineIssues: issues })),
 
-  /** Toggle selection of a single issue by id */
   toggleRefineIssue: (id: string) =>
     setState((prev) => ({
       ...prev,
@@ -622,7 +568,6 @@ export const workflowActions = {
       ),
     })),
 
-  /** Mark specified issues as resolved */
   markRefineIssuesResolved: (resolvedIds: string[]) =>
     setState((prev) => {
       const resolvedSet = new Set(resolvedIds)
@@ -634,7 +579,6 @@ export const workflowActions = {
       }
     }),
 
-  /** Reset all issue selections to default (high priority selected) */
   resetRefineIssueSelections: () =>
     setState((prev) => ({
       ...prev,
@@ -643,6 +587,63 @@ export const workflowActions = {
         selected: issue.priority === 'high',
         resolved: false,
       })),
+    })),
+
+  // P0.3.9.3: Humanization actions
+
+  setHumanizationStatus: (status: HumanizationStatus) =>
+    setState((prev) => ({
+      ...prev,
+      humanization: { ...prev.humanization, status },
+    })),
+
+  setHumanizationResult: (result: RefineResult) =>
+    setState((prev) => ({
+      ...prev,
+      humanization: { ...prev.humanization, status: 'success', result },
+    })),
+
+  adoptHumanization: () =>
+    setState((prev) => {
+      const humanizationResult = prev.humanization.result
+      if (!humanizationResult) return prev
+      const baseRefine = prev.refineData ?? {
+        content: humanizationResult.content,
+        title: humanizationResult.title,
+        hook: humanizationResult.hook,
+        wordCount: humanizationResult.content.length,
+        changes: [],
+        summary: '',
+      }
+      return {
+        ...prev,
+        refineData: {
+          content: humanizationResult.content,
+          title: humanizationResult.title,
+          hook: humanizationResult.hook,
+          wordCount: humanizationResult.content.length,
+          changes: [...(baseRefine.changes ?? []), ...(humanizationResult.changes ?? [])],
+          hookCandidates: baseRefine.hookCandidates,
+          titleCandidates: baseRefine.titleCandidates,
+          summary: humanizationResult.summary || baseRefine.summary,
+          resolvedIssues: baseRefine.resolvedIssues,
+          unresolvedIssues: baseRefine.unresolvedIssues,
+          preservedElements: [...(baseRefine.preservedElements ?? []), ...(humanizationResult.preservedElements ?? [])],
+        },
+        humanization: { ...prev.humanization, adopted: true },
+      }
+    }),
+
+  dismissHumanization: () =>
+    setState((prev) => ({
+      ...prev,
+      humanization: { ...prev.humanization, status: 'idle', result: null },
+    })),
+
+  resetHumanization: () =>
+    setState((prev) => ({
+      ...prev,
+      humanization: { status: 'idle', result: null, adopted: false },
     })),
 
   setFinalOutput: (output: FinalOutput) =>
@@ -661,6 +662,7 @@ export const workflowActions = {
       riskAnalysis: null,
       refineData: null,
       refineIssues: [],
+      humanization: { status: 'idle', result: null, adopted: false },
       finalOutput: null,
       adaptationResult: null,
       distillationResult: null,
@@ -673,8 +675,6 @@ export const workflowActions = {
     }
   },
 }
-
-// ─── Hook ─────────────────────────────────────────────
 
 export function useWorkflow() {
   const ws = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
