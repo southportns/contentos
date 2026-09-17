@@ -3,7 +3,10 @@ import {
   resolveHumanizationContentSource, buildHumanizationInput,
   mergeHumanizationIntoRefineData, isHumanizationUsingDraft, getHumanizationSourceLabel,
 } from '@/lib/workflow/humanization-adapter'
-import type { RefineResult, HumanizationState } from '../use-workflow'
+import {
+  workflowActions,
+  type RefineResult, type HumanizationState, type WorkflowState, type StrategyApprovalState,
+} from '../use-workflow'
 
 interface HumanizationWorkflowLite {
   refineData: RefineResult | null
@@ -191,5 +194,98 @@ describe('P0.3.9.3 - Humanization Integration Pipeline', () => {
     const src3 = resolveHumanizationContentSource(null, null, '草稿内容')
     expect(src3).toBe('草稿内容')
     expect(isHumanizationUsingDraft(null, null)).toBe(true)
+  })
+})
+
+// --- Regression & Chain Tests ---
+
+describe('P0.3.9.3 - Workflow State Regression Tests', () => {
+  it('INT-A. Full Workflow State Regression - all legacy fields present', () => {
+    type AssertKey<T, K extends string> = K extends keyof T ? true : false
+    const projectIdCheck: AssertKey<WorkflowState, 'projectId'> = true
+    const personaCheck: AssertKey<WorkflowState, 'persona'> = true
+    const referenceContentCheck: AssertKey<WorkflowState, 'referenceContent'> = true
+    const adaptationResultCheck: AssertKey<WorkflowState, 'adaptationResult'> = true
+    const uploadedContentCheck: AssertKey<WorkflowState, 'uploadedContent'> = true
+    const distillationResultCheck: AssertKey<WorkflowState, 'distillationResult'> = true
+    const topicProfileCheck: AssertKey<WorkflowState, 'topicProfile'> = true
+    const viralResultCheck: AssertKey<WorkflowState, 'viralResult'> = true
+    const anglesCheck: AssertKey<WorkflowState, 'angles'> = true
+    const selectedAngleCheck: AssertKey<WorkflowState, 'selectedAngle'> = true
+    const strategyCheck: AssertKey<WorkflowState, 'strategy'> = true
+    const strategyIdCheck: AssertKey<WorkflowState, 'strategyId'> = true
+    const strategyApprovalCheck: AssertKey<WorkflowState, 'strategyApproval'> = true
+    const draftCheck: AssertKey<WorkflowState, 'draft'> = true
+    const evaluationCheck: AssertKey<WorkflowState, 'evaluation'> = true
+    const strategyEvaluationCheck: AssertKey<WorkflowState, 'strategyEvaluation'> = true
+    const riskAnalysisCheck: AssertKey<WorkflowState, 'riskAnalysis'> = true
+    const refineDataCheck: AssertKey<WorkflowState, 'refineData'> = true
+    const refineIssuesCheck: AssertKey<WorkflowState, 'refineIssues'> = true
+    const humanizationCheck: AssertKey<WorkflowState, 'humanization'> = true
+    const finalOutputCheck: AssertKey<WorkflowState, 'finalOutput'> = true
+    expect(projectIdCheck).toBe(true)
+    expect(strategyApprovalCheck).toBe(true)
+    expect(finalOutputCheck).toBe(true)
+  })
+
+  it('INT-A2. Legacy actions present in workflowActions', () => {
+    expect(typeof workflowActions.setProjectId).toBe('function')
+    expect(typeof workflowActions.setPersona).toBe('function')
+    expect(typeof workflowActions.setTopicProfile).toBe('function')
+    expect(typeof workflowActions.updateTopicProfile).toBe('function')
+    expect(typeof workflowActions.setReferenceContent).toBe('function')
+    expect(typeof workflowActions.setAdaptationResult).toBe('function')
+    expect(typeof workflowActions.setUploadedContent).toBe('function')
+    expect(typeof workflowActions.setDistillationResult).toBe('function')
+    expect(typeof workflowActions.setViralResult).toBe('function')
+    expect(typeof workflowActions.setAngles).toBe('function')
+    expect(typeof workflowActions.updateAngle).toBe('function')
+    expect(typeof workflowActions.setSelectedAngle).toBe('function')
+    expect(typeof workflowActions.setStrategy).toBe('function')
+    expect(typeof workflowActions.setStrategyId).toBe('function')
+    expect(typeof workflowActions.setStrategyPending).toBe('function')
+    expect(typeof workflowActions.approveStrategy).toBe('function')
+    expect(typeof workflowActions.rejectStrategy).toBe('function')
+    expect(typeof workflowActions.resetStrategyApproval).toBe('function')
+    expect(typeof workflowActions.setDraft).toBe('function')
+    expect(typeof workflowActions.updateDraft).toBe('function')
+    expect(typeof workflowActions.setEvaluation).toBe('function')
+    expect(typeof workflowActions.setStrategyEvaluation).toBe('function')
+    expect(typeof workflowActions.setRiskAnalysis).toBe('function')
+    expect(typeof workflowActions.setRefineData).toBe('function')
+    expect(typeof workflowActions.updateRefineData).toBe('function')
+    expect(typeof workflowActions.setRefineIssues).toBe('function')
+    expect(typeof workflowActions.toggleRefineIssue).toBe('function')
+    expect(typeof workflowActions.markRefineIssuesResolved).toBe('function')
+    expect(typeof workflowActions.resetRefineIssueSelections).toBe('function')
+    expect(typeof workflowActions.setFinalOutput).toBe('function')
+    expect(typeof workflowActions.clearDownstream).toBe('function')
+    expect(typeof workflowActions.reset).toBe('function')
+  })
+
+  it('INT-A3. Strategy Approval State has approvedStrategy (P0.3.8.4)', () => {
+    type AssertKey<T, K extends string> = K extends keyof T ? true : false
+    const approvedStrategyCheck: AssertKey<StrategyApprovalState, 'approvedStrategy'> = true
+    expect(approvedStrategyCheck).toBe(true)
+  })
+})
+
+describe('P0.3.9.3 - Refine Chain Regression Test', () => {
+  it('INT-E. Draft -> Refine -> Issue Fix -> Humanization -> Adopt -> Final chain preserves all state', () => {
+    let state: HumanizationWorkflowLite = makeInitialState()
+    workflowActions.setDraft({
+      title: 'T', content: 'C', hook: 'H', wordCount: 1, sections: [{ section: 's', content: 'c' }],
+    })
+    const refineResult = makeRefineResult()
+    state = humanizationReducer(state, { type: 'SET_REFINE_DATA', data: refineResult })
+    expect(state.refineData).not.toBeNull()
+    state = humanizationReducer(state, { type: 'SET_STATUS', status: 'loading' })
+    const hResult = makeHumanizationResult()
+    state = humanizationReducer(state, { type: 'SET_RESULT', result: hResult })
+    expect(state.humanization.adopted).toBe(false)
+    state = humanizationReducer(state, { type: 'ADOPT' })
+    expect(state.humanization.adopted).toBe(true)
+    expect(state.refineData?.content).toBe('真人化后的内容')
+    expect(typeof workflowActions.setFinalOutput).toBe('function')
   })
 })

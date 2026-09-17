@@ -1,4 +1,8 @@
-use client'
+/**
+ * @file This file contains the workflow state and actions for content creation.
+ * It uses use-sync-external-share for subscription-based state updates.
+ */
+'use client'
 
 import { useSyncExternalStore } from 'react'
 
@@ -74,24 +78,36 @@ export interface ViralResult {
     weaknesses: string[]
     keyFactors: string[]
   }>
+  patterns: {
+    commonStrengths: string[]
+    commonWeaknesses: string[]
+    viralFactors: string[]
+    avgViralScore: number
+    topContents: Array<{ url: string; viralScore: number }>
+  }
 }
 
-export interface AngleProfile {
+export interface ContentAngle {
+  id: string
   title: string
   angle: string
-  rationale: string
-  targetAudience: string
-  emotionalTrigger: string
-  viralMechanism: string
-  suggestedHooks: string[]
-  riskNote?: string
-  relatedViralURLs: string[]
+  reasoning: string
+  targetEmotion: string
+  estimatedViralScore: number
+  difficulty: 'low' | 'medium' | 'high'
+  keyPoints: string[]
+  audienceAppeal: string
 }
 
 export interface ContentStrategy {
   title: string
   hook: string
-  structure: string[]
+  structure: Array<{
+    section: string
+    purpose: string
+    keyArguments: string[]
+    estimatedWords: number
+  }>
   keyArguments: string[]
   emotionalArc: { start: string; middle: string; end: string }
   callToAction: string
@@ -101,10 +117,73 @@ export interface ContentStrategy {
 }
 
 export interface WritingDraft {
-  content: string
   title: string
+  content: string
   hook: string
   wordCount: number
+  sections: Array<{ section: string; content: string }>
+}
+
+export interface EvaluationResult {
+  overallScore: number
+  scores: {
+    emotionalImpact: number
+    logicalClarity: number
+    novelty: number
+    readability: number
+    utility: number
+    platformFit: number
+  }
+  strengths: string[]
+  weaknesses: string[]
+  suggestions: Array<{
+    section: string
+    issue: string
+    suggestion: string
+    priority: 'high' | 'medium' | 'low'
+  }>
+  emotionalArcAnalysis: { achieved: boolean; analysis: string }
+  conclusion: string
+}
+
+export interface StrategyEvaluationResult {
+  platform: string
+  overallScore: number
+  grade: 'exceptional' | 'strong' | 'good' | 'average' | 'poor'
+  scores: Record<string, number>
+  platformFit: number
+  strategyConsistency: number
+  strengths: string[]
+  weaknesses: string[]
+  criticalIssues: string[]
+  improvementPriorities: Array<{
+    priority: number
+    problem: string
+    reason: string
+    suggestion: string
+  }>
+  shareAnalysis: {
+    motivation: string
+    target: string
+    context: string
+  }
+  aiStyleRisk: number
+  authenticityScore: number
+  evidenceQuality: number
+  confidence: number
+  verdict: string
+}
+
+export interface RiskAnalysisResult {
+  risks: Array<{
+    category: 'political_sensitive' | 'social_sensitive' | 'personal_privacy' | 'misinformation' | 'hate_speech' | 'commercial_compliance' | 'platform_violation' | 'legal_risk'
+    severity: 'high' | 'medium' | 'low'
+    description: string
+    suggestion: string
+    quote?: string
+  }>
+  overallRiskLevel: 'safe' | 'low' | 'medium' | 'high'
+  summary: string
 }
 
 export interface RefineResult {
@@ -114,15 +193,15 @@ export interface RefineResult {
   wordCount: number
   changes: Array<{
     type: string
-    original?: string
-    revised?: string
+    original: string
+    revised: string
     reason: string
     linkedIssueId?: string
     confidence?: number
   }>
   hookCandidates?: string[]
   titleCandidates?: string[]
-  summary?: string
+  summary: string
   resolvedIssues?: Array<{
     issueId: string
     resolution: string
@@ -131,7 +210,7 @@ export interface RefineResult {
   unresolvedIssues?: Array<{
     issueId: string
     reason: string
-    suggestion?: string
+    suggestion: string
   }>
   preservedElements?: Array<{
     element: string
@@ -139,24 +218,7 @@ export interface RefineResult {
   }>
 }
 
-export interface EvaluationResult {
-  scores: {
-    emotionalImpact: number
-    logicalClarity: number
-    novelty: number
-    readability: number
-    utility: number
-    platformFit: number
-  }
-  suggestions: Array<{
-    id?: string
-    section: string
-    issue: string
-    suggestion: string
-    priority: 'high' | 'medium' | 'low'
-  }>
-  weaknesses: string[]
-}
+// ─── P0.3.9.2: Evaluation → Refine Issue Feedback Loop ─────────────────────
 
 export interface RefineIssue {
   id: string
@@ -168,38 +230,95 @@ export interface RefineIssue {
   resolved: boolean
 }
 
-export interface RiskAnalysis {
-  overallRiskLevel: 'safe' | 'low' | 'medium' | 'high'
-  risks: Array<{
-    id: string
-    category: string
-    description?: string
-    suggestion?: string
-    severity: 'high' | 'medium' | 'low'
-  }>
+export interface FinalOutput {
+  title: string
+  content: string
+  hook: string
+  wordCount: number
+  platform?: string
 }
 
 export interface Persona {
-  id?: string
+  id: string
   name: string
-  bio: string
-  toneStyle: string
-  vocabulary: string
-  createdAt?: string
+  description: string | null
 }
 
-// P0.3.8.4: Strategy approval state
+export interface AdaptationResult {
+  referenceAnalysis: {
+    hookType: string
+    contentStructure: string[]
+    emotionalArc: { start: string; middle: string; end: string }
+    keyPoints: string[]
+    viralFactors: string[]
+    weaknesses: string[]
+  }
+  adaptedAngles: Array<{
+    id: string
+    title: string
+    angle: string
+    reasoning: string
+    targetEmotion: string
+    keyPoints: string[]
+    whatChanged: string
+    estimatedViralScore: number
+  }>
+  strategySuggestion: {
+    tone: string
+    structure: Array<{ section: string; purpose: string; keyArguments: string[] }>
+    hookStrategy: string
+    ctaStrategy: string
+  }
+}
+
+export interface UploadedContent {
+  title: string | null
+  content: string
+  sourceType: string
+  fileName: string | null
+}
+
+export interface DistillationResult {
+  sourceAnalysis: {
+    coreTheme: string
+    keyInsights: string[]
+    contentStructure: string[]
+    emotionalArc: { start: string; middle: string; end: string }
+    memorableQuotes: string[]
+    applicableAngles: string[]
+    weaknesses: string[]
+  }
+  distilledAngles: Array<{
+    id: string
+    title: string
+    angle: string
+    reasoning: string
+    targetEmotion: string
+    keyPoints: string[]
+    whatExtracted: string
+    estimatedViralScore: number
+  }>
+  strategySuggestion: {
+    tone: string
+    structure: Array<{ section: string; purpose: string; keyArguments: string[] }>
+    hookStrategy: string
+    ctaStrategy: string
+  }
+}
+
+// ─── P0.3.8.4: Strategy Approval State ────────────────────
+
 export type StrategyApprovalStatus = 'none' | 'pending' | 'approved' | 'rejected'
 
 export interface StrategyApprovalState {
   status: StrategyApprovalStatus
+  knowledgeAssisted: boolean
+  reviewedAt: number | null
   approvedStrategy: ContentStrategy | null
-  rejectionReason?: string
-  pendingAt: string | null
-  decidedAt: string | null
 }
 
-// P0.3.9.3: Humanization state
+// ─── P0.3.9.3: Humanization State ────────────────────────
+
 export type HumanizationStatus = 'idle' | 'loading' | 'success' | 'error'
 
 export interface HumanizationState {
@@ -208,116 +327,269 @@ export interface HumanizationState {
   adopted: boolean
 }
 
-// ─── State Shape ──────────────────────────────────────
+// ─── Workflow State ─────────────────────────────────────
 
 export interface WorkflowState {
+  projectId: string | null
+  persona: Persona | null
+  referenceContent: SearchedContent | null
+  adaptationResult: AdaptationResult | null
+  uploadedContent: UploadedContent | null
+  distillationResult: DistillationResult | null
+  topicProfile: TopicProfile | null
+  viralResult: ViralResult | null
+  angles: ContentAngle[]
+  selectedAngle: ContentAngle | null
+  strategy: ContentStrategy | null
+  strategyId: string | null
+  strategyApproval: StrategyApprovalState
   draft: WritingDraft | null
-  refineData: RefineResult | null
   evaluation: EvaluationResult | null
+  strategyEvaluation: StrategyEvaluationResult | null
+  riskAnalysis: RiskAnalysisResult | null
+  refineData: RefineResult | null
   refineIssues: RefineIssue[]
   humanization: HumanizationState
-  strategy: ContentStrategy | null
-  strategyApproval: StrategyApprovalState
-  persona: Persona | null
-  topicProfile: TopicProfile | null
-  selectedAngle: AngleProfile | null
-  riskAnalysis: RiskAnalysis | null
-  error: string | null
+  finalOutput: FinalOutput | null
 }
 
-// ─── Actions ──────────────────────────────────────────
-
-export type WorkflowAction =
-  | { type: 'SET_DRAFT'; draft: WritingDraft }
-  | { type: 'SET_REFINE_DATA'; data: RefineResult | null }
-  | { type: 'SET_EVALUATION'; evaluation: EvaluationResult | null }
-  | { type: 'SET_REFINE_ISSUES'; issues: RefineIssue[] }
-  | { type: 'TOGGLE_REFINE_ISSUE'; id: string }
-  | { type: 'RESET_REFINE_ISSUES_SELECTIONS' }
-  | { type: 'SET_HUMANIZATION_STATUS'; status: HumanizationStatus }
-  | { type: 'SET_HUMANIZATION_RESULT'; result: RefineResult }
-  | { type: 'ADOPT_HUMANIZATION' }
-  | { type: 'DISMISS_HUMANIZATION' }
-  | { type: 'RESET_HUMANIZATION' }
-  | { type: 'SET_STRATEGY'; strategy: ContentStrategy | null }
-  | { type: 'SET_STRATEGY_APPROVAL_PENDING'; strategy: ContentStrategy }
-  | { type: 'APPROVE_STRATEGY'; strategy?: ContentStrategy }
-  | { type: 'REJECT_STRATEGY'; reason?: string }
-  | { type: 'RESET_STRATEGY_APPROVAL' }
-  | { type: 'SET_PERSONA'; persona: Persona | null }
-  | { type: 'SET_TOPIC_PROFILE'; profile: TopicProfile | null }
-  | { type: 'SET_SELECTED_ANGLE'; angle: AngleProfile | null }
-  | { type: 'SET_RISK_ANALYSIS'; analysis: RiskAnalysis | null }
-  | { type: 'SET_ERROR'; error: string | null }
-  | { type: 'RESET' }
-
-// ─── Store Implementation ────────────────────────────
-
-type Listener = () => void
-
-let state: WorkflowState = {
-  draft: null,
-  refineData: null,
-  evaluation: null,
-  refineIssues: [],
-  humanization: { status: 'idle', result: null, adopted: false },
-  strategy: null,
-  strategyApproval: { status: 'none', approvedStrategy: null, pendingAt: null, decidedAt: null },
+const initialState: WorkflowState = {
+  projectId: null,
   persona: null,
+  referenceContent: null,
+  adaptationResult: null,
+  uploadedContent: null,
+  distillationResult: null,
   topicProfile: null,
+  viralResult: null,
+  angles: [],
   selectedAngle: null,
+  strategy: null,
+  strategyId: null,
+  strategyApproval: {
+    status: 'none',
+    knowledgeAssisted: false,
+    reviewedAt: null,
+    approvedStrategy: null,
+  },
+  draft: null,
+  evaluation: null,
+  strategyEvaluation: null,
   riskAnalysis: null,
-  error: null,
+  refineData: null,
+  refineIssues: [],
+  humanization: {
+    status: 'idle',
+    result: null,
+    adopted: false,
+  },
+  finalOutput: null,
 }
 
-const listeners = new Set<Listener>()
+const STORAGE_KEY = 'content-os-workflow'
 
-function getState(): WorkflowState {
-  return state
+function loadFromStorage(): WorkflowState {
+  if (typeof window === 'undefined') return initialState
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return initialState
+    const parsed = JSON.parse(raw) as Partial<WorkflowState>
+    return {
+      ...initialState,
+      ...parsed,
+      angles: Array.isArray(parsed.angles) ? parsed.angles : [],
+    }
+  } catch {
+    return initialState
+  }
 }
 
-function setState(next: WorkflowState): void {
-  state = next
+let state: WorkflowState = loadFromStorage()
+const listeners = new Set<() => void>()
+
+function saveToStorage(s: WorkflowState) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s))
+  } catch (e) {
+    console.error('[workflow] Failed to save to localStorage:', e)
+  }
+}
+
+function setState(updater: (prev: WorkflowState) => WorkflowState) {
+  state = updater(state)
+  saveToStorage(state)
   listeners.forEach((l) => l())
 }
 
-function subscribe(listener: Listener): () => void {
+function getSnapshot(): WorkflowState {
+  return state
+}
+
+function getServerSnapshot(): WorkflowState {
+  return initialState
+}
+
+function subscribe(listener: () => void): () => void {
   listeners.add(listener)
-  return () => listeners.delete(listener)
+  return () => { listeners.delete(listener) }
 }
-
-// ─── Hook ─────────────────────────────────────────────
-
-export function useWorkflow(): WorkflowState {
-  return useSyncExternalStore(subscribe, getState, getState)
-}
-
-// ─── Actions (External API) ───────────────────────────
 
 export const workflowActions = {
-  setDraft: (draft: WritingDraft) => setState({ ...state, draft }),
+  setProjectId: (id: string | null) =>
+    setState((prev) => ({ ...prev, projectId: id })),
 
-  setRefineData: (data: RefineResult | null) => setState({ ...state, refineData: data }),
+  setPersona: (persona: Persona | null) =>
+    setState((prev) => ({ ...prev, persona })),
 
-  setEvaluation: (evaluation: EvaluationResult | null) => setState({ ...state, evaluation }),
+  setTopicProfile: (profile: TopicProfile) =>
+    setState((prev) => ({ ...prev, topicProfile: profile })),
 
-  setRefineIssues: (issues: RefineIssue[]) => setState({ ...state, refineIssues: issues }),
+  updateTopicProfile: (patch: Partial<TopicProfile>) =>
+    setState((prev) => ({
+      ...prev,
+      topicProfile: prev.topicProfile ? { ...prev.topicProfile, ...patch } : null,
+    })),
+
+  setReferenceContent: (content: SearchedContent | null) =>
+    setState((prev) => ({ ...prev, referenceContent: content })),
+
+  setAdaptationResult: (result: AdaptationResult | null) =>
+    setState((prev) => ({ ...prev, adaptationResult: result })),
+
+  setUploadedContent: (content: UploadedContent | null) =>
+    setState((prev) => ({ ...prev, uploadedContent: content })),
+
+  setDistillationResult: (result: DistillationResult | null) =>
+    setState((prev) => ({ ...prev, distillationResult: result })),
+
+  setViralResult: (result: ViralResult) =>
+    setState((prev) => ({ ...prev, viralResult: result })),
+
+  setAngles: (angles: ContentAngle[]) =>
+    setState((prev) => ({ ...prev, angles })),
+
+  updateAngle: (id: string, patch: Partial<ContentAngle>) =>
+    setState((prev) => ({
+      ...prev,
+      angles: prev.angles.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+      selectedAngle: prev.selectedAngle?.id === id ? { ...prev.selectedAngle, ...patch } : prev.selectedAngle,
+    })),
+
+  setSelectedAngle: (angle: ContentAngle | null) =>
+    setState((prev) => ({ ...prev, selectedAngle: angle })),
+
+  setStrategy: (strategy: ContentStrategy) =>
+    setState((prev) => ({ ...prev, strategy })),
+
+  setStrategyId: (id: string | null) =>
+    setState((prev) => ({ ...prev, strategyId: id })),
+
+  setStrategyPending: (knowledgeAssisted: boolean) =>
+    setState((prev) => ({
+      ...prev,
+      strategyApproval: {
+        status: 'pending',
+        knowledgeAssisted,
+        reviewedAt: null,
+        approvedStrategy: null,
+      },
+    })),
+
+  approveStrategy: (editedStrategy?: ContentStrategy) =>
+    setState((prev) => ({
+      ...prev,
+      strategy: editedStrategy ?? prev.strategy,
+      strategyApproval: {
+        ...prev.strategyApproval,
+        status: 'approved',
+        reviewedAt: Date.now(),
+        approvedStrategy: editedStrategy ?? prev.strategy,
+      },
+    })),
+
+  rejectStrategy: () =>
+    setState((prev) => ({
+      ...prev,
+      strategyApproval: {
+        ...prev.strategyApproval,
+        status: 'rejected',
+        reviewedAt: Date.now(),
+      },
+    })),
+
+  resetStrategyApproval: () =>
+    setState((prev) => ({
+      ...prev,
+      strategyId: null,
+      strategyApproval: {
+        status: 'none',
+        knowledgeAssisted: false,
+        reviewedAt: null,
+        approvedStrategy: null,
+      },
+    })),
+
+  setDraft: (draft: WritingDraft) =>
+    setState((prev) => ({ ...prev, draft })),
+
+  updateDraft: (patch: Partial<WritingDraft>) =>
+    setState((prev) => ({
+      ...prev,
+      draft: prev.draft ? { ...prev.draft, ...patch } : null,
+    })),
+
+  setEvaluation: (evaluation: EvaluationResult) =>
+    setState((prev) => ({ ...prev, evaluation })),
+
+  setStrategyEvaluation: (result: StrategyEvaluationResult) =>
+    setState((prev) => ({ ...prev, strategyEvaluation: result })),
+
+  setRiskAnalysis: (result: RiskAnalysisResult) =>
+    setState((prev) => ({ ...prev, riskAnalysis: result })),
+
+  setRefineData: (data: RefineResult) =>
+    setState((prev) => ({ ...prev, refineData: data })),
+
+  updateRefineData: (patch: Partial<RefineResult>) =>
+    setState((prev) => ({
+      ...prev,
+      refineData: prev.refineData ? { ...prev.refineData, ...patch } : null,
+    })),
+
+  setRefineIssues: (issues: RefineIssue[]) =>
+    setState((prev) => ({ ...prev, refineIssues: issues })),
 
   toggleRefineIssue: (id: string) =>
-    setState({
-      ...state,
-      refineIssues: state.refineIssues.map((i) =>
-        i.id === id ? { ...i, selected: !i.selected } : i
+    setState((prev) => ({
+      ...prev,
+      refineIssues: prev.refineIssues.map((issue) =>
+        issue.id === id ? { ...issue, selected: !issue.selected } : issue,
       ),
+    })),
+
+  markRefineIssuesResolved: (resolvedIds: string[]) =>
+    setState((prev) => {
+      const resolvedSet = new Set(resolvedIds)
+      return {
+        ...prev,
+        refineIssues: prev.refineIssues.map((issue) =>
+          resolvedSet.has(issue.id) ? { ...issue, resolved: true } : issue,
+        ),
+      }
     }),
 
   resetRefineIssueSelections: () =>
-    setState({
-      ...state,
-      refineIssues: state.refineIssues.map((i) => ({ ...i, selected: false })),
-    }),
+    setState((prev) => ({
+      ...prev,
+      refineIssues: prev.refineIssues.map((issue) => ({
+        ...issue,
+        selected: issue.priority === 'high',
+        resolved: false,
+      })),
+    })),
 
-  // P0.3.9.3: Humanization actions (with adopted reset hardening)
+  // P0.3.9.3: Humanization actions
 
   setHumanizationStatus: (status: HumanizationStatus) =>
     setState((prev) => ({
@@ -345,7 +617,19 @@ export const workflowActions = {
       }
       return {
         ...prev,
-        refineData: mergeHumanizationIntoRefineData(baseRefine, humanizationResult),
+        refineData: {
+          content: humanizationResult.content,
+          title: humanizationResult.title,
+          hook: humanizationResult.hook,
+          wordCount: humanizationResult.content.length,
+          changes: [...(baseRefine.changes ?? []), ...(humanizationResult.changes ?? [])],
+          hookCandidates: baseRefine.hookCandidates,
+          titleCandidates: baseRefine.titleCandidates,
+          summary: humanizationResult.summary || baseRefine.summary,
+          resolvedIssues: baseRefine.resolvedIssues,
+          unresolvedIssues: baseRefine.unresolvedIssues,
+          preservedElements: [...(baseRefine.preservedElements ?? []), ...(humanizationResult.preservedElements ?? [])],
+        },
         humanization: { ...prev.humanization, adopted: true },
       }
     }),
@@ -362,105 +646,37 @@ export const workflowActions = {
       humanization: { status: 'idle', result: null, adopted: false },
     })),
 
-  setStrategy: (strategy: ContentStrategy | null) => setState({ ...state, strategy }),
+  setFinalOutput: (output: FinalOutput) =>
+    setState((prev) => ({ ...prev, finalOutput: output })),
 
-  // P0.3.8.4: Strategy approval gate actions
-
-  setStrategyApprovalPending: (strategy: ContentStrategy) =>
+  clearDownstream: () =>
     setState((prev) => ({
       ...prev,
-      strategyApproval: {
-        status: 'pending',
-        approvedStrategy: null,
-        rejectionReason: undefined,
-        pendingAt: new Date().toISOString(),
-        decidedAt: null,
-      },
-      strategy,
-    })),
-
-  approveStrategy: (strategy?: ContentStrategy) =>
-    setState((prev) => ({
-      ...prev,
-      strategyApproval: {
-        status: 'approved',
-        approvedStrategy: strategy ?? prev.strategy ?? null,
-        rejectionReason: undefined,
-        pendingAt: prev.strategyApproval.pendingAt,
-        decidedAt: new Date().toISOString(),
-      },
-    })),
-
-  rejectStrategy: (reason?: string) =>
-    setState((prev) => ({
-      ...prev,
-      strategyApproval: {
-        status: 'rejected',
-        approvedStrategy: null,
-        rejectionReason: reason,
-        pendingAt: prev.strategyApproval.pendingAt,
-        decidedAt: new Date().toISOString(),
-      },
-    })),
-
-  resetStrategyApproval: () =>
-    setState((prev) => ({
-      ...prev,
-      strategyApproval: {
-        status: 'none',
-        approvedStrategy: null,
-        pendingAt: null,
-        decidedAt: null,
-      },
-    })),
-
-  setPersona: (persona: Persona | null) => setState({ ...state, persona }),
-  setTopicProfile: (profile: TopicProfile | null) => setState({ ...state, topicProfile: profile }),
-  setSelectedAngle: (angle: AngleProfile | null) => setState({ ...state, selectedAngle: angle }),
-  setRiskAnalysis: (analysis: RiskAnalysis | null) => setState({ ...state, riskAnalysis: analysis }),
-  setError: (error: string | null) => setState({ ...state, error }),
-  reset: () =>
-    setState({
+      angles: [],
+      selectedAngle: null,
+      strategy: null,
+      strategyId: null,
       draft: null,
-      refineData: null,
       evaluation: null,
+      strategyEvaluation: null,
+      riskAnalysis: null,
+      refineData: null,
       refineIssues: [],
       humanization: { status: 'idle', result: null, adopted: false },
-      strategy: null,
-      strategyApproval: { status: 'none', approvedStrategy: null, pendingAt: null, decidedAt: null },
-      persona: null,
-      topicProfile: null,
-      selectedAngle: null,
-      riskAnalysis: null,
-      error: null,
-    }),
+      finalOutput: null,
+      adaptationResult: null,
+      distillationResult: null,
+    })),
+
+  reset: () => {
+    setState(() => ({ ...initialState }))
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY)
+    }
+  },
 }
 
-// ─── Helpers ──────────────────────────────────────────
-
-function mergeHumanizationIntoRefineData(
-  baseRefineData: RefineResult | null,
-  humanizationResult: RefineResult,
-): RefineResult {
-  const base = baseRefineData ?? {
-    content: humanizationResult.content,
-    title: humanizationResult.title,
-    hook: humanizationResult.hook,
-    wordCount: humanizationResult.content.length,
-    changes: [],
-    summary: '',
-  }
-  return {
-    content: humanizationResult.content,
-    title: humanizationResult.title,
-    hook: humanizationResult.hook,
-    wordCount: humanizationResult.content.length,
-    changes: [...(base.changes ?? []), ...(humanizationResult.changes ?? [])],
-    hookCandidates: base.hookCandidates,
-    titleCandidates: base.titleCandidates,
-    summary: humanizationResult.summary || base.summary,
-    resolvedIssues: base.resolvedIssues,
-    unresolvedIssues: base.unresolvedIssues,
-    preservedElements: [...(base.preservedElements ?? []), ...(humanizationResult.preservedElements ?? [])],
-  }
+export function useWorkflow() {
+  const ws = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+  return { ...ws, ...workflowActions }
 }
