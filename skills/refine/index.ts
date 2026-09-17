@@ -231,8 +231,11 @@ export async function runRefine(
     return result
   }
 
-  // ── P0.3.9.1: humanize mode — contract exists, uses LLM path ──
+  // ── P0.3.9.3: humanize mode — full context propagation ──
   if (validated.mode === 'humanize') {
+    if (!validated.topic || !validated.selectedAngleTitle) {
+      throw new Error('Humanization requires topic and selectedAngleTitle to construct context')
+    }
     const { text } = await generateText({
       model,
       system: REFINE_FULL_OUTPUT_SYSTEM_PROMPT + JSON_INSTRUCTION,
@@ -242,6 +245,11 @@ export async function runRefine(
         hook: validated.hook,
         platform: validated.platform,
         persona: validated.persona,
+        topic: validated.topic,
+        selectedAngleTitle: validated.selectedAngleTitle,
+        approvedStrategy: validated.approvedStrategy,
+        evaluationContext: validated.evaluationContext,
+        riskContext: validated.riskContext,
       }),
     })
 

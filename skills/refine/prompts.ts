@@ -191,6 +191,10 @@ ${contentStr}
 /**
  * Build a humanize prompt (P0.3.9.1 contract only).
  * The actual execution chain is wired in P0.3.9.3+.
+ *
+ * P0.3.9.3 Hardening: Full context propagation — strategy, evaluation,
+ * and risk context are injected as protective constraints to prevent the
+ * humanization process from undermining previously-approved decisions.
  */
 export const REFINE_HUMANIZE_PROMPT = (params: {
   content: string
@@ -198,14 +202,43 @@ export const REFINE_HUMANIZE_PROMPT = (params: {
   hook: string
   platform?: string
   persona?: string
+  topic?: string
+  selectedAngleTitle?: string
+  approvedStrategy?: RefineApprovedStrategyContext
+  evaluationContext?: RefineEvaluationContext
+  riskContext?: RefineRiskContext
 }): string => {
-  const { content, title, hook, platform, persona } = params
+  const { content, title, hook, platform, persona, topic, selectedAngleTitle, approvedStrategy, evaluationContext, riskContext } = params
   const contentStr = content.length > 4000 ? content.substring(0, 4000) + '...' : content
+
+  const strategyBlock = approvedStrategy
+    ? `## 已审批策略（结构约束）\n\n${approvedStrategy.keyArguments?.length ? `核心论点（不可改写）：\n${approvedStrategy.keyArguments.map((a) => `- ${a}`).join('\n')}\n\n` : ''}${approvedStrategy.emotionalArc ? `情绪弧线（不可改动）：${approvedStrategy.emotionalArc.start ?? ''} → ${approvedStrategy.emotionalArc.middle ?? ''} → ${approvedStrategy.emotionalArc.end ?? ''}\n\n` : ''}${approvedStrategy.callToAction ? `行动号召方式（保留）：${approvedStrategy.callToAction}\n\n` : ''}${approvedStrategy.tone ? `语调风格（保留）：${approvedStrategy.tone}` : ''}`.trim()
+    : ''
+
+  const evaluationBlock = evaluationContext?.suggestions?.length
+    ? `## 已修复问题（保护性约束）\n\n以下问题已通过对内容的修改得到解决，真人化过程中\\*\\*不得重新引入\\*\\*：\n\n${evaluationContext.suggestions
+        .map((s) => `- 【${s.section}】${s.issue}`)
+        .join('\n')}${evaluationContext.weaknesses?.length ? `\n\n已识别的弱点（不得加重）：\n${evaluationContext.weaknesses.map((w) => `- ${w}`).join('\n')}` : ''}`
+    : ''
+
+  const riskBlock = riskContext?.risks?.length
+    ? `## 已知风险（红线约束）\n\n以下风险已被识别，真人化过程中\\*\\*不得放大或新增\\*\\*同类风险：\n\n${riskContext.risks
+        .map((r) => `- [${r.severity ?? 'unknown'}] ${r.category}${r.description ? `: ${r.description}` : ''}`)
+        .join('\n')}${riskContext.overallRiskLevel ? `\n\n总体风险等级：${riskContext.overallRiskLevel}` : ''}`
+    : ''
 
   return `请对口播稿进行"去 AI 味"处理，使表达更自然、更像真人创作。
 
 ${platform ? `目标平台：${platform}` : ''}
 ${persona ? `创作者人设：${persona}` : ''}
+${topic ? `内容主题：${topic}` : ''}
+${selectedAngleTitle ? `内容角度：${selectedAngleTitle}` : ''}
+
+${strategyBlock}
+
+${evaluationBlock}
+
+${riskBlock}
 
 原文标题：${title}
 原钩子：${hook}
@@ -213,7 +246,7 @@ ${persona ? `创作者人设：${persona}` : ''}
 原文内容：
 ${contentStr}
 
-去 AI 味规则：
+## 去 AI 味执行规则
 1. 避免模板化开头/结尾（如"首先...其次...总之..."）
 2. 避免空洞的排比句和空泛形容词
 3. 减少过度连接词，让句子更紧凑
@@ -221,5 +254,11 @@ ${contentStr}
 5. 避免 AI 特征词汇（总而言之、值得一提的是、不可否认等）
 6. 引语需自然，不堆砌
 7. 保持核心信息和论点不变
-8. 返回完整内容，changes 中注明每处 humanization 修改`
+8. 返回完整内容，changes 中注明每处 humanization 修改
+
+## 严格禁止
+- 改动已通过的策略审批要素（核心论点、情绪弧线、行动号召方式、语调风格）
+- 重写已被评估标记为已修复的问题段落（结构、钩子、金句位置等）
+- 引入 Risk Analysis 中已标记为 high/medium 风险的元素
+- 改变段落间的逻辑递进关系（Strategy emotionalArc 已定义）`
 }
