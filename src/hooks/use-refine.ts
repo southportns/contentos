@@ -2,11 +2,23 @@
 
 import { useState, useCallback } from 'react'
 
+// ─── P0.3.9.1: Extended Refine Contract ─────────────────────────────────
+
 interface RefineChange {
-  type: string
+  type:
+    | 'hook_replaced'
+    | 'title_replaced'
+    | 'tone_change'
+    | 'candidates_generated'
+    | 'hook_generated'
+    | 'title_generated'
+    | 'issue_fix'
+    | 'humanization'
   original: string
   revised: string
   reason: string
+  linkedIssueId?: string
+  confidence?: number
 }
 
 interface RefineResult {
@@ -18,9 +30,73 @@ interface RefineResult {
   hookCandidates?: string[]
   titleCandidates?: string[]
   summary: string
+  // P0.3.9.1 New optional fields
+  resolvedIssues?: Array<{
+    issueId: string
+    resolution: string
+    changeId?: string
+  }>
+  unresolvedIssues?: Array<{
+    issueId: string
+    reason: string
+    suggestion: string
+  }>
+  preservedElements?: Array<{
+    element: string
+    reason: string
+  }>
 }
 
-type RefineMode = 'tone_change' | 'hook_select' | 'title_select'
+type RefineMode =
+  | 'tone_change'
+  | 'hook_select'
+  | 'title_select'
+  | 'hook_and_title_select'
+  | 'issue_fix'
+  | 'humanize'
+
+interface RefineEvaluationContext {
+  suggestions: Array<{
+    id?: string
+    section: string
+    issue: string
+    suggestion: string
+    priority: 'high' | 'medium' | 'low'
+  }>
+  weaknesses: string[]
+  scores?: {
+    emotionalImpact?: number
+    logicalClarity?: number
+    novelty?: number
+    readability?: number
+    utility?: number
+    platformFit?: number
+  }
+}
+
+interface RefineRiskContext {
+  overallRiskLevel?: 'safe' | 'low' | 'medium' | 'high'
+  risks: Array<{
+    id?: string
+    category: string
+    description?: string
+    suggestion?: string
+    severity?: 'high' | 'medium' | 'low'
+  }>
+}
+
+interface RefineApprovedStrategyContext {
+  title?: string
+  keyArguments?: string[]
+  emotionalArc?: {
+    start?: string
+    middle?: string
+    end?: string
+  }
+  callToAction?: string
+  tone?: string
+  selectedAngleTitle?: string
+}
 
 interface RefineInput {
   content: string
@@ -34,6 +110,11 @@ interface RefineInput {
   platform?: string
   topic?: string
   selectedAngleTitle?: string
+  // P0.3.9.1 New optional fields
+  evaluationContext?: RefineEvaluationContext
+  riskContext?: RefineRiskContext
+  approvedStrategy?: RefineApprovedStrategyContext
+  persona?: string
 }
 
 export function useRefine() {

@@ -195,10 +195,27 @@ export interface RefineResult {
     original: string
     revised: string
     reason: string
+    linkedIssueId?: string
+    confidence?: number
   }>
   hookCandidates?: string[]
   titleCandidates?: string[]
   summary: string
+  // P0.3.9.1 New optional output fields
+  resolvedIssues?: Array<{
+    issueId: string
+    resolution: string
+    changeId?: string
+  }>
+  unresolvedIssues?: Array<{
+    issueId: string
+    reason: string
+    suggestion: string
+  }>
+  preservedElements?: Array<{
+    element: string
+    reason: string
+  }>
 }
 
 export interface FinalOutput {
