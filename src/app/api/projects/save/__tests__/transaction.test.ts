@@ -1,8 +1,12 @@
 /**
  * P0.3.9.5 Final Fix — Transaction & Strategy Approval Regression Tests
  *
+ * NOTE: Tests use mock transaction (vi.fn). These are wiring/propagation tests,
+ * NOT real database rollback tests. Real DB rollback requires integration environment.
+ *
  * Covers:
- *   TEST 1: Transaction Rollback — if Archive fails, all writes rollback
+ *   TEST 1: Transaction Wiring — prisma.$transaction is used for save
+ *   TEST 1b: Transaction Integration — Archive failure propagates through transaction
  *   TEST 2a: Strategy Approval Preservation — approved → save → still approved
  *   TEST 2b: Strategy Approval Preservation — pending → save → still pending
  *   TEST 2c: Strategy Approval Preservation — rejected → save → still rejected
@@ -60,7 +64,6 @@ const mockArchiveRecords = vi.hoisted(() => new Map<string, {
 
 // Track whether transaction was used
 const mockUseTransaction = vi.hoisted(() => vi.fn());
-const mockTransactionCallback = vi.hoisted(() => vi.fn());
 
 // Track deleteMany calls
 const mockDraftDeleteMany = vi.hoisted(() => vi.fn());
@@ -140,6 +143,9 @@ vi.mock('@/lib/prisma', () => {
     userContentArchive: {
       create: mockArchiveCreate,
     },
+    user: {
+      upsert: vi.fn(async () => ({ id: 'default' })),
+    },
   };
 
   return {
@@ -162,6 +168,7 @@ vi.mock('@/lib/prisma', () => {
       strategyEvaluation: mockTx.strategyEvaluation,
       humanization: mockTx.humanization,
       userContentArchive: mockTx.userContentArchive,
+      user: mockTx.user,
     },
   };
 });
@@ -413,7 +420,7 @@ describe('P0.3.9.5 Final Fix — Transaction & Strategy Approval', () => {
     });
   });
 
-  describe('TEST 1b: Transaction Rollback — Archive failure propagates', () => {
+  describe('TEST 1b: Transaction Integration — Archive failure propagates', () => {
     it('when Archive create fails, save returns 500 and archive was inside transaction', async () => {
       // Make archive create fail inside the transaction
       mockArchiveCreate.mockImplementation(() => {
@@ -440,24 +447,24 @@ describe('P0.3.9.5 Final Fix — Transaction & Strategy Approval', () => {
     it('verifies archive is called inside transaction (after project/topic/draft)', async () => {
       // Track call order
       const callOrder: string[] = [];
-      mockProjectCreate.mockImplementation((...args: unknown[]) => {
+      mockProjectCreate.mockImplementation(() => {
         callOrder.push('project');
         const id = genId('proj');
         mockProjectRecords.set(id, { id, name: 'N/A', description: 'N/A' });
         return Promise.resolve({ id });
       });
-      mockTopicCreate.mockImplementation((...args: unknown[]) => {
+      mockTopicCreate.mockImplementation(() => {
         callOrder.push('topic');
         const id = genId('topic');
         mockTopicRecords.set(id, { id, topic: 'N/A', status: 'READY' });
         return Promise.resolve({ id });
       });
-      mockDraftCreate.mockImplementation((...args: unknown[]) => {
+      mockDraftCreate.mockImplementation(() => {
         callOrder.push('draft');
         const id = genId('draft');
         return Promise.resolve({ id, version: 1 });
       });
-      mockArchiveCreate.mockImplementation((...args: unknown[]) => {
+      mockArchiveCreate.mockImplementation(() => {
         callOrder.push('archive');
         const id = genId('archive');
         return Promise.resolve({ id });

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { Prisma } from '@/generated/prisma'
 import { isDatabaseConfigured } from '@/lib/utils/db-safe'
 import { prisma } from '@/lib/prisma'
-import { getDefaultUserId, ensureDefaultUser } from '@/lib/utils/default-user'
+import { getDefaultUserId } from '@/lib/utils/default-user'
 import { getNextDraftVersion, isFirstSave, getOriginalDraftVersion, getRefinedDraftVersion } from '@/lib/workflow/draft-version'
 
 export const runtime = 'nodejs'
@@ -237,11 +237,20 @@ export async function POST(request: Request) {
 
     const defaultUserId = getDefaultUserId()
 
-    // 0. Ensure default user exists (foreign key constraint)
-    await ensureDefaultUser()
-
     // Execute all database writes inside a single transaction
     const result = await prisma.$transaction(async (tx) => {
+      // 0. Ensure default user exists (foreign key constraint)
+      await tx.user.upsert({
+        where: { id: defaultUserId },
+        update: {},
+        create: {
+          id: defaultUserId,
+          email: defaultUserId === 'default'
+            ? 'default@contentos.local'
+            : `${defaultUserId}@contentos.local`,
+          name: 'Default User',
+        },
+      })
       // 1. Create or update project + topic
       const projectName = data.projectName || `${formatTime(new Date())} - ${data.topic.slice(0, 20)}`
       let project: { id: string }
