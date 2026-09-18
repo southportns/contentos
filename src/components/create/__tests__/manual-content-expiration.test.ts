@@ -89,4 +89,4 @@ describe('P0.3.9.3 - Manual Content Expiration (P5)', () => {
       expect(shouldExpireManualContent(sig1, sig2)).toBe(false)
     })
   })
-)
+})
