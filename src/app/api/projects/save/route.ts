@@ -2,11 +2,9 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { Prisma } from '@/generated/prisma'
 import { isDatabaseConfigured } from '@/lib/utils/db-safe'
-import { projectRepository } from '@/lib/repositories/project-repository'
-import { topicRepository } from '@/lib/repositories/topic-repository'
 import { prisma } from '@/lib/prisma'
 import { getDefaultUserId, ensureDefaultUser } from '@/lib/utils/default-user'
-import { getNextDraftVersion } from '@/lib/workflow/draft-version'
+import { getNextDraftVersion, isFirstSave, getOriginalDraftVersion, getRefinedDraftVersion } from '@/lib/workflow/draft-version'
 
 export const runtime = 'nodejs'
 
@@ -242,294 +240,340 @@ export async function POST(request: Request) {
     // 0. Ensure default user exists (foreign key constraint)
     await ensureDefaultUser()
 
-    // 1. Create or update project + topic
-    const projectName = data.projectName || `${formatTime(new Date())} - ${data.topic.slice(0, 20)}`
-    let project
-    let topic
+    // Execute all database writes inside a single transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Create or update project + topic
+      const projectName = data.projectName || `${formatTime(new Date())} - ${data.topic.slice(0, 20)}`
+      let project: { id: string }
+      let topic: { id: string }
 
-    if (data.projectId) {
-      // Update existing project
-      project = await projectRepository.findById(data.projectId)
-      if (!project) {
-        return NextResponse.json(
-          { success: false, error: '创作不存在' },
-          { status: 404 },
-        )
-      }
-      await projectRepository.update(project.id, {
-        name: projectName,
-        description: `主题：${data.topic}`,
-      })
-
-      // Find or create topic for this project
-      const existingTopics = (project as unknown as { topics: Array<{ id: string }> }).topics ?? []
-      if (existingTopics.length > 0) {
-        // Update existing topic
-        topic = await topicRepository.update(existingTopics[0].id, {
-          topic: data.topic,
-          category: data.category || null,
-          platform: data.platform || null,
-          audience: data.audience || null,
-          status: 'READY',
+      if (data.projectId) {
+        // Verify project exists within transaction
+        const existingProject = await tx.project.findUnique({
+          where: { id: data.projectId },
+          include: { topics: { select: { id: true } } },
         })
-        // Clean up old angles and strategy (but NOT drafts/evaluations/humanizations)
-        await prisma.angle.deleteMany({ where: { topicId: topic.id } })
-        await prisma.contentStrategy.deleteMany({ where: { topicId: topic.id } })
+        if (!existingProject) {
+          throw new Error('创作不存在')
+        }
+        project = existingProject
+
+        // Update project
+        await tx.project.update({
+          where: { id: project.id },
+          data: {
+            name: projectName,
+            description: `主题：${data.topic}`,
+          },
+        })
+
+        const existingTopics = (existingProject as unknown as { topics: Array<{ id: string }> }).topics ?? []
+        if (existingTopics.length > 0) {
+          // Update existing topic
+          const topicId = existingTopics[0].id
+          await tx.topic.update({
+            where: { id: topicId },
+            data: {
+              topic: data.topic,
+              category: data.category || null,
+              platform: data.platform || null,
+              audience: data.audience || null,
+              status: 'READY',
+            },
+          })
+          topic = { id: topicId }
+          // Clean up old angles (allowed per spec) but NOT strategy, drafts, evaluations
+          await tx.angle.deleteMany({ where: { topicId } })
+          // IMPORTANT: Do NOT delete strategies here — preserve approval status
+        } else {
+          const newTopic = await tx.topic.create({
+            data: {
+              topic: data.topic,
+              category: data.category || null,
+              platform: data.platform || null,
+              audience: data.audience || null,
+              status: 'READY',
+              project: { connect: { id: project.id } },
+            },
+          })
+          topic = newTopic
+        }
       } else {
-        topic = await topicRepository.create({
-          topic: data.topic,
-          category: data.category || null,
-          platform: data.platform || null,
-          audience: data.audience || null,
-          status: 'READY',
-          project: { connect: { id: project.id } },
+        // Create new project
+        project = await tx.project.create({
+          data: {
+            name: projectName,
+            description: `主题：${data.topic}`,
+            user: { connect: { id: defaultUserId } },
+          },
         })
+
+        // 2. Create topic
+        const newTopic = await tx.topic.create({
+          data: {
+            topic: data.topic,
+            category: data.category || null,
+            platform: data.platform || null,
+            audience: data.audience || null,
+            status: 'READY',
+            project: { connect: { id: project.id } },
+          },
+        })
+        topic = newTopic
       }
-    } else {
-      // Create new project
-      project = await projectRepository.create({
-        name: projectName,
-        description: `主题：${data.topic}`,
-        user: { connect: { id: defaultUserId } },
-      })
 
-      // 2. Create topic
-      topic = await topicRepository.create({
-        topic: data.topic,
-        category: data.category || null,
-        platform: data.platform || null,
-        audience: data.audience || null,
-        status: 'READY',
-        project: { connect: { id: project.id } },
-      })
-    }
-
-    // 3. Create selected angle
-    await prisma.angle.create({
-      data: {
-        topic: { connect: { id: topic.id } },
-        title: data.selectedAngle.title,
-        coreThesis: data.selectedAngle.angle,
-        emotion: data.selectedAngle.targetEmotion || null,
-        keyPoints: data.selectedAngle.keyPoints as unknown as Prisma.InputJsonValue,
-        audienceAppeal: data.selectedAngle.audienceAppeal || null,
-        estimatedViralScore: data.selectedAngle.estimatedViralScore || null,
-        status: 'APPROVED',
-      },
-    })
-
-    // 4. Upsert strategy (handles unique constraint on topicId)
-    const strategyData = data.strategy
-    await prisma.contentStrategy.upsert({
-      where: { topicId: topic.id },
-      create: {
-        topic: { connect: { id: topic.id } },
-        coreThesis: strategyData.title,
-        hookStrategy: strategyData.hook,
-        contentStructure: strategyData.structure.length > 0
-          ? strategyData.structure
-          : Prisma.JsonNull,
-        keyArguments: strategyData.keyArguments as unknown as Prisma.InputJsonValue,
-        endingStrategy: strategyData.emotionalArc
-          ? `${strategyData.emotionalArc.start} → ${strategyData.emotionalArc.middle} → ${strategyData.emotionalArc.end}`
-          : null,
-        ctaStrategy: strategyData.callToAction || null,
-        tone: strategyData.tone || null,
-        estimatedWordCount: strategyData.estimatedWordCount || null,
-        approvalStatus: 'pending',
-      },
-      update: {
-        coreThesis: strategyData.title,
-        hookStrategy: strategyData.hook,
-        contentStructure: strategyData.structure.length > 0
-          ? strategyData.structure
-          : Prisma.JsonNull,
-        keyArguments: strategyData.keyArguments as unknown as Prisma.InputJsonValue,
-        endingStrategy: strategyData.emotionalArc
-          ? `${strategyData.emotionalArc.start} → ${strategyData.emotionalArc.middle} → ${strategyData.emotionalArc.end}`
-          : null,
-        ctaStrategy: strategyData.callToAction || null,
-        tone: strategyData.tone || null,
-        estimatedWordCount: strategyData.estimatedWordCount || null,
-        approvalStatus: 'pending',
-        rejectionReason: null,
-        approvedAt: null,
-        rejectedAt: null,
-      },
-    })
-
-    // 5. Determine existing draft versions
-    const existingDrafts = await prisma.draft.findMany({
-      where: { topicId: topic.id },
-      select: { id: true, version: true },
-    })
-    const existingVersions = existingDrafts.map((d) => d.version)
-    const isFirstSave = existingDrafts.length === 0
-
-    // 6. Create drafts based on first save vs. subsequent save
-    let originalDraftId: string | null = null
-    let finalDraftId: string
-
-    if (isFirstSave) {
-      // First save: create v1 (original) and optionally v2 (refined)
-      const hasRefine = !!data.refineData && !!data.originalDraft
-
-      if (hasRefine && data.originalDraft) {
-        // Create Draft v1 (original)
-        const v1 = await prisma.draft.create({
-          data: {
-            topic: { connect: { id: topic.id } },
-            version: 1,
-            title: data.originalDraft.title,
-            content: data.originalDraft.content,
-            status: 'DRAFT',
-            wordCount: data.originalDraft.wordCount || null,
-          },
-        })
-        originalDraftId = v1.id
-
-        // Create Draft v2 (final/refined)
-        const v2 = await prisma.draft.create({
-          data: {
-            topic: { connect: { id: topic.id } },
-            version: 2,
-            title: data.draft.title,
-            content: data.draft.content,
-            status: 'FINAL',
-            wordCount: data.draft.wordCount || null,
-          },
-        })
-        finalDraftId = v2.id
-      } else {
-        // No refine: create v1 only
-        const v1 = await prisma.draft.create({
-          data: {
-            topic: { connect: { id: topic.id } },
-            version: 1,
-            title: data.draft.title,
-            content: data.draft.content,
-            status: 'FINAL',
-            wordCount: data.draft.wordCount || null,
-          },
-        })
-        originalDraftId = v1.id
-        finalDraftId = v1.id
-      }
-    } else {
-      // Subsequent save: create next version
-      const nextVersion = getNextDraftVersion(existingVersions)
-      const newDraft = await prisma.draft.create({
+      // 3. Create selected angle
+      await tx.angle.create({
         data: {
           topic: { connect: { id: topic.id } },
-          version: nextVersion,
-          title: data.draft.title,
-          content: data.draft.content,
-          status: 'FINAL',
+          title: data.selectedAngle.title,
+          coreThesis: data.selectedAngle.angle,
+          emotion: data.selectedAngle.targetEmotion || null,
+          keyPoints: data.selectedAngle.keyPoints as unknown as Prisma.InputJsonValue,
+          audienceAppeal: data.selectedAngle.audienceAppeal || null,
+          estimatedViralScore: data.selectedAngle.estimatedViralScore || null,
+          status: 'APPROVED',
+        },
+      })
+
+      // 4. Strategy — preserve approval status on existing strategies
+      const strategyData = data.strategy
+      const existingStrategy = await tx.contentStrategy.findUnique({
+        where: { topicId: topic.id },
+      })
+
+      if (existingStrategy) {
+        // Update existing strategy — preserve approvalStatus, rejectionReason, approvedAt, rejectedAt
+        await tx.contentStrategy.update({
+          where: { id: existingStrategy.id },
+          data: {
+            coreThesis: strategyData.title,
+            hookStrategy: strategyData.hook,
+            contentStructure: strategyData.structure.length > 0
+              ? strategyData.structure
+              : Prisma.JsonNull,
+            keyArguments: strategyData.keyArguments as unknown as Prisma.InputJsonValue,
+            endingStrategy: strategyData.emotionalArc
+              ? `${strategyData.emotionalArc.start} → ${strategyData.emotionalArc.middle} → ${strategyData.emotionalArc.end}`
+              : null,
+            ctaStrategy: strategyData.callToAction || null,
+            tone: strategyData.tone || null,
+            estimatedWordCount: strategyData.estimatedWordCount || null,
+            // IMPORTANT: Do NOT change approvalStatus, rejectionReason, approvedAt, rejectedAt
+          },
+        })
+      } else {
+        // Create new strategy
+        await tx.contentStrategy.create({
+          data: {
+            topic: { connect: { id: topic.id } },
+            coreThesis: strategyData.title,
+            hookStrategy: strategyData.hook,
+            contentStructure: strategyData.structure.length > 0
+              ? strategyData.structure
+              : Prisma.JsonNull,
+            keyArguments: strategyData.keyArguments as unknown as Prisma.InputJsonValue,
+            endingStrategy: strategyData.emotionalArc
+              ? `${strategyData.emotionalArc.start} → ${strategyData.emotionalArc.middle} → ${strategyData.emotionalArc.end}`
+              : null,
+            ctaStrategy: strategyData.callToAction || null,
+            tone: strategyData.tone || null,
+            estimatedWordCount: strategyData.estimatedWordCount || null,
+            approvalStatus: 'pending',
+          },
+        })
+      }
+
+      // 5. Determine existing draft versions
+      const existingDrafts = await tx.draft.findMany({
+        where: { topicId: topic.id },
+        select: { id: true, version: true },
+      })
+      const existingDraftCount = existingDrafts.length
+      const existingVersions = existingDrafts.map((d) => d.version)
+      const _isFirstSave = isFirstSave(existingDraftCount)
+
+      // 6. Create drafts based on first save vs. subsequent save
+      let originalDraftId: string | null = null
+      let finalDraftId: string
+
+      if (_isFirstSave) {
+        // First save: create v1 (original) and optionally v2 (refined)
+        const hasRefine = !!data.refineData && !!data.originalDraft
+
+        if (hasRefine && data.originalDraft) {
+          // Create Draft v1 (original)
+          const v1 = await tx.draft.create({
+            data: {
+              topic: { connect: { id: topic.id } },
+              version: getOriginalDraftVersion(),
+              title: data.originalDraft.title,
+              content: data.originalDraft.content,
+              status: 'DRAFT',
+              wordCount: data.originalDraft.wordCount || null,
+            },
+          })
+          originalDraftId = v1.id
+
+          // Create Draft v2 (final/refined)
+          const v2 = await tx.draft.create({
+            data: {
+              topic: { connect: { id: topic.id } },
+              version: getRefinedDraftVersion(),
+              title: data.draft.title,
+              content: data.draft.content,
+              status: 'FINAL',
+              wordCount: data.draft.wordCount || null,
+            },
+          })
+          finalDraftId = v2.id
+        } else {
+          // No refine: create v1 only
+          const v1 = await tx.draft.create({
+            data: {
+              topic: { connect: { id: topic.id } },
+              version: getOriginalDraftVersion(),
+              title: data.draft.title,
+              content: data.draft.content,
+              status: 'FINAL',
+              wordCount: data.draft.wordCount || null,
+            },
+          })
+          originalDraftId = v1.id
+          finalDraftId = v1.id
+        }
+      } else {
+        // Subsequent save: create next version
+        const nextVersion = getNextDraftVersion(existingVersions)
+        const newDraft = await tx.draft.create({
+          data: {
+            topic: { connect: { id: topic.id } },
+            version: nextVersion,
+            title: data.draft.title,
+            content: data.draft.content,
+            status: 'FINAL',
+            wordCount: data.draft.wordCount || null,
+          },
+        })
+        finalDraftId = newDraft.id
+      }
+
+      // 7. Create evaluation (only on first save, linked to original draft)
+      if (data.evaluation && _isFirstSave && originalDraftId) {
+        const evalData = data.evaluation
+        await tx.evaluation.create({
+          data: {
+            draft: { connect: { id: originalDraftId } },
+            topic: { connect: { id: topic.id } },
+            overallScore: evalData.overallScore,
+            emotionalImpactScore: evalData.scores?.emotionalImpact || null,
+            logicalClarityScore: evalData.scores?.logicalClarity || null,
+            noveltyScore: evalData.scores?.novelty || null,
+            readabilityScore: evalData.scores?.readability || null,
+            utilityScore: evalData.scores?.utility || null,
+            platformFitScore: evalData.scores?.platformFit || null,
+            strengths: evalData.strengths as unknown as Prisma.InputJsonValue,
+            issues: evalData.weaknesses as unknown as Prisma.InputJsonValue,
+            suggestions: evalData.suggestions.length > 0 ? evalData.suggestions : Prisma.JsonNull,
+            emotionalArcAnalysis: evalData.emotionalArcAnalysis || Prisma.JsonNull,
+            conclusion: evalData.conclusion || null,
+          },
+        })
+      }
+
+      // 8. Create strategy evaluation (only on first save, linked to original draft)
+      if (data.strategyEvaluation && _isFirstSave && originalDraftId) {
+        const seData = data.strategyEvaluation
+        await tx.strategyEvaluation.create({
+          data: {
+            draft: { connect: { id: originalDraftId } },
+            topic: { connect: { id: topic.id } },
+            platform: seData.platform,
+            overallScore: seData.overallScore,
+            grade: seData.grade,
+            scores: seData.scores || Prisma.JsonNull,
+            platformFit: seData.platformFit || null,
+            strategyConsistency: seData.strategyConsistency || null,
+            strengths: seData.strengths as unknown as Prisma.InputJsonValue,
+            weaknesses: seData.weaknesses as unknown as Prisma.InputJsonValue,
+            criticalIssues: seData.criticalIssues as unknown as Prisma.InputJsonValue,
+            improvementPriorities: seData.improvementPriorities.length > 0 ? seData.improvementPriorities : Prisma.JsonNull,
+            shareAnalysis: seData.shareAnalysis || Prisma.JsonNull,
+            aiStyleRisk: seData.aiStyleRisk || null,
+            authenticityScore: seData.authenticityScore || null,
+            evidenceQuality: seData.evidenceQuality || null,
+            confidence: seData.confidence || null,
+            verdict: seData.verdict || null,
+          },
+        })
+      }
+
+      // 9. Create humanization (if generated, linked to final draft)
+      if (data.humanization && data.humanization.result) {
+        const humData = data.humanization
+        const humResult = humData.result
+        await tx.humanization.create({
+          data: {
+            draft: { connect: { id: finalDraftId } },
+            topic: { connect: { id: topic.id } },
+            adopted: humData.adopted,
+            changes: humResult.changes.length > 0
+              ? (humResult.changes as unknown as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
+            issues: null,
+          },
+        })
+      }
+
+      // 10. Touch the project to update updatedAt
+      await tx.project.update({
+        where: { id: project.id },
+        data: {},
+      })
+
+      // 11. Archive final content (inside transaction — failure = full rollback)
+      await tx.userContentArchive.create({
+        data: {
+          topic: data.topic,
+          platform: data.platform || null,
+          finalTitle: data.draft.title,
+          finalContent: data.draft.content,
+          finalHook: data.draft.hook || null,
+          refineChanges: data.refineData?.changes || data.refineChanges || null,
+          refineData: data.refineData || null,
+          humanizationData: data.humanization?.result || null,
+          humanizationAdopted: data.humanization?.adopted ?? null,
+          resolvedIssues: data.refineData?.resolvedIssues || null,
+          unresolvedIssues: data.refineData?.unresolvedIssues || null,
+          preservedElements: data.refineData?.preservedElements || null,
+          draftVersion: _isFirstSave
+            ? (data.refineData && data.originalDraft ? getRefinedDraftVersion() : getOriginalDraftVersion())
+            : getNextDraftVersion(existingVersions),
+          refineVersion: _isFirstSave && data.refineData ? getRefinedDraftVersion() : null,
+          selectedAngleTitle: data.selectedAngle.title,
+          strategyTone: data.strategy.tone || null,
           wordCount: data.draft.wordCount || null,
+          user: { connect: { id: defaultUserId } },
         },
       })
-      finalDraftId = newDraft.id
-    }
 
-    // 7. Create evaluation (only on first save, linked to original draft)
-    if (data.evaluation && isFirstSave && originalDraftId) {
-      const evalData = data.evaluation
-      await prisma.evaluation.create({
-        data: {
-          draft: { connect: { id: originalDraftId } },
-          topic: { connect: { id: topic.id } },
-          overallScore: evalData.overallScore,
-          emotionalImpactScore: evalData.scores?.emotionalImpact || null,
-          logicalClarityScore: evalData.scores?.logicalClarity || null,
-          noveltyScore: evalData.scores?.novelty || null,
-          readabilityScore: evalData.scores?.readability || null,
-          utilityScore: evalData.scores?.utility || null,
-          platformFitScore: evalData.scores?.platformFit || null,
-          strengths: evalData.strengths as unknown as Prisma.InputJsonValue,
-          issues: evalData.weaknesses as unknown as Prisma.InputJsonValue,
-          suggestions: evalData.suggestions.length > 0 ? evalData.suggestions : Prisma.JsonNull,
-          emotionalArcAnalysis: evalData.emotionalArcAnalysis || Prisma.JsonNull,
-          conclusion: evalData.conclusion || null,
-        },
-      })
-    }
-
-    // 8. Create strategy evaluation (only on first save, linked to original draft)
-    if (data.strategyEvaluation && isFirstSave && originalDraftId) {
-      const seData = data.strategyEvaluation
-      await prisma.strategyEvaluation.create({
-        data: {
-          draft: { connect: { id: originalDraftId } },
-          topic: { connect: { id: topic.id } },
-          platform: seData.platform,
-          overallScore: seData.overallScore,
-          grade: seData.grade,
-          scores: seData.scores || Prisma.JsonNull,
-          platformFit: seData.platformFit || null,
-          strategyConsistency: seData.strategyConsistency || null,
-          strengths: seData.strengths as unknown as Prisma.InputJsonValue,
-          weaknesses: seData.weaknesses as unknown as Prisma.InputJsonValue,
-          criticalIssues: seData.criticalIssues as unknown as Prisma.InputJsonValue,
-          improvementPriorities: seData.improvementPriorities.length > 0 ? seData.improvementPriorities : Prisma.JsonNull,
-          shareAnalysis: seData.shareAnalysis || Prisma.JsonNull,
-          aiStyleRisk: seData.aiStyleRisk || null,
-          authenticityScore: seData.authenticityScore || null,
-          evidenceQuality: seData.evidenceQuality || null,
-          confidence: seData.confidence || null,
-          verdict: seData.verdict || null,
-        },
-      })
-    }
-
-    // 9. Create humanization (if generated, linked to final draft)
-    if (data.humanization && data.humanization.result) {
-      const humData = data.humanization
-      const humResult = humData.result
-      await prisma.humanization.create({
-        data: {
-          draft: { connect: { id: finalDraftId } },
-          topic: { connect: { id: topic.id } },
-          adopted: humData.adopted,
-          changes: humResult.changes.length > 0
-            ? (humResult.changes as unknown as Prisma.InputJsonValue)
-            : Prisma.JsonNull,
-          issues: null,
-        },
-      })
-    }
-
-    // 10. Touch the project to update updatedAt
-    await projectRepository.update(project.id, {})
-
-    // 11. Archive final content (now part of main save, failure = save failure)
-    const { contentService } = await import('@/lib/services/content-service')
-    await contentService.archiveContent(defaultUserId, {
-      topic: data.topic,
-      platform: data.platform || undefined,
-      finalTitle: data.draft.title,
-      finalContent: data.draft.content,
-      finalHook: data.draft.hook || undefined,
-      refineChanges: data.refineData?.changes || data.refineChanges || undefined,
-      refineData: data.refineData || undefined,
-      humanizationData: data.humanization?.result || undefined,
-      humanizationAdopted: data.humanization?.adopted ?? undefined,
-      resolvedIssues: data.refineData?.resolvedIssues || undefined,
-      unresolvedIssues: data.refineData?.unresolvedIssues || undefined,
-      preservedElements: data.refineData?.preservedElements || undefined,
-      draftVersion: isFirstSave
-        ? (data.refineData && data.originalDraft ? 2 : 1)
-        : getNextDraftVersion(existingVersions),
-      refineVersion: isFirstSave && data.refineData ? 2 : undefined,
-      selectedAngleTitle: data.selectedAngle.title,
-      strategyTone: data.strategy.tone || undefined,
-      wordCount: data.draft.wordCount || undefined,
+      return {
+        projectId: project.id,
+        topicId: topic.id,
+        originalDraftId,
+        finalDraftId,
+        draftVersion: _isFirstSave
+          ? (data.refineData && data.originalDraft ? getRefinedDraftVersion() : getOriginalDraftVersion())
+          : getNextDraftVersion(existingVersions),
+      }
     })
 
     return NextResponse.json({
       success: true,
       data: {
-        projectId: project.id,
-        topicId: topic.id,
+        projectId: result.projectId,
+        topicId: result.topicId,
+        draftVersion: result.draftVersion,
       },
     })
   } catch (error) {
