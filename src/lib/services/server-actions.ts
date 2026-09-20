@@ -17,6 +17,24 @@ export async function getProjects() {
   }
 }
 
+/**
+ * P0.4.1 — Get project detail with full content history.
+ * Read-only: returns project, topics, angles, strategy, drafts (with evaluation/humanization/strategyEvaluation).
+ */
+export async function getProjectDetail(projectId: string) {
+  if (!isDatabaseConfigured()) return null
+
+  if (!projectId) return null
+
+  try {
+    const { projectRepository } = await import('@/lib/repositories/project-repository')
+    return await projectRepository.findByIdWithContentHistory(projectId)
+  } catch (error) {
+    console.error('[Server Action] getProjectDetail failed:', error)
+    return null
+  }
+}
+
 export async function deleteProject(projectId: string): Promise<void> {
   if (!isDatabaseConfigured()) {
     throw new Error('Database not configured')
