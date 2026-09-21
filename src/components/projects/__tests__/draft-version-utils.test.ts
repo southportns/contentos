@@ -35,8 +35,6 @@ describe('compareDraftVersions', () => {
   it('handles completely different content', () => { expect(compareDraftVersions('AAA\nBBB', 'CCC\nDDD')).toEqual([{ type: 'removed', content: 'AAA' }, { type: 'removed', content: 'BBB' }, { type: 'added', content: 'CCC' }, { type: 'added', content: 'DDD' }]) })
   it('handles Chinese text', () => { expect(compareDraftVersions('你好世界', '你好新世界')).toEqual([{ type: 'removed', content: '你好世界' }, { type: 'added', content: '你好新世界' }]) })
   it('handles empty lines and trailing newline', () => {
-    // A: 第一行, (empty), 第三行 (trailing trimmed)
-    // B: 第一行, 第二行, 第三行
     expect(compareDraftVersions('第一行\n\n第三行\n', '第一行\n第二行\n第三行')).toEqual([
       { type: 'unchanged', content: '第一行' },
       { type: 'removed', content: '' },
