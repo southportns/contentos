@@ -1,7 +1,8 @@
 /*
  * P0.4.1 — Draft Version History Pure Helpers
+ * P0.4.2 — Draft Version Compare Pure Helpers
  *
- * Pure functions for version label determination and badge styling.
+ * Pure functions for version label determination, badge styling, and diff computation.
  * Separated from the React component for testability.
  */
 
