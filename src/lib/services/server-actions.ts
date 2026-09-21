@@ -3,6 +3,7 @@
 import { isDatabaseConfigured } from '@/lib/utils/db-safe'
 import { revalidatePath } from 'next/cache'
 import { getDefaultUserId } from '@/lib/utils/default-user'
+import type { Draft } from '@/generated/prisma'
 
 export async function getProjects() {
   if (!isDatabaseConfigured()) return []
@@ -57,6 +58,56 @@ export async function deleteProject(projectId: string): Promise<void> {
   await projectRepository.delete(projectId)
 
   revalidatePath('/projects')
+}
+
+/**
+ * P0.4.3 — Restore a draft version by creating a new Draft from historical content.
+ *
+ * Restore = Create New Draft (never overwrites old versions).
+ *
+ * @param sourceDraftId - The draft ID to restore content from
+ * @returns { success: boolean, draft?: Draft, error?: string }
+ */
+export async function restoreDraftVersion(
+  sourceDraftId: string,
+): Promise<{ success: boolean; draft?: Draft; error?: string }> {
+  if (!isDatabaseConfigured()) {
+    return { success: false, error: '数据库未配置' }
+  }
+
+  if (!sourceDraftId) {
+    return { success: false, error: '版本不存在或已不可用' }
+  }
+
+  try {
+    const { topicRepository } = await import('@/lib/repositories/topic-repository')
+    const defaultUserId = getDefaultUserId()
+
+    const draft = await topicRepository.createRestoredDraft(sourceDraftId, defaultUserId)
+
+    // Revalidate project detail page to show new version
+    revalidatePath('/projects/(app)', 'layout')
+
+    return { success: true, draft }
+  } catch (error) {
+    console.error('[Server Action] restoreDraftVersion failed:', error)
+
+    // Map repository errors to user-friendly messages
+    if (error instanceof Error) {
+      switch (error.message) {
+        case 'SOURCE_DRAFT_NOT_FOUND':
+          return { success: false, error: '该版本不存在或已不可用' }
+        case 'TOPIC_NOT_FOUND':
+          return { success: false, error: '项目上下文不存在' }
+        case 'OWNERSHIP_DENIED':
+          return { success: false, error: '无权操作此版本' }
+        default:
+          return { success: false, error: '恢复失败，请稍后重试' }
+      }
+    }
+
+    return { success: false, error: '恢复失败，请稍后重试' }
+  }
 }
 
 // ─── Persona Server Actions ─────────────────────────────
