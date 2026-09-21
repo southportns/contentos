@@ -26,6 +26,80 @@ function formatDate(date: Date): string {
   }).format(date)
 }
 
+function ScoreRow({ label, score }: { label: string; score: number | null }) {
+  if (score == null) return null
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium tabular-nums">{score}</span>
+    </div>
+  )
+}
+
+function EvaluationSection({ evaluation }: { evaluation: Evaluation | null }) {
+  if (!evaluation) return null
+  return (
+    <div className="space-y-2">
+      <h4 className="text-sm font-semibold flex items-center gap-1.5">
+        <Star className="size-3.5 text-amber-500" />
+        评估分数
+      </h4>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg bg-muted/30 p-3">
+        <ScoreRow label="综合" score={evaluation.overallScore} />
+        <ScoreRow label="情感冲击" score={evaluation.emotionalImpactScore} />
+        <ScoreRow label="逻辑清晰" score={evaluation.logicalClarityScore} />
+        <ScoreRow label="新颖度" score={evaluation.noveltyScore} />
+        <ScoreRow label="可读性" score={evaluation.readabilityScore} />
+        <ScoreRow label="平台适配" score={evaluation.platformFitScore} />
+      </div>
+    </div>
+  )
+}
+
+function StrategyEvaluationSection({ strategyEvaluation }: { strategyEvaluation: StrategyEvaluation | null }) {
+  if (!strategyEvaluation) return null
+  return (
+    <div className="space-y-2">
+      <h4 className="text-sm font-semibold">策略评估</h4>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg bg-muted/30 p-3">
+        <ScoreRow label="综合" score={strategyEvaluation.overallScore} />
+        {strategyEvaluation.grade && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">等级</span>
+            <span className="font-medium">{strategyEvaluation.grade}</span>
+          </div>
+        )}
+        {strategyEvaluation.platformFit != null && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">平台</span>
+            <span className="font-medium">{strategyEvaluation.platformFit}</span>
+          </div>
+        )}
+        {strategyEvaluation.strategyConsistency != null && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">一致性</span>
+            <span className="font-medium">{strategyEvaluation.strategyConsistency}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function HumanizationSection({ humanization }: { humanization: Humanization | null }) {
+  if (!humanization) return null
+  return (
+    <div className="space-y-2">
+      <h4 className="text-sm font-semibold">真人化</h4>
+      <div className="rounded-lg bg-muted/30 p-3">
+        <Badge variant={humanization.adopted ? 'default' : 'secondary'}>
+          {humanization.adopted ? '已采用' : '未采用'}
+        </Badge>
+      </div>
+    </div>
+  )
+}
+
 export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
   const [viewMode, setViewMode] = useState<'detail' | 'compare'>('detail')
   const [selectedVersion, setSelectedVersion] = useState<number>(drafts[0]?.version ?? 1)
@@ -120,6 +194,12 @@ export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
               {selectedDraft.wordCount && <span>{selectedDraft.wordCount} 字</span>}
             </div>
             <div className="rounded-lg bg-muted/30 p-4"><p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{selectedDraft.content}</p></div>
+            <EvaluationSection evaluation={selectedDraft.evaluation} />
+            <StrategyEvaluationSection strategyEvaluation={selectedDraft.strategyEvaluation} />
+            <HumanizationSection humanization={selectedDraft.humanization} />
+            {selectedDraft.evaluation == null && selectedDraft.strategyEvaluation == null && selectedDraft.humanization == null && (
+              <p className="text-sm text-muted-foreground text-center py-2">暂无分析数据</p>
+            )}
           </CardContent>
         </Card>
       )}
