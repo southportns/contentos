@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { FileText, ChevronRight, Star, ArrowLeftRight, ArrowLeft } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,6 +9,8 @@ import { cn } from '@/lib/utils'
 import type { Draft, Evaluation, Humanization, StrategyEvaluation } from '@/generated/prisma'
 import { getVersionLabel, getVersionBadgeVariant } from './draft-version-utils'
 import { DraftVersionCompare } from './draft-version-compare'
+import { DraftVersionRestoreButton } from './draft-version-restore-button'
+import { Separator } from '@/components/ui/separator'
 
 interface DraftVersionHistoryProps {
   drafts: Array<Draft & {
@@ -101,6 +104,7 @@ function HumanizationSection({ humanization }: { humanization: Humanization | nu
 }
 
 export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
+  const router = useRouter()
   const [viewMode, setViewMode] = useState<'detail' | 'compare'>('detail')
   const [selectedVersion, setSelectedVersion] = useState<number>(drafts[0]?.version ?? 1)
 
@@ -108,6 +112,12 @@ export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
     () => drafts.find((d) => d.version === selectedVersion) ?? drafts[0],
     [drafts, selectedVersion]
   )
+
+  const handleRestoreSuccess = (newVersion: number) => {
+    // Set the new version immediately; router.refresh() will refetch data
+    setSelectedVersion(newVersion)
+    router.refresh()
+  }
 
   const canCompare = drafts.length >= 2
 
@@ -200,6 +210,14 @@ export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
             {selectedDraft.evaluation == null && selectedDraft.strategyEvaluation == null && selectedDraft.humanization == null && (
               <p className="text-sm text-muted-foreground text-center py-2">暂无分析数据</p>
             )}
+            <Separator />
+            <div className="flex justify-end">
+              <DraftVersionRestoreButton
+                draftId={selectedDraft.id}
+                version={selectedDraft.version}
+                onRestoreSuccess={handleRestoreSuccess}
+              />
+            </div>
           </CardContent>
         </Card>
       )}
