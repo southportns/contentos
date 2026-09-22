@@ -552,7 +552,8 @@ describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
     })
 
     it('resolves active draft via getActiveDraft in useMemo', () => {
-      expect(historySource).toContain('getActiveDraft(drafts, activeDraftId)')
+      // P0.4.9: Uses localActiveDraftId for cross-tab sync (server → local → render)
+      expect(historySource).toContain('getActiveDraft(drafts, localActiveDraftId)')
     })
   })
 
