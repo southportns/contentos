@@ -2,9 +2,10 @@
  * P0.4.1 — Draft Version History Pure Helpers
  * P0.4.2 — Draft Version Compare Pure Helpers
  * P0.4.6 — Draft Version Evolution Pure Helpers
+ * P0.4.7 — Draft Version Lineage Traversal Pure Helpers
  *
  * Pure functions for version label determination, badge styling, diff computation,
- * and evolution metadata display.
+ * evolution metadata display, and lineage traversal.
  * Separated from the React component for testability.
  */
 
@@ -133,6 +134,88 @@ export function swapCompareVersions(
 export type DiffLine = {
   type: 'added' | 'removed' | 'unchanged'
   content: string
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P0.4.7 — Lineage Traversal Utilities
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * P0.4.7 — Get the parent draft from a drafts array.
+ *
+ * @param draft - The draft whose parent to find
+ * @param drafts - All drafts in the current topic
+ * @returns The parent draft, or null if no parentDraftId or parent not found
+ */
+export function getParentDraft<T extends { id: string; parentDraftId?: string | null }>(
+  draft: T,
+  drafts: T[],
+): T | null {
+  if (!draft.parentDraftId) return null
+  return drafts.find((d) => d.id === draft.parentDraftId) ?? null
+}
+
+/**
+ * P0.4.7 — Get all direct child drafts of a given draft.
+ *
+ * @param draft - The draft whose children to find
+ * @param drafts - All drafts in the current topic
+ * @returns Array of child drafts, sorted by version ascending
+ */
+export function getChildDrafts<T extends { id: string; parentDraftId?: string | null }>(
+  draft: T,
+  drafts: T[],
+): T[] {
+  return drafts
+    .filter((d) => d.parentDraftId === draft.id)
+    .sort((a, b) => {
+      // Sort by version if available, otherwise keep insertion order (stable)
+      const va = (a as { version?: number }).version
+      const vb = (b as { version?: number }).version
+      if (va != null && vb != null) return va - vb
+      return 0
+    })
+}
+
+/**
+ * P0.4.7 — Get the full lineage chain from the earliest ancestor to the current draft.
+ *
+ * Walks up the parent chain until reaching a draft with no parent or a cycle is detected.
+ * Returns the chain in order: [earliest ancestor, ..., current draft].
+ *
+ * @param draft - The draft to trace lineage for
+ * @param drafts - All drafts in the current topic
+ * @returns Array of drafts from ancestor to current
+ */
+export function getLineageChain<T extends {
+  id: string
+  parentDraftId?: string | null
+  version: number
+}>(
+  draft: T,
+  drafts: T[],
+): T[] {
+  const visited = new Set<string>()
+  const chain: T[] = [draft]
+  visited.add(draft.id)
+
+  let current: T | null = draft
+
+  while (current && current.parentDraftId) {
+    // Cycle protection: prevent infinite loop
+    if (visited.has(current.parentDraftId)) {
+      break
+    }
+
+    const parent = drafts.find((d) => d.id === current!.parentDraftId)
+    if (!parent) break
+
+    visited.add(parent.id)
+    chain.unshift(parent)
+    current = parent
+  }
+
+  return chain
 }
 
 /**
