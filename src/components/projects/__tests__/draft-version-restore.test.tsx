@@ -1,5 +1,5 @@
 /*
- * P0.4.3/P0.4.4/P0.4.5/P0.4.6 — Draft Version Restore Component Tests
+ * P0.4.3/P0.4.4/P0.4.5/P0.4.6/P0.4.7 — Draft Version Restore Component Tests
  *
  * Tests verify:
  *   1. Restore button exists in DraftVersionHistory detail view
@@ -17,6 +17,13 @@
  *  13. P0.4.6 — Initial version displayed correctly
  *  14. P0.4.6 — Restore version shows type + reason + lineage
  *  15. P0.4.6 — Unknown type fallback to "其他"
+ *  16. P0.4.7 — Lineage Explorer section in Detail Panel
+ *  17. P0.4.7 — Parent navigation (clickable, no page jump)
+ *  18. P0.4.7 — Child navigation (clickable, no page jump)
+ *  19. P0.4.7 — Branch hint in version list
+ *  20. P0.4.7 — Missing parent safety (no crash)
+ *  21. P0.4.7 — Lineage chain visualization
+ *  22. P0.4.7 — P0.4.5/P0.4.6 regression preserved
  */
 
 import { describe, it, expect } from 'vitest'
@@ -205,7 +212,7 @@ describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
       )
       expect(conflictCase).not.toBeNull()
       if (conflictCase) {
-        expect(conflictCase[1]).match(/[\u4e00-\u9fff]/)
+        expect(conflictCase[1]).toMatch(/[\u4e00-\u9fff]/)
       }
     })
   })
@@ -359,6 +366,156 @@ describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
     it('evolution section includes both type and lineage info', () => {
       expect(historySource).toContain('类型：')
       expect(historySource).toContain('来源：')
+    })
+  })
+
+  // ── P0.4.7 — Lineage Explorer Tests ──────────────────────────────────
+
+  describe('P0.4.7 — Lineage Explorer Section', () => {
+    it('Test G: Detail Panel renders "版本谱系" section', () => {
+      expect(historySource).toContain('版本谱系')
+    })
+
+    it('Test G: Lineage Explorer is a distinct section from 版本演化', () => {
+      const evolutionIdx = historySource.indexOf('版本演化')
+      const lineageIdx = historySource.indexOf('版本谱系')
+      expect(evolutionIdx).toBeGreaterThan(-1)
+      expect(lineageIdx).toBeGreaterThan(-1)
+      expect(lineageIdx).not.toBe(evolutionIdx)
+    })
+
+    it('imports getParentDraft utility', () => {
+      expect(historySource).toContain('getParentDraft')
+    })
+
+    it('imports getChildDrafts utility', () => {
+      expect(historySource).toContain('getChildDrafts')
+    })
+
+    it('imports getLineageChain utility', () => {
+      expect(historySource).toContain('getLineageChain')
+    })
+
+    it('computes parentDraft via useMemo', () => {
+      expect(historySource).toContain('parentDraft')
+      expect(historySource).toContain('getParentDraft(selectedDraft, drafts)')
+    })
+
+    it('computes childDrafts via useMemo', () => {
+      expect(historySource).toContain('childDrafts')
+      expect(historySource).toContain('getChildDrafts(selectedDraft, drafts)')
+    })
+
+    it('computes lineageChain via useMemo', () => {
+      expect(historySource).toContain('lineageChain')
+      expect(historySource).toContain('getLineageChain(selectedDraft, drafts)')
+    })
+  })
+
+  describe('P0.4.7 — Parent Navigation', () => {
+    it('Test H: shows "← 来源版本：" when parent exists', () => {
+      expect(historySource).toContain('← 来源版本')
+    })
+
+    it('Test H: shows parent version number in link text', () => {
+      expect(historySource).toContain('v{parentDraft.version}')
+    })
+
+    it('Test J: parent click calls setSelectedVersion(parentDraft.version)', () => {
+      expect(historySource).toContain('setSelectedVersion(parentDraft.version)')
+    })
+
+    it('Test M: shows "来源版本已不存在" when parentDraftId missing but set', () => {
+      expect(historySource).toContain('来源版本已不存在')
+    })
+
+    it('does not use router.push for navigation (no page jump)', () => {
+      expect(historySource).not.toContain("router.push")
+    })
+  })
+
+  describe('P0.4.7 — Child Navigation', () => {
+    it('Test I: shows "派生版本" header when children exist', () => {
+      expect(historySource).toContain('派生版本')
+    })
+
+    it('Test I: shows child version with change type label', () => {
+      expect(historySource).toContain('v{child.version}')
+      expect(historySource).toContain('getChangeTypeLabel(child.changeType)')
+    })
+
+    it('Test K: child click calls setSelectedVersion(child.version)', () => {
+      expect(historySource).toContain('setSelectedVersion(child.version)')
+    })
+
+    it('Test L: shows "暂无派生版本" when no children', () => {
+      expect(historySource).toContain('暂无派生版本')
+    })
+
+    it('childDrafts.length === 0 triggers empty state', () => {
+      expect(historySource).toContain('childDrafts.length === 0')
+    })
+  })
+
+  describe('P0.4.7 — Branch Hint in Version List', () => {
+    it('imports GitBranch icon from lucide-react', () => {
+      expect(historySource).toContain('GitBranch')
+    })
+
+    it('shows branch count hint when draft has children', () => {
+      expect(historySource).toContain('个派生版本')
+    })
+
+    it('branch hint only appears when child count > 0', () => {
+      expect(historySource).toContain('childCountsById.get(draft.id) ?? 0) > 0')
+    })
+  })
+
+  describe('P0.4.7 — Missing Parent Safety', () => {
+    it('Test M: does not crash when parentDraftId references missing draft', () => {
+      expect(historySource).toContain('来源版本已不存在')
+      expect(historySource).not.toContain('parentDraft!.version')
+    })
+
+    it('handles initial version (no parentDraftId) correctly', () => {
+      expect(historySource).toContain('初始版本')
+    })
+  })
+
+  describe('P0.4.7 — Lineage Chain Visualization', () => {
+    it('renders lineage chain only when chain length > 1', () => {
+      expect(historySource).toContain('lineageChain.length > 1')
+    })
+
+    it('each ancestor in chain is clickable', () => {
+      expect(historySource).toContain('onClick={() => setSelectedVersion(ancestor.version)}')
+    })
+
+    it('current version in chain is highlighted differently', () => {
+      expect(historySource).toContain('ancestor.version === selectedDraft.version')
+    })
+  })
+
+  describe('P0.4.7 — P0.4.5/P0.4.6 Regression', () => {
+    it('P0.4.5 lineage display in version list still works', () => {
+      expect(historySource).toContain('由 v{versionById.get(draft.parentDraftId)} 创建')
+    })
+
+    it('P0.4.6 evolution metadata section still exists', () => {
+      expect(historySource).toContain('版本演化')
+      expect(historySource).toContain('类型：{getChangeTypeLabel(selectedDraft.changeType)}')
+    })
+
+    it('P0.4.6 changeReason display still works', () => {
+      expect(historySource).toContain('原因：{selectedDraft.changeReason}')
+    })
+
+    it('P0.4.3 restore button still exists', () => {
+      expect(historySource).toContain('<DraftVersionRestoreButton')
+    })
+
+    it('P0.4.2 compare mode still exists', () => {
+      expect(historySource).toContain("viewMode === 'compare'")
     })
   })
 })
