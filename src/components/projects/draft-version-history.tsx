@@ -112,23 +112,23 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
   const router = useRouter()
   const [viewMode, setViewMode] = useState<'detail' | 'compare'>('detail')
   const [selectedVersion, setSelectedVersion] = useState<number>(() => {
+    // P0.4.8 — Initialize selected version to the active draft's version
     if (activeDraftId && drafts.length > 0) {
       const active = drafts.find(d => d.id === activeDraftId)
       if (active) return active.version
     }
     return drafts[0]?.version ?? 1
   })
-
-  // P0.4.9: Local active draft state synced from server or remote tabs
+  // P0.4.9 — Local active draft state (synced from server or remote tabs)
   const [localActiveDraftId, setLocalActiveDraftId] = useState<string | null | undefined>(activeDraftId)
 
-  // P0.4.9: Sync server prop to local state
+  // P0.4.9 — Sync server prop to local state (server is source of truth)
   useEffect(() => {
     setLocalActiveDraftId(activeDraftId)
   }, [activeDraftId])
 
-  // P0.4.9: Listen for active draft changes from other tabs
-  useActiveDraftSync({
+  // P0.4.9 — Listen for active draft changes from other tabs
+  const { sourceId } = useActiveDraftSync({
     topicId,
     currentDraftId: localActiveDraftId,
     onRemoteChange: (draftId) => {
@@ -137,10 +137,25 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
       if (newActiveDraft) {
         setSelectedVersion(newActiveDraft.version)
       }
+      // P0.4.9.1: If draft not found (remote Restore case),
+      // the useEffect below will sync selectedVersion after router.refresh()
       router.refresh()
     },
   })
 
+  // P0.4.9.1 — Sync selectedVersion when localActiveDraftId changes and
+  // the corresponding draft is available in the drafts array.
+  // Handles the remote Restore case: the new draft may not be in `drafts`
+  // when onRemoteChange fires, but after router.refresh() updates props.
+  useEffect(() => {
+    if (!localActiveDraftId) return
+    const activeDraft = drafts.find(d => d.id === localActiveDraftId)
+    if (activeDraft && selectedVersion !== activeDraft.version) {
+      setSelectedVersion(activeDraft.version)
+    }
+  }, [drafts, localActiveDraftId])
+
+  // P0.4.8 — Track whether "set as current" is in progress
   const [settingActive, setSettingActive] = useState(false)
 
   const selectedDraft = useMemo(
@@ -148,6 +163,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
     [drafts, selectedVersion]
   )
 
+  // P0.4.5 — Build a map from draft ID to version number for lineage display
   const versionById = useMemo(() => {
     const map = new Map<string, number>()
     for (const d of drafts) {
@@ -156,6 +172,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
     return map
   }, [drafts])
 
+  // P0.4.7 — Lineage relationships
   const parentDraft = useMemo(
     () => selectedDraft ? getParentDraft(selectedDraft, drafts) : null,
     [selectedDraft, drafts]
@@ -178,16 +195,19 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
     return map
   }, [drafts])
 
+  // P0.4.8 — Active draft resolution (P0.4.9: use local state)
   const activeDraft = useMemo(
     () => getActiveDraft(drafts, localActiveDraftId),
     [drafts, localActiveDraftId]
   )
 
   const handleRestoreSuccess = (newVersion: number) => {
+    // Set the new version immediately; router.refresh() will refetch data
     setSelectedVersion(newVersion)
     router.refresh()
   }
 
+  // P0.4.8 — Set a draft as the current working version
   const handleSetActiveDraft = async (draftId: string) => {
     if (!topicId) return
     setSettingActive(true)
@@ -195,12 +215,15 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
       const { setActiveDraft } = await import('@/lib/services/server-actions')
       const result = await setActiveDraft(topicId, draftId)
       if (result.success) {
+        // P0.4.9: Update local state immediately for responsive UI
         setLocalActiveDraftId(draftId)
+        // P0.4.9: Auto-select the new active draft's version
         const newActiveDraft = drafts.find(d => d.id === draftId)
         if (newActiveDraft) {
           setSelectedVersion(newActiveDraft.version)
         }
-        broadcastActiveDraftChange(topicId, draftId)
+        // P0.4.9: Broadcast to other tabs ONLY after DB success
+        broadcastActiveDraftChange(topicId, draftId, sourceId)
         router.refresh()
       } else {
         console.error('[P0.4.8] setActiveDraft failed:', result.error)
@@ -255,6 +278,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">v{draft.version}</span>
                     <Badge variant={getVersionBadgeVariant(draft.status)} className="text-[10px] px-1.5 py-0">{getVersionLabel(draft.version, draft.status)}</Badge>
+                    {/* P0.4.8 — Active Draft indicator */}
                     {activeDraft && draft.id === activeDraft.id && (
                       <Badge variant="default" className="text-[10px] px-1.5 py-0">当前</Badge>
                     )}
@@ -263,6 +287,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
                     <span className="text-xs text-muted-foreground">{formatDate(draft.createdAt)}</span>
                     {draft.wordCount && <span className="text-xs text-muted-foreground">{draft.wordCount}字</span>}
                   </div>
+                  {/* P0.4.5/P0.4.6 — Lineage + Evolution indicator */}
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {draft.changeType === 'INITIAL' ? (
                       <span>{getChangeTypeLabel(draft.changeType)}</span>
@@ -272,12 +297,14 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
                       <span>{getChangeTypeLabel(draft.changeType)}</span>
                     )}
                   </div>
+                  {/* P0.4.7 — Branch hint in version list */}
                   {(childCountsById.get(draft.id) ?? 0) > 0 && (
                     <div className="text-xs text-blue-500 mt-0.5 flex items-center gap-1">
                       <GitBranch className="size-3" />
                       {childCountsById.get(draft.id)} 个派生版本
                     </div>
                   )}
+                  {/* P0.4.8 — Set as active draft button */}
                   {activeDraft && draft.id !== activeDraft.id && topicId && (
                     <Button
                       variant="ghost"
@@ -323,11 +350,16 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
               <span>创建 {new Intl.DateTimeFormat('zh-CN', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'}).format(selectedDraft.createdAt)}</span>
               {selectedDraft.wordCount && <span>{selectedDraft.wordCount} 字</span>}
             </div>
+            {/* P0.4.6 — Version Evolution Metadata */}
             <div className="rounded-lg bg-muted/30 p-3 space-y-1.5">
               <h4 className="text-xs font-semibold text-muted-foreground">版本演化</h4>
-              <div className="text-xs text-muted-foreground">类型：{getChangeTypeLabel(selectedDraft.changeType)}</div>
+              <div className="text-xs text-muted-foreground">
+                类型：{getChangeTypeLabel(selectedDraft.changeType)}
+              </div>
               {selectedDraft.changeReason && (
-                <div className="text-xs text-muted-foreground">原因：{selectedDraft.changeReason}</div>
+                <div className="text-xs text-muted-foreground">
+                  原因：{selectedDraft.changeReason}
+                </div>
               )}
               <div className="text-xs text-muted-foreground">
                 {selectedDraft.parentDraftId && versionById.has(selectedDraft.parentDraftId) ? (
@@ -337,8 +369,10 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
                 )}
               </div>
             </div>
+            {/* P0.4.7 — Lineage Explorer */}
             <div className="rounded-lg bg-muted/30 p-3 space-y-2">
               <h4 className="text-xs font-semibold text-muted-foreground">版本谱系</h4>
+              {/* Lineage chain visualization */}
               {lineageChain.length > 1 && (
                 <div className="flex flex-col items-center gap-0.5 py-1">
                   {lineageChain.map((ancestor, idx) => (
@@ -361,6 +395,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
                   ))}
                 </div>
               )}
+              {/* Parent navigation */}
               <div className="space-y-1.5">
                 <div className="text-xs text-muted-foreground">
                   {parentDraft ? (
@@ -377,6 +412,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
                   )}
                 </div>
               </div>
+              {/* Child navigation */}
               {childDrafts.length > 0 && (
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">派生版本</div>
@@ -393,6 +429,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
                   </div>
                 </div>
               )}
+              {/* No children state */}
               {childDrafts.length === 0 && (
                 <div className="text-xs text-muted-foreground">暂无派生版本</div>
               )}
