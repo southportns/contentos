@@ -61,7 +61,7 @@ export async function deleteProject(projectId: string): Promise<void> {
 }
 
 /**
- * P0.4.3/P0.4.4 — Restore a draft version by creating a new Draft from historical content.
+ * P0.4.3 — Restore a draft version by creating a new Draft from historical content.
  *
  * Restore = Create New Draft (never overwrites old versions).
  *

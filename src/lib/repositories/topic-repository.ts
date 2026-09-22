@@ -196,10 +196,12 @@ export const topicRepository = {
           const nextVersion = (maxVersionDraft?.version ?? 0) + 1
 
           // Create new draft with only content fields copied
+          // P0.4.5 — Record lineage: new draft's parent is the source draft
           return tx.draft.create({
             data: {
               topicId: sourceDraft.topicId,
               version: nextVersion,
+              parentDraftId: sourceDraft.id,
               title: sourceDraft.title,
               content: sourceDraft.content,
               outline: sourceDraft.outline,
