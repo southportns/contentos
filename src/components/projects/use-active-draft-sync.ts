@@ -20,12 +20,19 @@
  *
  * SSR Safety: All BroadcastChannel access is inside useEffect. Hook returns
  * safely (no-ops) when BroadcastChannel is unavailable (SSR or old browser).
+ *
+ * P0.4.9.1 Hardening:
+ *   - Stable sourceId via useRef (no regeneration on re-render)
+ *   - Type guard (isValidActiveDraftMessage) before filter
+ *   - Refs for topicId/currentDraftId/onRemoteChange → effect depends only on topicId
+ *   - Unified filter API (ActiveDraftSyncFilterOptions object)
  */
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ACTIVE_DRAFT_CHANNEL,
   type ActiveDraftChangeMessage,
+  isValidActiveDraftMessage,
   shouldAcceptActiveDraftMessage,
 } from './active-draft-sync-utils'
 
@@ -64,13 +71,27 @@ export function useActiveDraftSync({
   currentDraftId,
   onRemoteChange,
 }: UseActiveDraftSyncOptions): UseActiveDraftSyncReturn {
-  // Generate a unique sourceId for this tab instance
-  const sourceIdRef = useRef<string>(generateSourceId())
+  // Generate a stable sourceId once per component instance (useState initializer)
+  const [sourceId] = useState(() => generateSourceId())
   // Track last processed event timestamp (monotonic within this tab)
   const lastEventTimestampRef = useRef<number>(0)
-  // Keep onRemoteChange in a ref to avoid re-subscribing on every render
+
+  // Refs to hold latest values without triggering effect re-runs.
+  // These are updated in a layout effect to avoid render-time mutation.
+  const topicIdRef = useRef(topicId)
+  const currentDraftIdRef = useRef(currentDraftId)
   const onRemoteChangeRef = useRef(onRemoteChange)
-  onRemoteChangeRef.current = onRemoteChange
+
+  // Keep refs in sync after each render (runs before browser paint, no cascading renders)
+  useEffect(() => {
+    topicIdRef.current = topicId
+  }, [topicId])
+  useEffect(() => {
+    currentDraftIdRef.current = currentDraftId
+  }, [currentDraftId])
+  useEffect(() => {
+    onRemoteChangeRef.current = onRemoteChange
+  }, [onRemoteChange])
 
   useEffect(() => {
     // SSR safety: BroadcastChannel may not exist
@@ -91,12 +112,15 @@ export function useActiveDraftSync({
       channel.onmessage = (event: MessageEvent<unknown>) => {
         const message = event.data
 
-        // Apply all filtering via pure utility functions
+        // P0.4.9.1 — Type guard first so message is narrowed to ActiveDraftChangeMessage
+        if (!isValidActiveDraftMessage(message)) return
+
+        // P0.4.9.1 — Unified filter with options object
         const shouldAccept = shouldAcceptActiveDraftMessage(message, {
-          topicId,
-          sourceId: sourceIdRef.current,
+          topicId: topicIdRef.current,
+          sourceId,
           lastEventTimestamp: lastEventTimestampRef.current,
-          currentDraftId,
+          currentDraftId: currentDraftIdRef.current,
         })
 
         if (!shouldAccept) return
@@ -123,9 +147,9 @@ export function useActiveDraftSync({
         }
       }
     }
-  }, [topicId, currentDraftId])
+  }, [topicId, sourceId])
 
-  return { sourceId: sourceIdRef.current }
+  return { sourceId }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

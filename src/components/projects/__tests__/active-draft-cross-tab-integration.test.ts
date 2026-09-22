@@ -337,8 +337,8 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
     const channelA = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
     const channelB = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
 
-    let tabAReceivedDraftIds: string[] = []
-    let tabBReceivedDraftIds: string[] = []
+    const tabAReceivedDraftIds: string[] = []
+    const tabBReceivedDraftIds: string[] = []
 
     // Tab A listener: filters by its stable sourceId
     channelA.onmessage = (event) => {
@@ -397,8 +397,8 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
     const channelB = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
     const channelC = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
 
-    let bReceived: string[] = []
-    let cReceived: string[] = []
+    const bReceived: string[] = []
+    const cReceived: string[] = []
 
     channelB.onmessage = (event) => {
       const msg = event.data

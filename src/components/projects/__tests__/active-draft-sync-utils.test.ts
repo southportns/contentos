@@ -6,7 +6,7 @@ import {
   createActiveDraftChangeMessage,
   isValidActiveDraftMessage,
   shouldAcceptActiveDraftMessage,
-  ActiveDraftChangeMessage,
+  ActiveDraftSyncFilterOptions,
 } from '../active-draft-sync-utils'
 
 describe('active-draft-sync-utils', () => {
@@ -146,9 +146,14 @@ describe('active-draft-sync-utils', () => {
         draftId: 'draft-X',
         sourceId: 'source-1',
       })
-      const result = shouldAcceptActiveDraftMessage(msg, 'topic-B', 'source-2', 'draft-old', 0)
-      expect(result.accept).toBe(false)
-      expect(result.reason).toBe('wrong-topic')
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-B',
+        sourceId: 'source-2',
+        currentDraftId: 'draft-old',
+        lastEventTimestamp: 0,
+      }
+      const result = shouldAcceptActiveDraftMessage(msg, options)
+      expect(result).toBe(false)
     })
   })
 
@@ -159,9 +164,14 @@ describe('active-draft-sync-utils', () => {
         draftId: 'draft-X',
         sourceId: 'source-1',
       })
-      const result = shouldAcceptActiveDraftMessage(msg, 'topic-A', 'source-1', 'draft-old', 0)
-      expect(result.accept).toBe(false)
-      expect(result.reason).toBe('self-message')
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-A',
+        sourceId: 'source-1',
+        currentDraftId: 'draft-old',
+        lastEventTimestamp: 0,
+      }
+      const result = shouldAcceptActiveDraftMessage(msg, options)
+      expect(result).toBe(false)
     })
   })
 
@@ -172,9 +182,14 @@ describe('active-draft-sync-utils', () => {
         draftId: 'draft-X',
         sourceId: 'source-2',
       })
-      const result = shouldAcceptActiveDraftMessage(msg, 'topic-A', 'source-1', 'draft-old', msg.timestamp)
-      expect(result.accept).toBe(false)
-      expect(result.reason).toBe('stale')
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-A',
+        sourceId: 'source-1',
+        currentDraftId: 'draft-old',
+        lastEventTimestamp: msg.timestamp,
+      }
+      const result = shouldAcceptActiveDraftMessage(msg, options)
+      expect(result).toBe(false)
     })
 
     it('should accept fresh message', () => {
@@ -183,8 +198,14 @@ describe('active-draft-sync-utils', () => {
         draftId: 'draft-X',
         sourceId: 'source-2',
       })
-      const result = shouldAcceptActiveDraftMessage(msg, 'topic-A', 'source-1', 'draft-old', msg.timestamp - 1)
-      expect(result.accept).toBe(true)
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-A',
+        sourceId: 'source-1',
+        currentDraftId: 'draft-old',
+        lastEventTimestamp: msg.timestamp - 1,
+      }
+      const result = shouldAcceptActiveDraftMessage(msg, options)
+      expect(result).toBe(true)
     })
   })
 
@@ -195,9 +216,76 @@ describe('active-draft-sync-utils', () => {
         draftId: 'draft-same',
         sourceId: 'source-2',
       })
-      const result = shouldAcceptActiveDraftMessage(msg, 'topic-A', 'source-1', 'draft-same', 0)
-      expect(result.accept).toBe(false)
-      expect(result.reason).toBe('no-change')
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-A',
+        sourceId: 'source-1',
+        currentDraftId: 'draft-same',
+        lastEventTimestamp: 0,
+      }
+      const result = shouldAcceptActiveDraftMessage(msg, options)
+      expect(result).toBe(false)
+    })
+  })
+
+  // ── P0.4.9.1 — Unknown/unrecognised payloads ─────────────────────────────
+
+  describe('P0.4.9.1 — Unknown payload rejection', () => {
+    it('should reject null payload', () => {
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-A',
+        sourceId: 'source-1',
+        currentDraftId: 'draft-old',
+        lastEventTimestamp: 0,
+      }
+      expect(shouldAcceptActiveDraftMessage(null, options)).toBe(false)
+    })
+
+    it('should reject undefined payload', () => {
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-A',
+        sourceId: 'source-1',
+        currentDraftId: 'draft-old',
+        lastEventTimestamp: 0,
+      }
+      expect(shouldAcceptActiveDraftMessage(undefined, options)).toBe(false)
+    })
+
+    it('should reject non-object payloads', () => {
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-A',
+        sourceId: 'source-1',
+        currentDraftId: 'draft-old',
+        lastEventTimestamp: 0,
+      }
+      expect(shouldAcceptActiveDraftMessage('hello', options)).toBe(false)
+      expect(shouldAcceptActiveDraftMessage(42, options)).toBe(false)
+      expect(shouldAcceptActiveDraftMessage(true, options)).toBe(false)
+    })
+
+    it('should reject object with wrong type field', () => {
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-A',
+        sourceId: 'source-1',
+        currentDraftId: 'draft-old',
+        lastEventTimestamp: 0,
+      }
+      expect(shouldAcceptActiveDraftMessage({
+        type: 'OTHER_TYPE',
+        topicId: 'topic-A',
+        draftId: 'draft-X',
+        sourceId: 'source-2',
+        timestamp: 1,
+      }, options)).toBe(false)
+    })
+
+    it('should reject function payload', () => {
+      const options: ActiveDraftSyncFilterOptions = {
+        topicId: 'topic-A',
+        sourceId: 'source-1',
+        currentDraftId: 'draft-old',
+        lastEventTimestamp: 0,
+      }
+      expect(shouldAcceptActiveDraftMessage(() => {}, options)).toBe(false)
     })
   })
 })

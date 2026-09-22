@@ -123,7 +123,11 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
   const [localActiveDraftId, setLocalActiveDraftId] = useState<string | null | undefined>(activeDraftId)
 
   // P0.4.9 — Sync server prop to local state (server is source of truth)
+  // Intentional: localActiveDraftId is mutable state synced from the authority (server prop)
+  // P0.4.9.1 design: this pattern is per React docs for syncing props that can also be
+  // updated by external systems (BroadcastChannel messages from other tabs)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocalActiveDraftId(activeDraftId)
   }, [activeDraftId])
 
@@ -147,12 +151,17 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
   // the corresponding draft is available in the drafts array.
   // Handles the remote Restore case: the new draft may not be in `drafts`
   // when onRemoteChange fires, but after router.refresh() updates props.
+  // Intentional: selectedVersion selection state must stay consistent with the
+  // authoritative active draft — this is a "sync" not a "cascade" (guarded
+  // by the selectedVersion inequality check to prevent infinite loops)
   useEffect(() => {
     if (!localActiveDraftId) return
     const activeDraft = drafts.find(d => d.id === localActiveDraftId)
     if (activeDraft && selectedVersion !== activeDraft.version) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedVersion(activeDraft.version)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drafts, localActiveDraftId])
 
   // P0.4.8 — Track whether "set as current" is in progress

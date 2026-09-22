@@ -162,9 +162,9 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
       expect(hookSource).toContain('shouldAcceptActiveDraftMessage')
     })
 
-    it('pure utility function isForTopic filters by topicId', () => {
-      expect(utilsSource).toContain('isForTopic')
-      expect(utilsSource).toContain('message.topicId')
+    it('unified shouldAcceptActiveDraftMessage filters by topicId via options', () => {
+      expect(utilsSource).toContain('shouldAcceptActiveDraftMessage')
+      expect(utilsSource).toContain('ActiveDraftSyncFilterOptions')
     })
   })
 
@@ -232,12 +232,12 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
       expect(utilsSource).toContain('shouldAcceptActiveDraftMessage')
     })
 
-    it('exports individual filter functions', () => {
-      expect(utilsSource).toContain('isActiveDraftChangeMessage')
-      expect(utilsSource).toContain('isForTopic')
-      expect(utilsSource).toContain('isFromSelf')
-      expect(utilsSource).toContain('isNewerThanLastEvent')
-      expect(utilsSource).toContain('isDifferentDraft')
+    it('P0.4.9.1 — exports ActiveDraftSyncFilterOptions interface for unified filter', () => {
+      expect(utilsSource).toContain('ActiveDraftSyncFilterOptions')
+    })
+
+    it('P0.4.9.1 — shouldAcceptActiveDraftMessage accepts options object', () => {
+      expect(utilsSource).toMatch(/shouldAcceptActiveDraftMessage\([\s\S]*?ActiveDraftSyncFilterOptions/)
     })
   })
 
@@ -298,4 +298,4 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
       expect(historySource).toContain('版本谱系')
     })
   })
-)
+})

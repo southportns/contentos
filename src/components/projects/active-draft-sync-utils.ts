@@ -9,6 +9,22 @@ export interface ActiveDraftChangeMessage {
   timestamp: number
 }
 
+/**
+ * P0.4.9.1 — Filter options for shouldAcceptActiveDraftMessage.
+ * Encapsulates all local-state parameters needed to decide whether
+ * a remote message should be acted upon.
+ */
+export interface ActiveDraftSyncFilterOptions {
+  /** The topic ID this tab is currently viewing */
+  topicId: string
+  /** The stable source ID of this tab (self-message rejection) */
+  sourceId: string
+  /** Monotonic timestamp of last processed event (stale rejection) */
+  lastEventTimestamp: number
+  /** Current active draft ID in this tab (no-change rejection) */
+  currentDraftId: string | null | undefined
+}
+
 export function generateSourceId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
@@ -39,16 +55,33 @@ export function isValidActiveDraftMessage(value: unknown): value is ActiveDraftC
   )
 }
 
+/**
+ * P0.4.9.1 — Unified filter: accepts an options object instead of
+ * individual positional parameters. Returns a boolean for direct
+ * use in conditional checks (no `.accept` property access needed).
+ */
 export function shouldAcceptActiveDraftMessage(
+  msg: unknown,
+  options: ActiveDraftSyncFilterOptions
+): boolean {
+  // Type guard first — reject non-conforming payloads
+  if (!isValidActiveDraftMessage(msg)) return false
+
+  if (msg.topicId !== options.topicId) return false
+  if (msg.sourceId === options.sourceId) return false
+  if (msg.timestamp <= options.lastEventTimestamp) return false
+  if (msg.draftId === options.currentDraftId) return false
+
+  return true
+}
+
+/**
+ * Pure helper: determine if a message originated from this tab.
+ * Used in tests and as a standalone predicate.
+ */
+export function isFromSelf(
   msg: ActiveDraftChangeMessage,
-  localTopicId: string,
-  localSourceId: string,
-  localCurrentDraftId: string | null | undefined,
-  lastEventTimestamp: number
-): { accept: boolean; reason: 'wrong-topic' | 'self-message' | 'stale' | 'no-change' | 'valid' } {
-  if (msg.topicId !== localTopicId) return { accept: false, reason: 'wrong-topic' }
-  if (msg.sourceId === localSourceId) return { accept: false, reason: 'self-message' }
-  if (msg.timestamp <= lastEventTimestamp) return { accept: false, reason: 'stale' }
-  if (msg.draftId === localCurrentDraftId) return { accept: false, reason: 'no-change' }
-  return { accept: true, reason: 'valid' }
+  selfSourceId: string
+): boolean {
+  return msg.sourceId === selfSourceId
 }
