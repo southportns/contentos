@@ -1,5 +1,5 @@
 /*
- * P0.4.3 — Draft Version Restore Component Tests
+ * P0.4.3/P0.4.4 — Draft Version Restore Component Tests
  *
  * Tests verify:
  *   1. Restore button exists in DraftVersionHistory detail view
@@ -7,13 +7,15 @@
  *   3. restoreDraftVersion Server Action is wired
  *   4. DraftVersionRestoreButton component is properly structured
  *   5. P0.4.1/P0.4.2 regression (detail/compare modes still intact)
+ *   6. P0.4.4 — DRAFT_VERSION_CONFLICT error mapping (no P2002 exposure)
+ *   7. P0.4.4 — Conflict error shows user-friendly toast (no crash)
  */
 
 import { describe, it, expect } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 
-describe('P0.4.3 — Draft Version Restore Component', () => {
+describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
   const historySource = fs.readFileSync(
     path.resolve(__dirname, '../draft-version-history.tsx'),
     'utf-8'
@@ -21,6 +23,11 @@ describe('P0.4.3 — Draft Version Restore Component', () => {
 
   const buttonSource = fs.readFileSync(
     path.resolve(__dirname, '../draft-version-restore-button.tsx'),
+    'utf-8'
+  )
+
+  const serverActionsSource = fs.readFileSync(
+    path.resolve(__dirname, '../../../lib/services/server-actions.ts'),
     'utf-8'
   )
 
@@ -159,6 +166,66 @@ describe('P0.4.3 — Draft Version Restore Component', () => {
     it('router imported for refresh capability', () => {
       expect(historySource).toContain("import { useRouter } from 'next/navigation'")
       expect(historySource).toContain('router.refresh()')
+    })
+  })
+
+  // ── P0.4.4 — Version Conflict Handling ────────────────────────────────
+
+  describe('P0.4.4 — DRAFT_VERSION_CONFLICT Error Mapping', () => {
+    it('maps DRAFT_VERSION_CONFLICT to user-friendly message (no P2002 exposed)', () => {
+      expect(serverActionsSource).toContain('DRAFT_VERSION_CONFLICT')
+      expect(serverActionsSource).toContain('版本创建冲突，请重试')
+    })
+
+    it('does NOT expose Prisma/SQL/P2002 in error messages', () => {
+      // Verify the DRAFT_VERSION_CONFLICT case does not leak internal details
+      const conflictCase = serverActionsSource.match(
+        /case 'DRAFT_VERSION_CONFLICT':[\s\S]*?return \{[^}]+\}/
+      )
+      expect(conflictCase).not.toBeNull()
+      if (conflictCase) {
+        expect(conflictCase[0]).not.toContain('P2002')
+        expect(conflictCase[0]).not.toContain('Prisma')
+        expect(conflictCase[0]).not.toContain('database')
+        expect(conflictCase[0]).not.toContain('constraint')
+        expect(conflictCase[0]).not.toContain('stack')
+      }
+    })
+
+    it('error message is in Chinese for end users', () => {
+      const conflictCase = serverActionsSource.match(
+        /case 'DRAFT_VERSION_CONFLICT':[\s\S]*?error: '([^']+)'/
+      )
+      expect(conflictCase).not.toBeNull()
+      if (conflictCase) {
+        // Verify the message contains Chinese characters
+        expect(conflictCase[1]).match(/[\u4e00-\u9fff]/)
+      }
+    })
+  })
+
+  describe('P0.4.4 — Conflict Error UI Behavior (No Crash)', () => {
+    it('component handles error from restoreDraftVersion gracefully', () => {
+      // Verify toast.error is called with the error message (no crash)
+      expect(buttonSource).toContain('toast.error')
+      expect(buttonSource).toContain('result.error')
+    })
+
+    it('does NOT crash or show unhandled promise on conflict', () => {
+      // Verify the component has try/catch around the async call
+      expect(buttonSource).toContain('try')
+      expect(buttonSource).toContain('catch')
+    })
+
+    it('disables button during restore to prevent double-submit', () => {
+      expect(buttonSource).toContain('disabled={isRestoring}')
+      expect(buttonSource).toContain('isRestoring')
+    })
+
+    it('does not expose stack trace or internal errors in UI', () => {
+      // Verify that error.message is displayed, not error.stack
+      expect(buttonSource).not.toContain('error.stack')
+      expect(buttonSource).not.toContain('stack trace')
     })
   })
 })
