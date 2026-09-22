@@ -61,7 +61,7 @@ export async function deleteProject(projectId: string): Promise<void> {
 }
 
 /**
- * P0.4.3 — Restore a draft version by creating a new Draft from historical content.
+ * P0.4.3/P0.4.4 — Restore a draft version by creating a new Draft from historical content.
  *
  * Restore = Create New Draft (never overwrites old versions).
  *
@@ -101,6 +101,9 @@ export async function restoreDraftVersion(
           return { success: false, error: '项目上下文不存在' }
         case 'OWNERSHIP_DENIED':
           return { success: false, error: '无权操作此版本' }
+        case 'DRAFT_VERSION_CONFLICT':
+          // P0.4.4 — Version creation conflict after max retries
+          return { success: false, error: '版本创建冲突，请重试' }
         default:
           return { success: false, error: '恢复失败，请稍后重试' }
       }
