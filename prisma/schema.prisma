@@ -317,23 +317,28 @@ model ContentStrategy {
 // ─── Drafts ─────────────────────────────────────────────
 
 model Draft {
-  id        String   @id @default(cuid())
-  topicId   String
-  version   Int      @default(1)
-  title     String?
-  content   String
-  outline   Json?
-  status    String   @default("DRAFT") // DRAFT | HUMANIZED | FINAL
-  wordCount Int?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  topicId       String
+  version       Int      @default(1)
+  parentDraftId String?
+
+  title         String?
+  content       String
+  outline       Json?
+  status        String   @default("DRAFT") // DRAFT | HUMANIZED | FINAL
+  wordCount     Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   topic               Topic                @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  parentDraft         Draft?               @relation("DraftLineage", fields: [parentDraftId], references: [id], onDelete: SetNull)
+  childDrafts         Draft[]              @relation("DraftLineage")
   evaluation          Evaluation?
   humanization        Humanization?
   strategyEvaluation  StrategyEvaluation?
 
   @@index([topicId])
+  @@index([parentDraftId])
   @@unique([topicId, version])
 }
 
