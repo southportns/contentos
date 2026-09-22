@@ -140,7 +140,7 @@ export const topicRepository = {
   },
 
   /**
-   * P0.4.3 — Create a new Draft version by restoring content from a historical version.
+   * P0.4.3/P0.4.4 — Create a new Draft version by restoring content from a historical version.
    *
    * Restore = Create New Draft (never overwrites or deletes old versions).
    *
@@ -148,57 +148,90 @@ export const topicRepository = {
    * - Concurrent restores cannot produce duplicate versions (max version is re-read inside tx)
    * - No partial drafts on failure (all-or-nothing)
    *
+   * P0.4.4 additions:
+   * - Prisma P2002 (unique constraint violation on topicId+version) is caught
+   * - Up to 3 retries with re-read of max version on each attempt
+   * - Throws DRAFT_VERSION_CONFLICT if all retries exhausted
+   *
    * @param sourceDraftId - The draft ID to restore content from
    * @param userId - Current user ID (for ownership validation)
    * @returns The newly created Draft
-   * @throws Error if source draft not found, ownership denied, or creation fails
+   * @throws Error if source draft not found, ownership denied, version conflict, or creation fails
    */
   async createRestoredDraft(
     sourceDraftId: string,
     userId: string,
   ): Promise<Draft> {
-    return prisma.$transaction(async (tx) => {
-      // 1. Read source draft
-      const sourceDraft = await tx.draft.findUnique({
-        where: { id: sourceDraftId },
-        include: { topic: { include: { project: true } } },
-      })
+    const MAX_RETRIES = 3
 
-      if (!sourceDraft) {
-        throw new Error('SOURCE_DRAFT_NOT_FOUND')
-      }
-
-      // 2. Ownership validation: draft → topic → project → user
-      if (!sourceDraft.topic || !sourceDraft.topic.project) {
-        throw new Error('TOPIC_NOT_FOUND')
-      }
-      if (sourceDraft.topic.project.userId !== userId) {
-        throw new Error('OWNERSHIP_DENIED')
-      }
-
-      // 3. Get current max version for this topic
-      const maxVersionDraft = await tx.draft.findFirst({
-        where: { topicId: sourceDraft.topicId },
-        orderBy: { version: 'desc' },
-        select: { version: true },
-      })
-      const nextVersion = (maxVersionDraft?.version ?? 0) + 1
-
-      // 4. Create new draft with only content fields copied
-      const newDraft = await tx.draft.create({
-        data: {
-          topicId: sourceDraft.topicId,
-          version: nextVersion,
-          title: sourceDraft.title,
-          content: sourceDraft.content,
-          outline: sourceDraft.outline,
-          status: 'DRAFT',
-          wordCount: sourceDraft.content.length,
-        },
-      })
-
-      return newDraft
+    // Step 1: Read source draft and validate ownership (read-only, no conflict risk)
+    const sourceDraft = await prisma.draft.findUnique({
+      where: { id: sourceDraftId },
+      include: { topic: { include: { project: true } } },
     })
+
+    if (!sourceDraft) {
+      throw new Error('SOURCE_DRAFT_NOT_FOUND')
+    }
+
+    if (!sourceDraft.topic || !sourceDraft.topic.project) {
+      throw new Error('TOPIC_NOT_FOUND')
+    }
+    if (sourceDraft.topic.project.userId !== userId) {
+      throw new Error('OWNERSHIP_DENIED')
+    }
+
+    // Step 2: Retry loop for version creation (handles P2002 unique constraint conflicts)
+    let lastError: Error | null = null
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const newDraft = await prisma.$transaction(async (tx) => {
+          // Re-read max version inside transaction for freshness
+          const maxVersionDraft = await tx.draft.findFirst({
+            where: { topicId: sourceDraft.topicId },
+            orderBy: { version: 'desc' },
+            select: { version: true },
+          })
+          const nextVersion = (maxVersionDraft?.version ?? 0) + 1
+
+          // Create new draft with only content fields copied
+          return tx.draft.create({
+            data: {
+              topicId: sourceDraft.topicId,
+              version: nextVersion,
+              title: sourceDraft.title,
+              content: sourceDraft.content,
+              outline: sourceDraft.outline,
+              status: 'DRAFT',
+              wordCount: sourceDraft.content.length,
+            },
+          })
+        })
+
+        return newDraft
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+
+        // Check for Prisma unique constraint violation (P2002) on topicId+version
+        // Check code property directly (more reliable than instanceof for mocked errors)
+        if (error instanceof Error && (error as unknown as { code?: string }).code === 'P2002') {
+          // Version conflict — another concurrent operation grabbed the same version.
+          // Re-read max version on next attempt will compute a fresh nextVersion.
+          if (attempt < MAX_RETRIES) {
+            continue // Retry
+          }
+          // All retries exhausted — throw controlled error
+          throw new Error('DRAFT_VERSION_CONFLICT')
+        }
+
+        // For any other error, throw immediately (no retry)
+        throw lastError
+      }
+    }
+
+    // Should not reach here, but safety net
+    throw lastError ?? new Error('DRAFT_VERSION_CONFLICT')
   },
 
   // ── Evaluation ──────────────────────────────────────
