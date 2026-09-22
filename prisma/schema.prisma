@@ -334,6 +334,7 @@ model Draft {
   strategyEvaluation  StrategyEvaluation?
 
   @@index([topicId])
+  @@unique([topicId, version])
 }
 
 // ─── Evaluation ─────────────────────────────────────────
