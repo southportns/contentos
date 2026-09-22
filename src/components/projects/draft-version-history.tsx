@@ -17,6 +17,7 @@ interface DraftVersionHistoryProps {
     evaluation: Evaluation | null
     humanization: Humanization | null
     strategyEvaluation: StrategyEvaluation | null
+    parentDraftId?: string | null
   }>
 }
 
@@ -113,6 +114,15 @@ export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
     [drafts, selectedVersion]
   )
 
+  // P0.4.5 — Build a map from draft ID to version number for lineage display
+  const versionById = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const d of drafts) {
+      map.set(d.id, d.version)
+    }
+    return map
+  }, [drafts])
+
   const handleRestoreSuccess = (newVersion: number) => {
     // Set the new version immediately; router.refresh() will refetch data
     setSelectedVersion(newVersion)
@@ -169,6 +179,12 @@ export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
                     <span className="text-xs text-muted-foreground">{formatDate(draft.createdAt)}</span>
                     {draft.wordCount && <span className="text-xs text-muted-foreground">{draft.wordCount}字</span>}
                   </div>
+                  {/* P0.4.5 — Lineage indicator */}
+                  {draft.parentDraftId && versionById.has(draft.parentDraftId) && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      ↳ 由 v{versionById.get(draft.parentDraftId)} 创建
+                    </div>
+                  )}
                 </div>
                 {selectedVersion === draft.version && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
               </button>
@@ -202,6 +218,14 @@ export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
             <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span>创建 {new Intl.DateTimeFormat('zh-CN', {year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'}).format(selectedDraft.createdAt)}</span>
               {selectedDraft.wordCount && <span>{selectedDraft.wordCount} 字</span>}
+            </div>
+            {/* P0.4.5 — Lineage: version origin */}
+            <div className="text-xs text-muted-foreground">
+              {selectedDraft.parentDraftId && versionById.has(selectedDraft.parentDraftId) ? (
+                <span>版本来源：由 v{versionById.get(selectedDraft.parentDraftId)} 创建</span>
+              ) : (
+                <span>初始版本</span>
+              )}
             </div>
             <div className="rounded-lg bg-muted/30 p-4"><p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{selectedDraft.content}</p></div>
             <EvaluationSection evaluation={selectedDraft.evaluation} />
