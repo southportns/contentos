@@ -1,5 +1,5 @@
 /*
- * P0.4.3/P0.4.4 — Draft Version Restore Component Tests
+ * P0.4.3/P0.4.4/P0.4.5 — Draft Version Restore Component Tests
  *
  * Tests verify:
  *   1. Restore button exists in DraftVersionHistory detail view
@@ -9,6 +9,9 @@
  *   5. P0.4.1/P0.4.2 regression (detail/compare modes still intact)
  *   6. P0.4.4 — DRAFT_VERSION_CONFLICT error mapping (no P2002 exposure)
  *   7. P0.4.4 — Conflict error shows user-friendly toast (no crash)
+ *   8. P0.4.5 — Lineage display in version history list
+ *   9. P0.4.5 — Lineage display in detail panel (initial/derived)
+ *  10. P0.4.5 — Restore success shows lineage after refresh
  */
 
 import { describe, it, expect } from 'vitest'
@@ -226,6 +229,61 @@ describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
       // Verify that error.message is displayed, not error.stack
       expect(buttonSource).not.toContain('error.stack')
       expect(buttonSource).not.toContain('stack trace')
+    })
+  })
+
+  // ── P0.4.5 — Lineage Display Tests ────────────────────────────────────
+
+  describe('P0.4.5 — Lineage Display in Version List', () => {
+    it('shows lineage indicator when parentDraftId exists', () => {
+      expect(historySource).toContain('parentDraftId')
+      expect(historySource).toContain('↳ 由 v')
+      expect(historySource).toContain('创建')
+    })
+
+    it('looks up parent version using versionById map', () => {
+      expect(historySource).toContain('versionById')
+      expect(historySource).toContain('versionById.has')
+      expect(historySource).toContain('versionById.get')
+    })
+
+    it('does NOT show lineage for null parentDraftId', () => {
+      // Verify the conditional rendering: only shows when parentDraftId is truthy
+      expect(historySource).toContain('draft.parentDraftId && versionById.has(draft.parentDraftId)')
+    })
+  })
+
+  describe('P0.4.5 — Lineage Display in Detail Panel', () => {
+    it('shows "初始版本" when parentDraftId is null', () => {
+      expect(historySource).toContain('初始版本')
+    })
+
+    it('shows "版本来源" with parent version when parentDraftId exists', () => {
+      expect(historySource).toContain('版本来源')
+      expect(historySource).toContain('由 v')
+    })
+
+    it('conditionally renders lineage based on parentDraftId presence', () => {
+      // Verify ternary: parentDraftId ? "from vX" : "初始版本"
+      expect(historySource).toContain('selectedDraft.parentDraftId && versionById.has(selectedDraft.parentDraftId)')
+    })
+  })
+
+  describe('P0.4.5 — Restore Success Shows Lineage After Refresh', () => {
+    it('handleRestoreSuccess selects new version and triggers refresh', () => {
+      expect(historySource).toContain('setSelectedVersion(newVersion)')
+      expect(historySource).toContain('router.refresh()')
+    })
+
+    it('after refresh, router refetches data including parentDraftId', () => {
+      // router.refresh() causes Next.js to re-render with fresh data
+      // The new draft's parentDraftId will be populated from the database
+      expect(historySource).toContain('router.refresh()')
+    })
+
+    it('versionById map is rebuilt from drafts prop via useMemo', () => {
+      expect(historySource).toContain('useMemo')
+      expect(historySource).toContain('versionById')
     })
   })
 })

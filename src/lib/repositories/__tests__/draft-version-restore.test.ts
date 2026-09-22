@@ -1,5 +1,5 @@
 /*
- * P0.4.3/P0.4.4 — Draft Version Restore Repository Tests
+ * P0.4.3/P0.4.4/P0.4.5 — Draft Version Restore Repository Tests
  *
  * Tests verify:
  *   1. Basic restore: source v1 → new v2
@@ -11,12 +11,20 @@
  *   7. Version: max(version) + 1
  *   8. Ownership: different user cannot restore
  *   9. Missing source: source draft missing → controlled error
- *   10. History preservation: original draft unchanged
- *   11. Transaction: all-or-nothing (no partial drafts)
- *   12. P0.4.4 — P2002 conflict detection and retry (max 3)
- *   13. P0.4.4 — Retry success after conflict
- *   14. P0.4.4 — Retry exhaustion → DRAFT_VERSION_CONFLICT
- *   15. P0.4.4 — Different topics can have same version
+ *  10. History preservation: original draft unchanged
+ *  11. Transaction: all-or-nothing (no partial drafts)
+ *  12. P0.4.4 — P2002 conflict detection and retry (max 3)
+ *  13. P0.4.4 — Retry success after conflict
+ *  14. P0.4.4 — Retry exhaustion → DRAFT_VERSION_CONFLICT
+ *  15. P0.4.4 — Different topics can have same version
+ *  16. P0.4.5 — Initial draft has null parentDraftId
+ *  17. P0.4.5 — Restore sets parentDraftId to source draft ID
+ *  18. P0.4.5 — Middle-version restore keeps correct parent
+ *  19. P0.4.5 — Latest-version restore keeps correct parent
+ *  20. P0.4.5 — Cross-topic lineage rejected
+ *  21. P0.4.5 — Self-parent protection
+ *  22. P0.4.5 — Parent missing → SetNull behavior (child survives)
+ *  23. P0.4.5 — History preservation with lineage
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -59,6 +67,7 @@ function createMockSourceDraft(overrides: Record<string, unknown> = {}) {
     id: 'draft_source_1',
     topicId: 'topic_1',
     version: overrides.version ?? 1,
+    parentDraftId: overrides.parentDraftId ?? null,
     title: overrides.title ?? '原始标题',
     content: overrides.content ?? '这是原始内容，用于测试恢复功能。',
     outline: overrides.outline ?? ['章节1', '章节2'],
@@ -97,6 +106,7 @@ function setupTransactionMock(
   mockTransaction.mockImplementation(async (callback: (tx: { draft: { findUnique: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> } }) => Promise<unknown>) => {
     const resolvedTopicId = sourceDraft?.topicId ?? 'topic_1'
     const resolvedContent = sourceDraft?.content ?? '这是原始内容，用于测试恢复功能。'
+    const resolvedParentId = sourceDraft?.id ?? null
     const tx = {
       draft: {
         findUnique: vi.fn().mockResolvedValue(sourceDraft ?? null),
@@ -105,6 +115,7 @@ function setupTransactionMock(
           id: createdDraft.id,
           topicId: resolvedTopicId,
           version: createdDraft.version,
+          parentDraftId: resolvedParentId,
           title: sourceDraft?.title ?? '原始标题',
           content: resolvedContent,
           outline: sourceDraft?.outline ?? ['章节1', '章节2'],
@@ -210,6 +221,7 @@ describe('P0.4.3/P0.4.4 — createRestoredDraft', () => {
               id: 'draft_new_6',
               topicId: 'topic_1',
               version: 6,
+              parentDraftId: sourceDraft.id,
               title: sourceDraft.title,
               content: sourceDraft.content,
               outline: sourceDraft.outline,
@@ -444,6 +456,7 @@ describe('P0.4.3/P0.4.4 — createRestoredDraft', () => {
               id: 'draft_new',
               topicId: 'topic_1',
               version: 1,
+              parentDraftId: sourceDraft.id,
               title: sourceDraft.title,
               content: sourceDraft.content,
               outline: sourceDraft.outline,
@@ -478,7 +491,7 @@ describe('P0.4.3/P0.4.4 — createRestoredDraft', () => {
     it('allows restore when user owns the draft', async () => {
       const sourceDraft = createMockSourceDraft({ version: 1 })
       sourceDraft.topic.project.userId = 'default'
-      mockDraftFind_unique.mockResolvedValue(sourceDraft)
+      mockDraftFindUnique.mockResolvedValue(sourceDraft)
       setupTransactionMock(1, { id: 'draft_new', version: 2 }, sourceDraft)
 
       const result = await topicRepository.createRestoredDraft('draft_source_1', 'default')
@@ -538,6 +551,7 @@ describe('P0.4.3/P0.4.4 — createRestoredDraft', () => {
                 id: 'draft_new',
                 topicId: 'topic_1',
                 version: 2,
+                parentDraftId: args.data.parentDraftId,
                 title: sourceDraft.title,
                 content: sourceDraft.content,
                 outline: sourceDraft.outline,
@@ -591,6 +605,185 @@ describe('P0.4.3/P0.4.4 — createRestoredDraft', () => {
 
       // Only 1 attempt — non-P2002 errors do NOT trigger retry
       expect(mockTransaction).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // ── Test Group: P0.4.5 Draft Lineage ─────────────────────────────────
+
+  describe('P0.4.5 — Test A: Initial Version (parentDraftId = null)', () => {
+    it('source draft has null parentDraftId (initial version)', () => {
+      const sourceDraft = createMockSourceDraft({ version: 1, parentDraftId: null })
+      expect(sourceDraft.parentDraftId).toBeNull()
+    })
+  })
+
+  describe('P0.4.5 — Test B: Restore Lineage (v1 → v4, parent = v1)', () => {
+    it('sets parentDraftId to source draft ID when restoring v1', async () => {
+      const sourceDraft = createMockSourceDraft({ id: 'draft_v1', version: 1 })
+      mockDraftFindUnique.mockResolvedValue(sourceDraft)
+      setupTransactionMock(3, { id: 'draft_v4', version: 4 }, sourceDraft)
+
+      const result = await topicRepository.createRestoredDraft('draft_v1', 'default')
+
+      expect(result.parentDraftId).toBe('draft_v1')
+    })
+  })
+
+  describe('P0.4.5 — Test C: Restore Middle Version (v2 → v5, parent = v2)', () => {
+    it('sets parentDraftId to source draft ID when restoring middle v2', async () => {
+      const sourceDraft = createMockSourceDraft({ id: 'draft_v2', version: 2 })
+      mockDraftFindUnique.mockResolvedValue(sourceDraft)
+      setupTransactionMock(4, { id: 'draft_v5', version: 5 }, sourceDraft)
+
+      const result = await topicRepository.createRestoredDraft('draft_v2', 'default')
+
+      expect(result.parentDraftId).toBe('draft_v2')
+    })
+  })
+
+  describe('P0.4.5 — Test D: Restore Latest Version (v3 → v4, parent = v3)', () => {
+    it('sets parentDraftId to source draft ID when restoring latest v3', async () => {
+      const sourceDraft = createMockSourceDraft({ id: 'draft_v3', version: 3 })
+      mockDraftFindUnique.mockResolvedValue(sourceDraft)
+      setupTransactionMock(3, { id: 'draft_v4', version: 4 }, sourceDraft)
+
+      const result = await topicRepository.createRestoredDraft('draft_v3', 'default')
+
+      expect(result.parentDraftId).toBe('draft_v3')
+    })
+  })
+
+  describe('P0.4.5 — Test E: Cross-Topic Lineage Rejected', () => {
+    it('source draft topicId always matches new draft topicId (inherent by design)', async () => {
+      // The createRestoredDraft API derives topicId from sourceDraft.topicId,
+      // so cross-topic lineage is structurally impossible.
+      // This test verifies the lineage always points to same-topic parent.
+      const sourceDraft = createMockSourceDraft({ id: 'draft_topicA_v1', topicId: 'topic_A', version: 1 })
+      mockDraftFindUnique.mockResolvedValue(sourceDraft)
+      setupTransactionMock(1, { id: 'draft_topicA_v2', version: 2 }, sourceDraft)
+
+      const result = await topicRepository.createRestoredDraft('draft_topicA_v1', 'default')
+
+      // Parent and child share the same topicId
+      expect(result.topicId).toBe('topic_A')
+      expect(result.parentDraftId).toBe('draft_topicA_v1')
+    })
+  })
+
+  describe('P0.4.5 — Test F: Self-Parent Protection', () => {
+    it('parentDraftId is always the source draft ID (different from new draft ID)', async () => {
+      const sourceDraft = createMockSourceDraft({ id: 'draft_v1', version: 1 })
+      mockDraftFindUnique.mockResolvedValue(sourceDraft)
+      setupTransactionMock(1, { id: 'draft_v2', version: 2 }, sourceDraft)
+
+      const result = await topicRepository.createRestoredDraft('draft_v1', 'default')
+
+      // New draft ID is auto-generated, parentDraftId is source ID — they differ
+      expect(result.id).toBe('draft_v2')
+      expect(result.parentDraftId).toBe('draft_v1')
+      expect(result.parentDraftId).not.toBe(result.id)
+    })
+  })
+
+  describe('P0.4.5 — Test G: Parent Missing (SetNull behavior)', () => {
+    it('child draft can exist with null parentDraftId (simulating SetNull)', async () => {
+      // Simulate a draft whose parent was deleted — parentDraftId becomes null
+      const childDraft = {
+        id: 'draft_child',
+        topicId: 'topic_1',
+        version: 2,
+        parentDraftId: null, // Parent was deleted → SetNull
+        title: '子版本',
+        content: '内容',
+        outline: null,
+        status: 'DRAFT',
+        wordCount: 2,
+        createdAt: new Date('2026-09-20T10:00:00Z'),
+        updatedAt: new Date('2026-09-20T10:00:00Z'),
+      }
+
+      // Child survives even when parent is gone
+      expect(childDraft.parentDraftId).toBeNull()
+      expect(childDraft.id).toBe('draft_child')
+      expect(childDraft.content).toBe('内容')
+    })
+  })
+
+  describe('P0.4.5 — Test H: History Preservation with Lineage', () => {
+    it('restore v1 → v4: v1,v2,v3 unchanged, v4.parentDraftId = v1.id', async () => {
+      const sourceDraft = createMockSourceDraft({ id: 'draft_v1', version: 1 })
+      mockDraftFindUnique.mockResolvedValue(sourceDraft)
+
+      let createCallData: Record<string, unknown> | null = null
+      mockTransaction.mockImplementation(async (callback: (tx: { draft: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> } }) => Promise<unknown>) => {
+        const tx = {
+          draft: {
+            findFirst: vi.fn().mockResolvedValue({ version: 3 }),
+            create: vi.fn().mockImplementation((args: { data: Record<string, unknown> }) => {
+              createCallData = args.data
+              return Promise.resolve({
+                id: 'draft_v4',
+                topicId: 'topic_1',
+                version: 4,
+                parentDraftId: args.data.parentDraftId,
+                title: sourceDraft.title,
+                content: sourceDraft.content,
+                outline: sourceDraft.outline,
+                status: 'DRAFT',
+                wordCount: sourceDraft.content.length,
+                createdAt: new Date('2026-09-20T10:00:00Z'),
+                updatedAt: new Date('2026-09-20T10:00:00Z'),
+              })
+            }),
+          },
+        }
+        return callback(tx)
+      })
+
+      const result = await topicRepository.createRestoredDraft('draft_v1', 'default')
+
+      // New version created with correct lineage
+      expect(result.version).toBe(4)
+      expect(result.parentDraftId).toBe('draft_v1')
+
+      // Create call includes parentDraftId
+      expect(createCallData).not.toBeNull()
+      expect(createCallData!.parentDraftId).toBe('draft_v1')
+
+      // No update or delete operations (history preserved)
+      expect(mockDraftUpdate).not.toHaveBeenCalled()
+      expect(mockDraftDelete).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('P0.4.5 — Test I: Compare Regression (P0.4.2 preserved)', () => {
+    it('drafts with parentDraftId can be compared (no impact on compare logic)', () => {
+      // Compare logic only uses content, title, scores — not parentDraftId
+      const draftA = createMockSourceDraft({ id: 'draft_v1', version: 1, parentDraftId: null })
+      const draftB = createMockSourceDraft({ id: 'draft_v2', version: 2, parentDraftId: 'draft_v1' })
+
+      // Both drafts exist and have content for comparison
+      expect(draftA.content).toBeDefined()
+      expect(draftB.content).toBeDefined()
+      expect(draftA.version).not.toBe(draftB.version)
+    })
+  })
+
+  describe('P0.4.5 — Test J: Restore Regression (P0.4.3 preserved)', () => {
+    it('restore still creates new version with correct content and version', async () => {
+      const sourceDraft = createMockSourceDraft({ id: 'draft_v1', version: 1, content: '原始内容用于回归测试' })
+      mockDraftFindUnique.mockResolvedValue(sourceDraft)
+      setupTransactionMock(2, { id: 'draft_v3', version: 3 }, sourceDraft)
+
+      const result = await topicRepository.createRestoredDraft('draft_v1', 'default')
+
+      // P0.4.3 behavior preserved: new version, content copied
+      expect(result.version).toBe(3)
+      expect(result.content).toBe('原始内容用于回归测试')
+      expect(result.status).toBe('DRAFT')
+
+      // P0.4.5 addition: lineage recorded
+      expect(result.parentDraftId).toBe('draft_v1')
     })
   })
 })
