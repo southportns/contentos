@@ -2,12 +2,12 @@
 
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileText, ChevronRight, Star, ArrowLeftRight, ArrowLeft } from 'lucide-react'
+import { FileText, ChevronRight, Star, ArrowLeftRight, ArrowLeft, GitBranch, ArrowDown } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { Draft, Evaluation, Humanization, StrategyEvaluation } from '@/generated/prisma'
-import { getVersionLabel, getVersionBadgeVariant, getChangeTypeLabel } from './draft-version-utils'
+import { getVersionLabel, getVersionBadgeVariant, getChangeTypeLabel, getParentDraft, getChildDrafts, getLineageChain } from './draft-version-utils'
 import { DraftVersionCompare } from './draft-version-compare'
 import { DraftVersionRestoreButton } from './draft-version-restore-button'
 import { Separator } from '@/components/ui/separator'
@@ -123,6 +123,29 @@ export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
     return map
   }, [drafts])
 
+  // P0.4.7 — Lineage relationships
+  const parentDraft = useMemo(
+    () => selectedDraft ? getParentDraft(selectedDraft, drafts) : null,
+    [selectedDraft, drafts]
+  )
+  const childDrafts = useMemo(
+    () => selectedDraft ? getChildDrafts(selectedDraft, drafts) : [],
+    [selectedDraft, drafts]
+  )
+  const lineageChain = useMemo(
+    () => selectedDraft ? getLineageChain(selectedDraft, drafts) : [],
+    [selectedDraft, drafts]
+  )
+  const childCountsById = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const d of drafts) {
+      if (d.parentDraftId) {
+        map.set(d.parentDraftId, (map.get(d.parentDraftId) ?? 0) + 1)
+      }
+    }
+    return map
+  }, [drafts])
+
   const handleRestoreSuccess = (newVersion: number) => {
     // Set the new version immediately; router.refresh() will refetch data
     setSelectedVersion(newVersion)
@@ -189,6 +212,13 @@ export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
                       <span>{getChangeTypeLabel(draft.changeType)}</span>
                     )}
                   </div>
+                  {/* P0.4.7 — Branch hint in version list */}
+                  {(childCountsById.get(draft.id) ?? 0) > 0 && (
+                    <div className="text-xs text-blue-500 mt-0.5 flex items-center gap-1">
+                      <GitBranch className="size-3" />
+                      {childCountsById.get(draft.id)} 个派生版本
+                    </div>
+                  )}
                 </div>
                 {selectedVersion === draft.version && <ChevronRight className="size-4 shrink-0 text-muted-foreground" />}
               </button>
@@ -241,6 +271,71 @@ export function DraftVersionHistory({ drafts }: DraftVersionHistoryProps) {
                   <span>初始版本</span>
                 )}
               </div>
+            </div>
+            {/* P0.4.7 — Lineage Explorer */}
+            <div className="rounded-lg bg-muted/30 p-3 space-y-2">
+              <h4 className="text-xs font-semibold text-muted-foreground">版本谱系</h4>
+              {/* Lineage chain visualization */}
+              {lineageChain.length > 1 && (
+                <div className="flex flex-col items-center gap-0.5 py-1">
+                  {lineageChain.map((ancestor, idx) => (
+                    <div key={ancestor.id} className="flex flex-col items-center">
+                      <button
+                        onClick={() => setSelectedVersion(ancestor.version)}
+                        className={cn(
+                          'text-xs px-2 py-0.5 rounded',
+                          ancestor.version === selectedDraft.version
+                            ? 'bg-primary/10 text-primary font-medium'
+                            : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 cursor-pointer'
+                        )}
+                      >
+                        v{ancestor.version}
+                      </button>
+                      {idx < lineageChain.length - 1 && (
+                        <ArrowDown className="size-3 text-muted-foreground my-0.5" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Parent navigation */}
+              <div className="space-y-1.5">
+                <div className="text-xs text-muted-foreground">
+                  {parentDraft ? (
+                    <button
+                      onClick={() => setSelectedVersion(parentDraft.version)}
+                      className="text-blue-600 hover:underline cursor-pointer"
+                    >
+                      ← 来源版本：v{parentDraft.version} ({getChangeTypeLabel(parentDraft.changeType)})
+                    </button>
+                  ) : selectedDraft.parentDraftId ? (
+                    <span className="text-muted-foreground">来源版本已不存在</span>
+                  ) : (
+                    <span>初始版本</span>
+                  )}
+                </div>
+              </div>
+              {/* Child navigation */}
+              {childDrafts.length > 0 && (
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">派生版本</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {childDrafts.map((child) => (
+                      <button
+                        key={child.id}
+                        onClick={() => setSelectedVersion(child.version)}
+                        className="text-xs px-2 py-1 rounded-md bg-background border hover:bg-accent transition-colors cursor-pointer"
+                      >
+                        v{child.version} · {getChangeTypeLabel(child.changeType)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* No children state */}
+              {childDrafts.length === 0 && (
+                <div className="text-xs text-muted-foreground">暂无派生版本</div>
+              )}
             </div>
             <div className="rounded-lg bg-muted/30 p-4"><p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{selectedDraft.content}</p></div>
             <EvaluationSection evaluation={selectedDraft.evaluation} />
