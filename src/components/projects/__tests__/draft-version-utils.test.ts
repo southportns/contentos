@@ -1,14 +1,33 @@
 /*
  * P0.4.6 — Draft Version Evolution Utility Tests
+ * P0.4.7 — Draft Version Lineage Traversal Utility Tests
  *
  * Tests verify:
  *   1. getChangeTypeLabel maps all known types correctly
  *   2. Unknown types fall back to "其他" (no crash)
  *   3. All 7 change types produce expected Chinese labels
+ *   4. getParentDraft returns correct parent or null
+ *   5. getChildDrafts returns children sorted by version
+ *   6. getLineageChain walks up the parent chain correctly
+ *   7. Cycle protection prevents infinite loops
+ *   8. Missing parent handles gracefully
  */
 
 import { describe, it, expect } from 'vitest'
-import { getChangeTypeLabel } from '../draft-version-utils'
+import { getChangeTypeLabel, getParentDraft, getChildDrafts, getLineageChain } from '../draft-version-utils'
+
+// ── P0.4.7 Test Helpers ────────────────────────────────────────────────
+
+interface TestDraft {
+  id: string
+  parentDraftId: string | null
+  version: number
+  changeType: string
+}
+
+function makeDraft(id: string, version: number, parentId: string | null = null, changeType: string = 'RESTORE'): TestDraft {
+  return { id, parentDraftId: parentId, version, changeType }
+}
 
 describe('P0.4.6 — getChangeTypeLabel', () => {
   it('maps INITIAL to "初始版本"', () => {
@@ -49,5 +68,138 @@ describe('P0.4.6 — getChangeTypeLabel', () => {
 
   it('falls back to "其他" for random garbage', () => {
     expect(getChangeTypeLabel('XYZ123')).toBe('其他')
+  })
+})
+
+// ── P0.4.7 — Lineage Traversal Tests ───────────────────────────────────
+
+describe('P0.4.7 — getParentDraft', () => {
+  it('Test A: returns null when parentDraftId is null', () => {
+    const v1 = makeDraft('d1', 1, null, 'INITIAL')
+    const drafts = [v1]
+    expect(getParentDraft(v1, drafts)).toBeNull()
+  })
+
+  it('Test A: returns null when parentDraftId is undefined', () => {
+    const draft = { id: 'd1', parentDraftId: undefined, version: 1, changeType: 'INITIAL' } as unknown as TestDraft
+    expect(getParentDraft(draft, [draft])).toBeNull()
+  })
+
+  it('Test B: returns the parent draft when parentDraftId matches', () => {
+    const v1 = makeDraft('d1', 1, null, 'INITIAL')
+    const v2 = makeDraft('d2', 2, 'd1')
+    const drafts = [v1, v2]
+    const parent = getParentDraft(v2, drafts)
+    expect(parent).not.toBeNull()
+    expect(parent!.id).toBe('d1')
+    expect(parent!.version).toBe(1)
+  })
+
+  it('Test E: returns null when parent does not exist in drafts (no throw)', () => {
+    const v2 = makeDraft('d2', 2, 'nonexistent-id')
+    const drafts = [v2]
+    expect(() => getParentDraft(v2, drafts)).not.toThrow()
+    expect(getParentDraft(v2, drafts)).toBeNull()
+  })
+})
+
+describe('P0.4.7 — getChildDrafts', () => {
+  it('Test C: returns all children sorted by version ascending', () => {
+    const v2 = makeDraft('d2', 2, 'd1')
+    const v4 = makeDraft('d4', 4, 'd2', 'RESTORE')
+    const v5 = makeDraft('d5', 5, 'd2', 'REFINE')
+    const drafts = [v2, v4, v5]
+    const children = getChildDrafts(v2, drafts)
+    expect(children).toHaveLength(2)
+    expect(children[0].id).toBe('d4')
+    expect(children[1].id).toBe('d5')
+    expect(children[0].version).toBeLessThan(children[1].version)
+  })
+
+  it('Test C: returns empty array when no children', () => {
+    const v1 = makeDraft('d1', 1, null, 'INITIAL')
+    const drafts = [v1]
+    expect(getChildDrafts(v1, drafts)).toEqual([])
+  })
+
+  it('Test C: does not include unrelated drafts', () => {
+    const v1 = makeDraft('d1', 1, null, 'INITIAL')
+    const v2 = makeDraft('d2', 2, 'd1')
+    const v3 = makeDraft('d3', 3, 'd1')
+    const unrelated = makeDraft('d99', 99, 'other-parent')
+    const drafts = [v1, v2, v3, unrelated]
+    const children = getChildDrafts(v1, drafts)
+    expect(children).toHaveLength(2)
+    expect(children.map(c => c.id)).toContain('d2')
+    expect(children.map(c => c.id)).toContain('d3')
+  })
+})
+
+describe('P0.4.7 — getLineageChain', () => {
+  it('Test D: returns full lineage chain from ancestor to current', () => {
+    const v1 = makeDraft('d1', 1, null, 'INITIAL')
+    const v2 = makeDraft('d2', 2, 'd1')
+    const v4 = makeDraft('d4', 4, 'd2')
+    const drafts = [v1, v2, v4]
+    const chain = getLineageChain(v4, drafts)
+    expect(chain).toHaveLength(3)
+    expect(chain[0].id).toBe('d1')
+    expect(chain[1].id).toBe('d2')
+    expect(chain[2].id).toBe('d4')
+  })
+
+  it('Test D: returns only current draft when no parent', () => {
+    const v1 = makeDraft('d1', 1, null, 'INITIAL')
+    const drafts = [v1]
+    const chain = getLineageChain(v1, drafts)
+    expect(chain).toHaveLength(1)
+    expect(chain[0].id).toBe('d1')
+  })
+
+  it('Test E: stops gracefully when parent missing (no throw)', () => {
+    const v2 = makeDraft('d2', 2, 'missing-parent')
+    const drafts = [v2]
+    expect(() => getLineageChain(v2, drafts)).not.toThrow()
+    const chain = getLineageChain(v2, drafts)
+    expect(chain).toHaveLength(1) // Only current draft
+    expect(chain[0].id).toBe('d2')
+  })
+
+  it('Test F: cycle protection prevents infinite loop (2-node cycle)', () => {
+    // v1 -> v2 -> v1 (cycle)
+    const v1 = makeDraft('d1', 1, 'd2')
+    const v2 = makeDraft('d2', 2, 'd1')
+    const drafts = [v1, v2]
+    // Key assertion: function terminates (no infinite loop / no throw)
+    expect(() => getLineageChain(v1, drafts)).not.toThrow()
+    const chain = getLineageChain(v1, drafts)
+    // Should contain at least the current draft; visits parent before detecting cycle
+    expect(chain.length).toBeGreaterThanOrEqual(1)
+    // Chain should not grow unbounded — at most all drafts in the cycle
+    expect(chain.length).toBeLessThanOrEqual(drafts.length)
+  })
+
+  it('Test F: handles longer cycle without infinite loop (v1->v2->v3->v1)', () => {
+    const v1 = makeDraft('d1', 1, 'd3')
+    const v2 = makeDraft('d2', 2, 'd1')
+    const v3 = makeDraft('d3', 3, 'd2')
+    const drafts = [v1, v2, v3]
+    // Key assertion: function terminates (no infinite loop / no throw)
+    expect(() => getLineageChain(v1, drafts)).not.toThrow()
+    const chain = getLineageChain(v1, drafts)
+    // Should contain at least the current draft; bounded by total drafts
+    expect(chain.length).toBeGreaterThanOrEqual(1)
+    expect(chain.length).toBeLessThanOrEqual(drafts.length)
+  })
+
+  it('Test F: terminates within reasonable time even with cycle', () => {
+    const v1 = makeDraft('d1', 1, 'd2')
+    const v2 = makeDraft('d2', 2, 'd1')
+    const drafts = [v1, v2]
+    const start = Date.now()
+    getLineageChain(v1, drafts)
+    const elapsed = Date.now() - start
+    // Should complete nearly instantly (< 100ms), proving no infinite loop
+    expect(elapsed).toBeLessThan(100)
   })
 })
