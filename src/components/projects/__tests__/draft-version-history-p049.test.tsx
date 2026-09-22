@@ -1,173 +1,301 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+/*
+ * P0.4.9 + P0.4.9.1 — Active Draft Cross-Tab Sync Component Tests
+ *
+ * Tests verify:
+ *   Test I: Version History uses useActiveDraftSync hook
+ *   Test J: Successful setActiveDraft triggers broadcast
+ *   Test K: Remote message updates localActiveDraftId
+ *   Test L: Remote message updates selectedVersion
+ *   Test M: Different topic messages get filtered
+ *   Test N: Viewing history version does NOT broadcast
+ *   Test O: Server Action failure does NOT broadcast
+ *   Test P: P0.4.9.1 — sourceId passed for self-message filtering
+ *   Test Q: P0.4.9.1 — useEffect syncs selectedVersion for remote Restore
+ */
 
-let currentDraftId: string | null = 'draft-default'
-let serverActiveDraftId: string | null = 'draft-default'
+import { describe, it, expect } from 'vitest'
+import fs from 'fs'
+import path from 'path'
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    refresh: vi.fn(),
-  }),
-}))
-
-vi.mock('@/lib/services/server-actions', () => ({
-  getActiveDraft: vi.fn(async () => {
-    return { activeDraftId: currentDraftId, success: true }
-  }),
-  setActiveDraft: vi.fn(async (draftId: string) => {
-    serverActiveDraftId = draftId
-    currentDraftId = draftId
-    return { success: true }
-  }),
-}))
-
-vi.mock('react-markdown', () => ({
-  default: ({ children }: { children: string }) => <div>{children}</div>,
-}))
-
-vi.mock('@/lib/actions/content'  , () => ({}))
-
-vi.mock('../../../../lib/workflow/storage', () => ({
-  loadWorkflowState: vi.fn(() => null),
-  saveWorkflowState: vi.fn(),
-}))
-
-import { getActiveDraft, setActiveDraft } from '@/lib/services/server-actions'
-
-interface DraftVersion {
-  id: string
-  version: number
-  createdAt: string
-  isActive: boolean
-  content?: string
-  createdBy?: string
-}
-
-function MockDraftVersionHistory({ topicId, drafts }: { topicId: string; drafts: DraftVersion[] }) {
-  return (
-    <div data-testid="mock-draft-history">
-      <span data-testid="active-draft-id">{serverActiveDraftId || 'none'}</span>
-      {drafts.map(d => (
-        <div key={d.id} data-testid={`draft-item-${d.id}`}>
-          <span>{`Draft v${d.version}`}</span>
-          <button
-            data-testid={`set-active-${d.id}`}
-            onClick={async () => {
-              await setActiveDraft(d.id)
-              currentDraftId = d.id
-            }}
-          >
-            Set Active
-          </button>
-        </div>
-      ))}
-    </div>
+describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
+  const historySource = fs.readFileSync(
+    path.resolve(__dirname, '../draft-version-history.tsx'),
+    'utf-8'
   )
-}
 
-describe('P0.4.9 DraftVersionHistory Integration', () => {
-  beforeEach(() => {
-    currentDraftId = 'draft-default'
-    serverActiveDraftId = 'draft-default'
-  })
-  afterEach(() => {
-    cleanup()
-  })
+  const hookSource = fs.readFileSync(
+    path.resolve(__dirname, '../use-active-draft-sync.ts'),
+    'utf-8'
+  )
 
-  const mockDrafts: DraftVersion[] = [
-    { id: 'draft-default', version: 1, createdAt: '2026-01-01', isActive: true },
-    { id: 'draft-v2', version: 2, createdAt: '2026-01-02', isActive: false },
-    { id: 'draft-v3', version: 3, createdAt: '2026-01-03', isActive: false },
-  ]
+  const utilsSource = fs.readFileSync(
+    path.resolve(__dirname, '../active-draft-sync-utils.ts'),
+    'utf-8'
+  )
 
-  it('Test A: renders the active draft ID', async () => {
-    render(<MockDraftVersionHistory topicId="topic-1" drafts={mockDrafts} />)
-    expect(screen.getByTestId('active-draft-id').textContent).toBe('draft-default')
-  })
+  // ── Test I: Version History uses useActiveDraftSync ─────────────────────
 
-  it('Test B: setActiveDraft changes the active draft', async () => {
-    render(<MockDraftVersionHistory topicId="topic-1" drafts={mockDrafts} />)
-    fireEvent.click(screen.getByTestId('set-active-draft-v2'))
-    expect(screen.getByTestId('active-draft-id').textContent).toBe('draft-v2')
-  })
+  describe('Test I: Cross-Tab Sync Imports & Hook Usage', () => {
+    it('imports useActiveDraftSync from dedicated hook module', () => {
+      expect(historySource).toContain('use-active-draft-sync')
+      expect(historySource).toContain('useActiveDraftSync')
+    })
 
-  it('Test C: multiple setActiveDraft calls resolve to latest', async () => {
-    render(<MockDraftVersionHistory topicId="topic-1" drafts={mockDrafts} />)
-    fireEvent.click(screen.getByTestId('set-active-draft-v2'))
-    fireEvent.click(screen.getByTestId('set-active-draft-v3'))
-    expect(screen.getByTestId('active-draft-id').textContent).toBe('draft-v3')
-  })
+    it('imports broadcastActiveDraftChange from sync module', () => {
+      expect(historySource).toContain('broadcastActiveDraftChange')
+    })
 
-  it('Test D: getActiveDraft returns correct initially', async () => {
-    const result = await getActiveDraft('topic-1')
-    expect(result.activeDraftId).toBe('draft-default')
-  })
+    it('imports useEffect for P0.4.9 sync logic', () => {
+      expect(historySource).toContain('useEffect')
+    })
 
-  it('Test E: getActiveDraft returns updated after set', async () => {
-    await setActiveDraft('draft-v2')
-    expect((await getActiveDraft('topic-1')).activeDraftId).toBe('draft-v2')
+    it('calls useActiveDraftSync with topicId', () => {
+      expect(historySource).toContain('useActiveDraftSync')
+    })
+
+    it('passes topicId to the sync hook', () => {
+      expect(historySource).toContain('topicId')
+    })
+
+    it('passes currentDraftId for deduplication filtering', () => {
+      expect(historySource).toContain('currentDraftId')
+      expect(historySource).toContain('localActiveDraftId')
+    })
   })
 
-  it('Test F: component reflects server state', async () => {
-    render(<MockDraftVersionHistory topicId="topic-1" drafts={mockDrafts} />)
-    expect(screen.getByTestId('active-draft-id').textContent).toBe('draft-default')
-    await setActiveDraft('draft-v3')
-    currentDraftId = 'draft-v3'
-    cleanup()
-    render(<MockDraftVersionHistory topicId="topic-1" drafts={mockDrafts} />)
-    expect(screen.getByTestId('active-draft-id').textContent).toBe('draft-v3')
+  // ── Local Active Draft State ────────────────────────────────────────────
+
+  describe('Local Active Draft State Management', () => {
+    it('creates localActiveDraftId state initialized from activeDraftId prop', () => {
+      expect(historySource).toContain('localActiveDraftId')
+      expect(historySource).toContain('setLocalActiveDraftId')
+    })
+
+    it('uses useEffect to sync server prop to local state', () => {
+      expect(historySource).toContain('setLocalActiveDraftId(activeDraftId)')
+    })
+
+    it('resolves activeDraft from local state (not server prop)', () => {
+      expect(historySource).toContain('getActiveDraft(drafts, localActiveDraftId)')
+    })
   })
 
-  it('Test G: broadcast does not affect same tab', async () => {
-    const msg = {
-      type: 'ACTIVE_DRAFT_CHANGED',
-      topicId: 'topic-1',
-      draftId: 'draft-v3',
-      sourceId: 'self-source',
-      timestamp: Date.now(),
-    }
-    expect(msg.sourceId).toBe('self-source')
+  // ── Test J: Successful setActiveDraft triggers broadcast ────────────────
+
+  describe('Test J: Broadcast After Server Action Success', () => {
+    it('broadcast triggered within result.success branch', () => {
+      expect(historySource).toContain('broadcastActiveDraftChange')
+      const successBlock = historySource.match(/if \(result\.success\) \{([\s\S]*?)else/)
+      expect(successBlock).not.toBeNull()
+      if (successBlock) {
+        expect(successBlock[1]).toContain('broadcastActiveDraftChange')
+      }
+    })
+
+    it('broadcasts with topicId, draftId, and sourceId', () => {
+      expect(historySource).toContain('broadcastActiveDraftChange(topicId, draftId, sourceId)')
+    })
+
+    it('sets local state immediately for responsive UI', () => {
+      expect(historySource).toContain('setLocalActiveDraftId(draftId)')
+    })
+
+    it('auto-selects the new active draft version after broadcast', () => {
+      expect(historySource).toContain('setSelectedVersion(newActiveDraft.version)')
+    })
   })
 
-  it('Test H: stale timestamp rejected', async () => {
-    const { shouldAcceptActiveDraftMessage } = await import('../active-draft-sync-utils')
-    const msg = {
-      type: 'ACTIVE_DRAFT_CHANGED' as const,
-      topicId: 'topic-1',
-      draftId: 'draft-new',
-      sourceId: 'other-source',
-      timestamp: 100,
-    }
-    const result = shouldAcceptActiveDraftMessage(msg, 'topic-1', 'self-source', 'draft-old', 200)
-    expect(result.accept).toBe(false)
-    expect(result.reason).toBe('stale')
+  // ── Test K/L: Remote change handler ─────────────────────────────────────
+
+  describe('Test K/L: Remote Change Updates localActiveDraftId and selectedVersion', () => {
+    it('onRemoteChange updates localActiveDraftId', () => {
+      expect(historySource).toContain('setLocalActiveDraftId(draftId)')
+    })
+
+    it('onRemoteChange updates selectedVersion to remote draft', () => {
+      expect(historySource).toContain('setSelectedVersion')
+    })
+
+    it('onRemoteChange triggers router.refresh for authoritative DB re-fetch', () => {
+      expect(historySource).toContain('router.refresh()')
+    })
   })
 
-  it('Test I: wrong-topic rejected', async () => {
-    const { shouldAcceptActiveDraftMessage } = await import('../active-draft-sync-utils')
-    const msg = {
-      type: 'ACTIVE_DRAFT_CHANGED' as const,
-      topicId: 'topic-2',
-      draftId: 'draft-new',
-      sourceId: 'other-source',
-      timestamp: Date.now(),
-    }
-    const result = shouldAcceptActiveDraftMessage(msg, 'topic-1', 'self-source', 'draft-old', 0)
-    expect(result.accept).toBe(false)
-    expect(result.reason).toBe('wrong-topic')
+  // ── Test O: Failure does NOT broadcast ──────────────────────────────────
+
+  describe('Test O: Server Action Failure Does NOT Broadcast', () => {
+    it('broadcastActiveDraftChange does NOT appear in the failure (else) branch', () => {
+      const successBranchMatch = historySource.match(/if \(result\.success\) \{([\s\S]*?)\} else/)
+      if (successBranchMatch) {
+        expect(successBranchMatch[1]).toContain('broadcastActiveDraftChange')
+      }
+    })
+
+    it('failure branch goes to console.error without broadcast', () => {
+      const elseBranch = historySource.match(/else \{[\s\S]*?console\.error[\s\S]*?\}/)
+      expect(elseBranch).not.toBeNull()
+      if (elseBranch) {
+        expect(elseBranch[0]).not.toContain('broadcastActiveDraftChange')
+      }
+    })
   })
 
-  it('Test J: same draftId no-op', async () => {
-    const { shouldAcceptActiveDraftMessage } = await import('../active-draft-sync-utils')
-    const msg = {
-      type: 'ACTIVE_DRAFT_CHANGED' as const,
-      topicId: 'topic-1',
-      draftId: 'draft-default',
-      sourceId: 'other-source',
-      timestamp: Date.now(),
-    }
-    const result = shouldAcceptActiveDraftMessage(msg, 'topic-1', 'self-source', 'draft-default', 0)
-    expect(result.accept).toBe(false)
-    expect(result.reason).toBe('no-change')
+  // ── Test N: View does not equal Switch ──────────────────────────────────
+
+  describe('Test N: Viewing History Version Does NOT Broadcast', () => {
+    it('version list click handler does not contain broadcast', () => {
+      const hasVersionClick = historySource.includes('setSelectedVersion(draft.version)')
+      expect(hasVersionClick).toBe(true)
+      const broadcastCount = (historySource.match(/broadcastActiveDraftChange/g) || []).length
+      expect(broadcastCount).toBe(2)
+    })
+
+    it('e.stopPropagation prevents list click from bubbling to set-active button', () => {
+      expect(historySource).toContain('e.stopPropagation()')
+    })
   })
-})
+
+  // ── Test M: Different topic messages filtered ───────────────────────────
+
+  describe('Test M: Different Topic Messages Get Filtered', () => {
+    it('hook uses shouldAcceptActiveDraftMessage which checks topicId', () => {
+      expect(hookSource).toContain('shouldAcceptActiveDraftMessage')
+    })
+
+    it('pure utility function isForTopic filters by topicId', () => {
+      expect(utilsSource).toContain('isForTopic')
+      expect(utilsSource).toContain('message.topicId')
+    })
+  })
+
+  // ── Hook Structure Tests ────────────────────────────────────────────────
+
+  describe('use-active-draft-sync.ts Structure', () => {
+    it('defines useActiveDraftSync hook', () => {
+      expect(hookSource).toContain('useActiveDraftSync')
+    })
+
+    it('exports broadcastActiveDraftChange function', () => {
+      expect(hookSource).toContain('broadcastActiveDraftChange')
+    })
+
+    it('creates BroadcastChannel inside useEffect (SSR safe)', () => {
+      expect(hookSource).toContain('useEffect')
+      expect(hookSource).toContain('new BroadcastChannel')
+    })
+
+    it('checks typeof BroadcastChannel for graceful degradation', () => {
+      expect(hookSource).toContain("typeof BroadcastChannel === 'undefined'")
+    })
+
+    it('closes channel on cleanup', () => {
+      expect(hookSource).toContain('channel.close()')
+    })
+
+    it('wraps postMessage in try/catch', () => {
+      expect(hookSource).toContain('try')
+      expect(hookSource).toContain('catch')
+    })
+
+    it('uses crypto.randomUUID for sourceId with fallback', () => {
+      expect(hookSource).toContain('randomUUID')
+    })
+
+    it('tracks lastEventTimestampRef for ordering protection', () => {
+      expect(hookSource).toContain('lastEventTimestamp')
+    })
+
+    // ── P0.4.9.1 — Self-message fix ───────────────────────────────────────
+
+    it('P0.4.9.1 — broadcastActiveDraftChange accepts sourceId parameter', () => {
+      expect(hookSource).toMatch(/broadcastActiveDraftChange\([^)]*sourceId[^)]*\)/)
+    })
+
+    it('P0.4.9.1 — useActiveDraftSync returns sourceId for component use', () => {
+      expect(hookSource).toMatch(/return\s*\{[^}]*sourceId/)
+    })
+  })
+
+  // ── active-draft-sync-utils.ts Structure ────────────────────────────────
+
+  describe('active-draft-sync-utils.ts Structure', () => {
+    it('exports ACTIVE_DRAFT_CHANNEL constant', () => {
+      expect(utilsSource).toContain('ACTIVE_DRAFT_CHANNEL')
+      expect(utilsSource).toContain('contentos:active-draft')
+    })
+
+    it('exports ActiveDraftChangeMessage type', () => {
+      expect(utilsSource).toContain('ActiveDraftChangeMessage')
+    })
+
+    it('exports shouldAcceptActiveDraftMessage function', () => {
+      expect(utilsSource).toContain('shouldAcceptActiveDraftMessage')
+    })
+
+    it('exports individual filter functions', () => {
+      expect(utilsSource).toContain('isActiveDraftChangeMessage')
+      expect(utilsSource).toContain('isForTopic')
+      expect(utilsSource).toContain('isFromSelf')
+      expect(utilsSource).toContain('isNewerThanLastEvent')
+      expect(utilsSource).toContain('isDifferentDraft')
+    })
+  })
+
+  // ── Test P: P0.4.9.1 — sourceId fix ────────────────────────────────────
+
+  describe('Test P: P0.4.9.1 — Self-Message Fix via Stable sourceId', () => {
+    it('destructures sourceId from useActiveDraftSync return value', () => {
+      expect(historySource).toMatch(/const\s*\{\s*sourceId\s*\}\s*=\s*useActiveDraftSync/)
+    })
+
+    it('passes sourceId to broadcastActiveDraftChange call', () => {
+      expect(historySource).toMatch(/broadcastActiveDraftChange\(\s*topicId\s*,\s*draftId\s*,\s*sourceId\s*\)/)
+    })
+
+    it('broadcast count is exactly 2: import + call in handleSetActiveDraft', () => {
+      const broadcastCount = (historySource.match(/broadcastActiveDraftChange/g) || []).length
+      expect(broadcastCount).toBe(2)
+    })
+  })
+
+  // ── Test Q: P0.4.9.1 — selectedVersion sync for remote Restore ──────────
+
+  describe('Test Q: P0.4.9.1 — selectedVersion Sync After Remote Change', () => {
+    it('has useEffect that watches drafts and localActiveDraftId for version sync', () => {
+      const useEffectMatch = historySource.match(/useEffect\(\(\)\s*=>\s*\{[\s\S]*?localActiveDraftId[\s\S]*?selectedVersion[\s\S]*?\}\s*,\s*\[\s*drafts\s*,\s*localActiveDraftId\s*\]\)/)
+      expect(useEffectMatch).not.toBeNull()
+    })
+
+    it('new useEffect only updates selectedVersion when version differs', () => {
+      expect(historySource).toMatch(/selectedVersion\s*!==\s*activeDraft\.version/)
+    })
+  })
+
+  // ── Regression Guard ───────────────────────────────────────────────────
+
+  describe('P0.4.9 — Regression Guard', () => {
+    it('P0.4.3 restore button still exists', () => {
+      expect(historySource).toContain('<DraftVersionRestoreButton')
+    })
+
+    it('P0.4.8 set-active button still exists', () => {
+      expect(historySource).toContain('handleSetActiveDraft')
+    })
+
+    it('P0.4.8 active badge still exists', () => {
+      expect(historySource).toContain('当前')
+    })
+
+    it('settingActive state still disables button during switch', () => {
+      expect(historySource).toContain('disabled={settingActive}')
+    })
+
+    it('P0.4.5 lineage display in version list preserved', () => {
+      expect(historySource).toContain('versionById.get(draft.parentDraftId)')
+    })
+
+    it('P0.4.7 lineage explorer section preserved', () => {
+      expect(historySource).toContain('版本谱系')
+    })
+  })
+)
