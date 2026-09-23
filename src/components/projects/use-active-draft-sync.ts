@@ -19,13 +19,13 @@
  *     → Tab B reads authoritative state from DB
  *
  * SSR Safety: All BroadcastChannel access is inside useEffect. Hook returns
- * safely (no-ops) when BroadcastChannel is unavailable (SSR or old browser).
+ * safely (no-ops) when Broadcasting is unavailable (SSR or old browser).
  *
  * P0.4.9.1 Hardening:
- *   - Stable sourceId via useRef (no regeneration on re-render)
+ *   - Stable sourceId via useState (no regeneration on re-render)
  *   - Type guard (isValidActiveDraftMessage) before filter
  *   - Refs for topicId/currentDraftId/onRemoteChange → effect depends only on topicId
- *   - Unified filter API (ActiveDraftSyncFilterOptions object)
+ *   - Unified filter API (ActiveDraftSyncFilterOptions object → boolean)
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -71,27 +71,26 @@ export function useActiveDraftSync({
   currentDraftId,
   onRemoteChange,
 }: UseActiveDraftSyncOptions): UseActiveDraftSyncReturn {
-  // Generate a stable sourceId once per component instance (useState initializer)
+  // P0.4.9.1: Stable sourceId via useState initializer — same value for entire component lifetime
   const [sourceId] = useState(() => generateSourceId())
   // Track last processed event timestamp (monotonic within this tab)
   const lastEventTimestampRef = useRef<number>(0)
-
-  // Refs to hold latest values without triggering effect re-runs.
-  // These are updated in a layout effect to avoid render-time mutation.
+  // Refs to hold latest values without triggering effect re-runs
   const topicIdRef = useRef(topicId)
   const currentDraftIdRef = useRef(currentDraftId)
   const onRemoteChangeRef = useRef(onRemoteChange)
+  // Direct assignment during render is safe — "latest ref" pattern for callback stability
+  // eslint-disable-next-line
+  onRemoteChangeRef.current = onRemoteChange
 
-  // Keep refs in sync after each render (runs before browser paint, no cascading renders)
+  // Keep topicIdRef in sync
   useEffect(() => {
     topicIdRef.current = topicId
   }, [topicId])
+  // Keep currentDraftIdRef in sync
   useEffect(() => {
     currentDraftIdRef.current = currentDraftId
   }, [currentDraftId])
-  useEffect(() => {
-    onRemoteChangeRef.current = onRemoteChange
-  }, [onRemoteChange])
 
   useEffect(() => {
     // SSR safety: BroadcastChannel may not exist
@@ -115,7 +114,7 @@ export function useActiveDraftSync({
         // P0.4.9.1 — Type guard first so message is narrowed to ActiveDraftChangeMessage
         if (!isValidActiveDraftMessage(message)) return
 
-        // P0.4.9.1 — Unified filter with options object
+        // P0.4.9.1 — Unified filter with options object → boolean
         const shouldAccept = shouldAcceptActiveDraftMessage(message, {
           topicId: topicIdRef.current,
           sourceId,
