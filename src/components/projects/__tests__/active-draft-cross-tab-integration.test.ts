@@ -8,6 +8,7 @@
  *   Old timestamp messages are ignored
  *   Same draftId messages are ignored
  *   P0.4.9.1: Stable sourceId end-to-end self-message verification
+ *   P0.4.9.1: Unknown payload type guard behavioral verification
  *
  * These are pure logic integration tests (no React rendering).
  */
@@ -109,10 +110,8 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
     }
 
     channelA.postMessage(message)
-    // Note: mock doesn't deliver to self, but we test the filter function directly
-      // Simulate receiving a self-message
     channelB.onmessage!({ data: message } as MessageEvent)
-    expect(processedCount).toBe(0) // Self-message was filtered
+    expect(processedCount).toBe(0)
   })
 
   it('Tab B accepts message from different tab with valid filter chain', () => {
@@ -129,8 +128,8 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
         lastEventTimestamp: lastTimestamp,
         currentDraftId: 'draft_v3',
       })) {
-        lastTimestamp = msg.timestamp
-        lastReceivedDraftId = msg.draftId
+        lastTimestamp = (msg as ActiveDraftChangeMessage).timestamp
+        lastReceivedDraftId = (msg as ActiveDraftChangeMessage).draftId
       }
     }
 
@@ -163,7 +162,6 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
       }
     }
 
-    // Message for different topic
     const wrongTopicMsg: ActiveDraftChangeMessage = {
       type: 'ACTIVE_DRAFT_CHANGED',
       topicId: 'topic_999',
@@ -190,7 +188,7 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
         lastEventTimestamp: currentTimestamp,
         currentDraftId: 'draft_v3',
       })) {
-        currentTimestamp = msg.timestamp
+        currentTimestamp = (msg as ActiveDraftChangeMessage).timestamp
         receivedCount++
       }
     }
@@ -200,7 +198,7 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
       topicId: 'topic_123',
       draftId: 'draft_v5',
       sourceId: 'tab_a',
-      timestamp: 100, // Older than currentTimestamp (500)
+      timestamp: 100,
     }
 
     channelB.onmessage({ data: oldMessage } as MessageEvent)
@@ -217,7 +215,7 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
         topicId: 'topic_123',
         sourceId: 'tab_b',
         lastEventTimestamp: 0,
-        currentDraftId: 'draft_v5', // Already have draft_v5
+        currentDraftId: 'draft_v5',
       })) {
         receivedCount++
       }
@@ -226,9 +224,9 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
     const sameDraftMsg: ActiveDraftChangeMessage = {
       type: 'ACTIVE_DRAFT_CHANGED',
       topicId: 'topic_123',
-      draftId: 'draft_v5', // Same as current
+      draftId: 'draft_v5',
       sourceId: 'tab_a',
-      timestamp: 999, // Very new
+      timestamp: 999,
     }
 
     channelB.onmessage({ data: sameDraftMsg } as MessageEvent)
@@ -304,7 +302,6 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
     const channelB = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
     const channelC = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
 
-    // Close channelB (simulating tab close)
     channelB.close()
 
     const receivedMessages: string[] = []
@@ -323,24 +320,21 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
 
     channelA.postMessage(message)
 
-    // Only channelC should receive (channelB is closed)
     expect(receivedMessages).toEqual(['draft_v8'])
   })
 
   // ── P0.4.9.1 — Stable sourceId end-to-end self-message verification ─────
 
   it('P0.4.9.1 — broadcast with own stable sourceId is rejected by own listener', () => {
-    // Simulate: useActiveDraftSync generates a stable sourceId per tab
     const tabAStableSourceId = 'stable-tab-a-uuid'
     const tabBStableSourceId = 'stable-tab-b-uuid'
 
     const channelA = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
     const channelB = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
 
-    const tabAReceivedDraftIds: string[] = []
-    const tabBReceivedDraftIds: string[] = []
+    let tabAReceivedDraftIds: string[] = []
+    let tabBReceivedDraftIds: string[] = []
 
-    // Tab A listener: filters by its stable sourceId
     channelA.onmessage = (event) => {
       const msg = event.data
       if (shouldAcceptActiveDraftMessage(msg, {
@@ -353,7 +347,6 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
       }
     }
 
-    // Tab B listener: filters by its stable sourceId
     channelB.onmessage = (event) => {
       const msg = event.data
       if (shouldAcceptActiveDraftMessage(msg, {
@@ -366,25 +359,18 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
       }
     }
 
-    // Tab A broadcasts using its OWN stable sourceId (P0.4.9.1 fix)
     const messageFromA: ActiveDraftChangeMessage = {
       type: 'ACTIVE_DRAFT_CHANGED',
       topicId: 'topic_123',
       draftId: 'draft_v5',
-      sourceId: tabAStableSourceId, // Same as listener's sourceId
+      sourceId: tabAStableSourceId,
       timestamp: 1000,
     }
 
     channelA.postMessage(messageFromA)
-
-    // Mock delivers to other channels (not self), so Tab B receives
-    // But Tab A should still reject if it were delivered (via direct simulation)
     channelA.onmessage!({ data: messageFromA } as MessageEvent)
 
-    // Tab A's own sourceId match → self-message → rejected
     expect(tabAReceivedDraftIds).toEqual([])
-
-    // Tab B's sourceId differs → accepted
     expect(tabBReceivedDraftIds).toEqual(['draft_v5'])
   })
 
@@ -397,8 +383,8 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
     const channelB = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
     const channelC = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
 
-    const bReceived: string[] = []
-    const cReceived: string[] = []
+    let bReceived: string[] = []
+    let cReceived: string[] = []
 
     channelB.onmessage = (event) => {
       const msg = event.data
@@ -424,7 +410,6 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
       }
     }
 
-    // Tab A broadcasts with its unique stable sourceId
     const msg: ActiveDraftChangeMessage = {
       type: 'ACTIVE_DRAFT_CHANGED',
       topicId: 'topic_shared',
@@ -435,8 +420,42 @@ describe('P0.4.9 — Cross-Tab Integration (Mock BroadcastChannel)', () => {
 
     channelA.postMessage(msg)
 
-    // Both B and C should receive (different sourceIds)
     expect(bReceived).toEqual(['draft_new'])
     expect(cReceived).toEqual(['draft_new'])
+  })
+
+  // ── P0.4.9.1 — Full behavioral: unknown payload does not pass filter ─────
+
+  it('P0.4.9.1 — unknown payloads are rejected by the unified filter', () => {
+    const channelB = new MockBroadcastChannel(ACTIVE_DRAFT_CHANNEL)
+
+    let bProcessedValid = false
+    channelB.onmessage = (event) => {
+      const msg = event.data
+      if (shouldAcceptActiveDraftMessage(msg, {
+        topicId: 'topic_123',
+        sourceId: 'tab_b',
+        lastEventTimestamp: 0,
+        currentDraftId: 'draft_v1',
+      })) {
+        bProcessedValid = true
+      }
+    }
+
+    // @ts-expect-error: simulating unknown payload
+    channelB.onmessage({ data: null } as MessageEvent)
+    expect(bProcessedValid).toBe(false)
+
+    // @ts-expect-error: simulating unknown payload
+    channelB.onmessage({ data: 'malicious' } as MessageEvent)
+    expect(bProcessedValid).toBe(false)
+
+    // @ts-expect-error: simulating unknown payload
+    channelB.onmessage({ data: { type: 'HACK', topicId: 'topic_123', draftId: 'x', sourceId: 'y', timestamp: 999 } } as MessageEvent)
+    expect(bProcessedValid).toBe(false)
+
+    // @ts-expect-error: simulating unknown payload — missing fields
+    channelB.onmessage({ data: { type: 'ACTIVE_DRAFT_CHANGED' } } as MessageEvent)
+    expect(bProcessedValid).toBe(false)
   })
 })

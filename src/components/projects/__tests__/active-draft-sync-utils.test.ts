@@ -6,7 +6,9 @@ import {
   createActiveDraftChangeMessage,
   isValidActiveDraftMessage,
   shouldAcceptActiveDraftMessage,
+  isFromSelf,
   ActiveDraftSyncFilterOptions,
+  ActiveDraftChangeMessage,
 } from '../active-draft-sync-utils'
 
 describe('active-draft-sync-utils', () => {
@@ -139,7 +141,7 @@ describe('active-draft-sync-utils', () => {
     })
   })
 
-  describe('Test E: shouldAcceptActiveDraftMessage - wrong-topic', () => {
+  describe('Test E: shouldAcceptActiveDraftMessage — wrong-topic', () => {
     it('should reject message from different topic', () => {
       const msg = createActiveDraftChangeMessage({
         topicId: 'topic-A',
@@ -227,65 +229,66 @@ describe('active-draft-sync-utils', () => {
     })
   })
 
+  describe('Test I: isFromSelf helper', () => {
+    it('should identify self-message', () => {
+      const msg: ActiveDraftChangeMessage = {
+        type: 'ACTIVE_DRAFT_CHANGED',
+        topicId: 't',
+        draftId: 'd',
+        sourceId: 'self-id',
+        timestamp: 1,
+      }
+      expect(isFromSelf(msg, 'self-id')).toBe(true)
+      expect(isFromSelf(msg, 'other-id')).toBe(false)
+    })
+  })
+
   // ── P0.4.9.1 — Unknown/unrecognised payloads ─────────────────────────────
 
   describe('P0.4.9.1 — Unknown payload rejection', () => {
+    const baseOptions: ActiveDraftSyncFilterOptions = {
+      topicId: 'topic-A',
+      sourceId: 'source-1',
+      currentDraftId: 'draft-old',
+      lastEventTimestamp: 0,
+    }
+
     it('should reject null payload', () => {
-      const options: ActiveDraftSyncFilterOptions = {
-        topicId: 'topic-A',
-        sourceId: 'source-1',
-        currentDraftId: 'draft-old',
-        lastEventTimestamp: 0,
-      }
-      expect(shouldAcceptActiveDraftMessage(null, options)).toBe(false)
+      expect(shouldAcceptActiveDraftMessage(null, baseOptions)).toBe(false)
     })
 
     it('should reject undefined payload', () => {
-      const options: ActiveDraftSyncFilterOptions = {
-        topicId: 'topic-A',
-        sourceId: 'source-1',
-        currentDraftId: 'draft-old',
-        lastEventTimestamp: 0,
-      }
-      expect(shouldAcceptActiveDraftMessage(undefined, options)).toBe(false)
+      expect(shouldAcceptActiveDraftMessage(undefined, baseOptions)).toBe(false)
     })
 
     it('should reject non-object payloads', () => {
-      const options: ActiveDraftSyncFilterOptions = {
-        topicId: 'topic-A',
-        sourceId: 'source-1',
-        currentDraftId: 'draft-old',
-        lastEventTimestamp: 0,
-      }
-      expect(shouldAcceptActiveDraftMessage('hello', options)).toBe(false)
-      expect(shouldAcceptActiveDraftMessage(42, options)).toBe(false)
-      expect(shouldAcceptActiveDraftMessage(true, options)).toBe(false)
+      expect(shouldAcceptActiveDraftMessage('hello', baseOptions)).toBe(false)
+      expect(shouldAcceptActiveDraftMessage(42, baseOptions)).toBe(false)
+      expect(shouldAcceptActiveDraftMessage(true, baseOptions)).toBe(false)
     })
 
     it('should reject object with wrong type field', () => {
-      const options: ActiveDraftSyncFilterOptions = {
-        topicId: 'topic-A',
-        sourceId: 'source-1',
-        currentDraftId: 'draft-old',
-        lastEventTimestamp: 0,
-      }
       expect(shouldAcceptActiveDraftMessage({
         type: 'OTHER_TYPE',
         topicId: 'topic-A',
         draftId: 'draft-X',
         sourceId: 'source-2',
         timestamp: 1,
-      }, options)).toBe(false)
+      }, baseOptions)).toBe(false)
     })
 
     it('should reject function payload', () => {
-      const options: ActiveDraftSyncFilterOptions = {
-        topicId: 'topic-A',
-        sourceId: 'source-1',
-        currentDraftId: 'draft-old',
-        lastEventTimestamp: 0,
-      }
-      expect(shouldAcceptActiveDraftMessage(() => {}, options)).toBe(false)
+      expect(shouldAcceptActiveDraftMessage(() => {}, baseOptions)).toBe(false)
+    })
+
+    it('should reject empty topicId', () => {
+      expect(shouldAcceptActiveDraftMessage({
+        type: 'ACTIVE_DRAFT_CHANGED',
+        topicId: '',
+        draftId: 'draft-X',
+        sourceId: 'source-2',
+        timestamp: 1,
+      }, baseOptions)).toBe(false)
     })
   })
 })

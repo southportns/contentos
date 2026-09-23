@@ -162,9 +162,14 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
       expect(hookSource).toContain('shouldAcceptActiveDraftMessage')
     })
 
-    it('unified shouldAcceptActiveDraftMessage filters by topicId via options', () => {
-      expect(utilsSource).toContain('shouldAcceptActiveDraftMessage')
+    it('shouldAcceptActiveDraftMessage uses unified options API with topicId filter', () => {
       expect(utilsSource).toContain('ActiveDraftSyncFilterOptions')
+      expect(utilsSource).match(/msg\.topicId !== options\.topicId/)
+    })
+
+    it('isFromSelf helper exists for self-message identification', () => {
+      expect(utilsSource).toContain('isFromSelf')
+      expect(utilsSource).match(/msg\.sourceId === selfSourceId/)
     })
   })
 
@@ -208,11 +213,11 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
     // ── P0.4.9.1 — Self-message fix ───────────────────────────────────────
 
     it('P0.4.9.1 — broadcastActiveDraftChange accepts sourceId parameter', () => {
-      expect(hookSource).toMatch(/broadcastActiveDraftChange\([^)]*sourceId[^)]*\)/)
+      expect(hookSource).match(/broadcastActiveDraftChange\([^)]*sourceId[^)]*\)/)
     })
 
     it('P0.4.9.1 — useActiveDraftSync returns sourceId for component use', () => {
-      expect(hookSource).toMatch(/return\s*\{[^}]*sourceId/)
+      expect(hookSource).match(/return\s*\{[^}]*sourceId/)
     })
   })
 
@@ -237,7 +242,15 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
     })
 
     it('P0.4.9.1 — shouldAcceptActiveDraftMessage accepts options object', () => {
-      expect(utilsSource).toMatch(/shouldAcceptActiveDraftMessage\([\s\S]*?ActiveDraftSyncFilterOptions/)
+      expect(utilsSource).match(/shouldAcceptActiveDraftMessage\([\s\S]*?ActiveDraftSyncFilterOptions/)
+    })
+
+    it('P0.4.9.1 — exports isValidActiveDraftMessage type guard', () => {
+      expect(utilsSource).toContain('isValidActiveDraftMessage')
+    })
+
+    it('P0.4.9.1 — exports isFromSelf helper', () => {
+      expect(utilsSource).toContain('isFromSelf')
     })
   })
 
@@ -245,11 +258,11 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
 
   describe('Test P: P0.4.9.1 — Self-Message Fix via Stable sourceId', () => {
     it('destructures sourceId from useActiveDraftSync return value', () => {
-      expect(historySource).toMatch(/const\s*\{\s*sourceId\s*\}\s*=\s*useActiveDraftSync/)
+      expect(historySource).match(/const\s*\{\s*sourceId\s*\}\s*=\s*useActiveDraftSync/)
     })
 
     it('passes sourceId to broadcastActiveDraftChange call', () => {
-      expect(historySource).toMatch(/broadcastActiveDraftChange\(\s*topicId\s*,\s*draftId\s*,\s*sourceId\s*\)/)
+      expect(historySource).match(/broadcastActiveDraftChange\(\s*topicId\s*,\s*draftId\s*,\s*sourceId\s*\)/)
     })
 
     it('broadcast count is exactly 2: import + call in handleSetActiveDraft', () => {
@@ -267,7 +280,7 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
     })
 
     it('new useEffect only updates selectedVersion when version differs', () => {
-      expect(historySource).toMatch(/selectedVersion\s*!==\s*activeDraft\.version/)
+      expect(historySource).match(/selectedVersion\s*!==\s*activeDraft\.version/)
     })
   })
 
