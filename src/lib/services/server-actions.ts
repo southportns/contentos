@@ -166,6 +166,74 @@ export async function setActiveDraft(
   }
 }
 
+/**
+ * P0.5.1 — Save a manual edit to the active draft.
+ *
+ * Creates a new MANUAL_EDIT Draft from the source draft, with user-modified content.
+ * The new draft becomes the active draft. The original draft is never modified.
+ *
+ * @param sourceDraftId - The draft ID that is being edited
+ * @param content - The modified content
+ * @param title - Optional modified title (pass empty string to clear)
+ * @param changeReason - Optional reason for the edit
+ * @returns { success: boolean, draft?: Draft, topic?: Topic, error?: string }
+ */
+export async function saveManualDraftEdit(
+  sourceDraftId: string,
+  content: string,
+  title?: string | null,
+  changeReason?: string,
+): Promise<{ success: boolean; draft?: Draft; topic?: Topic; error?: string }> {
+  if (!isDatabaseConfigured()) {
+    return { success: false, error: '数据库未配置' }
+  }
+
+  if (!sourceDraftId) {
+    return { success: false, error: '版本不存在或已不可用' }
+  }
+
+  if (!content || content.trim().length === 0) {
+    return { success: false, error: '内容不能为空' }
+  }
+
+  try {
+    const { topicRepository } = await import('@/lib/repositories/topic-repository')
+    const defaultUserId = getDefaultUserId()
+
+    const result = await topicRepository.createManualEditDraft({
+      sourceDraftId,
+      content,
+      title,
+      changeReason,
+      userId: defaultUserId,
+    })
+
+    // Revalidate project detail page to show new version
+    revalidatePath('/projects/(app)', 'layout')
+
+    return { success: true, draft: result.draft, topic: result.topic }
+  } catch (error) {
+    console.error('[Server Action] saveManualDraftEdit failed:', error)
+
+    if (error instanceof Error) {
+      switch (error.message) {
+        case 'SOURCE_DRAFT_NOT_FOUND':
+          return { success: false, error: '该版本不存在或已不可用' }
+        case 'TOPIC_NOT_FOUND':
+          return { success: false, error: '项目上下文不存在' }
+        case 'OWNERSHIP_DENIED':
+          return { success: false, error: '无权操作此版本' }
+        case 'DRAFT_VERSION_CONFLICT':
+          return { success: false, error: '版本创建冲突，请重试' }
+        default:
+          return { success: false, error: '保存失败，请稍后重试' }
+      }
+    }
+
+    return { success: false, error: '保存失败，请稍后重试' }
+  }
+}
+
 // ─── Persona Server Actions ─────────────────────────────
 
 export async function getPersonas() {
