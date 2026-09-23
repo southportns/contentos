@@ -6,6 +6,7 @@ import { getProjectDetail } from '@/lib/services/server-actions'
 import { isDatabaseConfigured } from '@/lib/utils/db-safe'
 import { ProjectDetailHeader } from '@/components/projects/project-detail-header'
 import { DraftVersionHistory } from '@/components/projects/draft-version-history'
+import { DraftEditor } from '@/components/projects/draft-editor'
 import type { Topic, Draft, Evaluation, Humanization, StrategyEvaluation, Angle, ContentStrategy } from '@/generated/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -86,6 +87,19 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
           </Link>
         </div>
       )}
+
+      {/* P0.5.1 — Active Draft Editor (only show if there is an active draft) */}
+      {topic && (() => {
+        const activeDraft = topic.activeDraft
+        if (!activeDraft) return null
+        return (
+          <DraftEditor
+            activeDraft={activeDraft}
+            allDrafts={drafts}
+            topicId={topic.id}
+          />
+        )
+      })()}
 
       {/* Version History (only show if topic exists) */}
       {topic && (
