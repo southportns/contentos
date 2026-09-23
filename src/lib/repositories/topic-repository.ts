@@ -252,6 +252,105 @@ export const topicRepository = {
     throw lastError ?? new Error('DRAFT_VERSION_CONFLICT')
   },
 
+  /**
+   * P0.5.1 — Create a new MANUAL_EDIT Draft from an existing source draft's content.
+   *
+   * Manual Edit = Create New Draft with user-modified content (never overwrites old versions).
+   *
+   * Transaction guarantees (same as createRestoredDraft):
+   * - Concurrent edits cannot produce duplicate versions (max version re-read inside tx)
+   * - No partial drafts on failure (all-or-nothing)
+   * - Atomic activeDraftId update
+   *
+   * @param params - Parameters for manual edit draft creation
+   * @returns The newly created Draft and updated Topic
+   * @throws Error if source draft not found, ownership denied, version conflict, or creation fails
+   */
+  async createManualEditDraft(params: {
+    sourceDraftId: string
+    content: string
+    title?: string | null
+    changeReason?: string
+    userId: string
+  }): Promise<{ draft: Draft; topic: Topic }> {
+    const { sourceDraftId, content, title, changeReason, userId } = params
+    const MAX_RETRIES = 3
+
+    // Step 1: Read source draft and validate ownership
+    const sourceDraft = await prisma.draft.findUnique({
+      where: { id: sourceDraftId },
+      include: { topic: { include: { project: true } } },
+    })
+
+    if (!sourceDraft) {
+      throw new Error('SOURCE_DRAFT_NOT_FOUND')
+    }
+
+    if (!sourceDraft.topic || !sourceDraft.topic.project) {
+      throw new Error('TOPIC_NOT_FOUND')
+    }
+    if (sourceDraft.topic.project.userId !== userId) {
+      throw new Error('OWNERSHIP_DENIED')
+    }
+
+    // Step 2: Retry loop for version creation
+    let lastError: Error | null = null
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          // Re-read max version inside transaction for freshness
+          const maxVersionDraft = await tx.draft.findFirst({
+            where: { topicId: sourceDraft.topicId },
+            orderBy: { version: 'desc' },
+            select: { version: true },
+          })
+          const nextVersion = (maxVersionDraft?.version ?? 0) + 1
+
+          // Create new MANUAL_EDIT draft with user-modified content
+          const newDraft = await tx.draft.create({
+            data: {
+              topicId: sourceDraft.topicId,
+              version: nextVersion,
+              parentDraftId: sourceDraft.id,
+              changeType: 'MANUAL_EDIT',
+              changeReason: changeReason || `基于 v${sourceDraft.version} 手动编辑`,
+              title: title !== undefined ? title : sourceDraft.title,
+              content,
+              outline: sourceDraft.outline,
+              status: 'DRAFT',
+              wordCount: content.length,
+            },
+          })
+
+          // Update topic's active draft atomically
+          const updatedTopic = await tx.topic.update({
+            where: { id: sourceDraft.topicId },
+            data: { activeDraftId: newDraft.id },
+          })
+
+          return { draft: newDraft, topic: updatedTopic }
+        })
+
+        return result
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+
+        if (error instanceof Error && (error as unknown as { code?: string }).code === 'P2002') {
+          if (attempt < MAX_RETRIES) {
+            continue
+          }
+          throw new Error('DRAFT_VERSION_CONFLICT')
+        }
+
+        throw lastError
+      }
+    }
+
+    // Should not reach here, but safety net
+    throw lastError ?? new Error('DRAFT_VERSION_CONFLICT')
+  },
+
   // ── P0.4.8 — Active Draft ───────────────────────────
 
   /**
