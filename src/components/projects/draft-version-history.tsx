@@ -136,7 +136,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
     currentDraftId: localActiveDraftId,
     onRemoteChange: (draftId) => {
       setLocalActiveDraftId(draftId)
-      const newActiveDraft = drafts.find(d => d.id === draftId)
+      const newActiveDraft = sortedDrafts.find(d => d.id === draftId)
       if (newActiveDraft) {
         setSelectedVersion(newActiveDraft.version)
       }
@@ -146,70 +146,82 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
     },
   })
 
+  // P0.5.2 — Sort drafts by version desc (latest first) to guarantee correct order
+  // regardless of database return order.
+  // NOTE: Defined as a plain const (not useMemo) to preserve existing hook order
+  // required by react-hooks/preserve-manual-memoization rule.
+  // Also must be BEFORE the P0.4.9.1 useEffect below that references sortedDrafts
+  // to avoid TDZ (temporal dead zone) errors.
+  const sortedDrafts = [...drafts].sort((a, b) => b.version - a.version)
+
   // P0.4.9.1 — Sync selectedVersion when localActiveDraftId changes and
-  // the corresponding draft is available in the drafts array.
-  // Handles the remote Restore case: the new draft may not be in `drafts`
+  // the corresponding draft is available in the sortedDrafts array.
+  // Handles the remote Restore case: the new draft may not be in `sortedDrafts`
   // when onRemoteChange fires, but after router.refresh() updates props.
   // Intentional: guarded by selectedVersion inequality check to prevent loops
   useEffect(() => {
     if (!localActiveDraftId) return
-    const activeDraft = drafts.find(d => d.id === localActiveDraftId)
+    const activeDraft = sortedDrafts.find(d => d.id === localActiveDraftId)
     if (activeDraft && selectedVersion !== activeDraft.version) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedVersion(activeDraft.version)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drafts, localActiveDraftId])
+  }, [sortedDrafts, localActiveDraftId])
 
   // P0.4.8 — Track whether "set as current" is in progress
   const [settingActive, setSettingActive] = useState(false)
 
   const selectedDraft = useMemo(
-    () => drafts.find((d) => d.version === selectedVersion) ?? drafts[0],
-    [drafts, selectedVersion]
+    () => sortedDrafts.find((d) => d.version === selectedVersion) ?? sortedDrafts[0],
+    [sortedDrafts, selectedVersion]
   )
 
   // P0.4.5 — Build a map from draft ID to version number for lineage display
   const versionById = useMemo(() => {
     const map = new Map<string, number>()
-    for (const d of drafts) {
+    for (const d of sortedDrafts) {
       map.set(d.id, d.version)
     }
     return map
-  }, [drafts])
+  }, [sortedDrafts])
 
   // P0.4.7 — Lineage relationships
   const parentDraft = useMemo(
-    () => selectedDraft ? getParentDraft(selectedDraft, drafts) : null,
-    [selectedDraft, drafts]
+    () => selectedDraft ? getParentDraft(selectedDraft, sortedDrafts) : null,
+    [selectedDraft, sortedDrafts]
   )
   const childDrafts = useMemo(
-    () => selectedDraft ? getChildDrafts(selectedDraft, drafts) : [],
-    [selectedDraft, drafts]
+    () => selectedDraft ? getChildDrafts(selectedDraft, sortedDrafts) : [],
+    [selectedDraft, sortedDrafts]
   )
   const lineageChain = useMemo(
-    () => selectedDraft ? getLineageChain(selectedDraft, drafts) : [],
-    [selectedDraft, drafts]
+    () => selectedDraft ? getLineageChain(selectedDraft, sortedDrafts) : [],
+    [selectedDraft, sortedDrafts]
   )
   const childCountsById = useMemo(() => {
     const map = new Map<string, number>()
-    for (const d of drafts) {
+    for (const d of sortedDrafts) {
       if (d.parentDraftId) {
         map.set(d.parentDraftId, (map.get(d.parentDraftId) ?? 0) + 1)
       }
     }
     return map
-  }, [drafts])
+  }, [sortedDrafts])
 
   // P0.4.8 — Active draft resolution (P0.4.9: use local state)
   const activeDraft = useMemo(
-    () => getActiveDraft(drafts, localActiveDraftId),
-    [drafts, localActiveDraftId]
+    () => getActiveDraft(sortedDrafts, localActiveDraftId),
+    [sortedDrafts, localActiveDraftId]
   )
 
-  const handleRestoreSuccess = (newVersion: number) => {
+  const handleRestoreSuccess = (result: { version: number; draftId: string }) => {
     // Set the new version immediately; router.refresh() will refetch data
-    setSelectedVersion(newVersion)
+    setSelectedVersion(result.version)
+    // P0.5.2 — Broadcast restore to other tabs so they can update
+    if (topicId) {
+      broadcastActiveDraftChange(topicId, result.draftId, sourceId)
+    }
     router.refresh()
   }
 
@@ -224,7 +236,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
         // P0.4.9: Update local state immediately for responsive UI
         setLocalActiveDraftId(draftId)
         // P0.4.9: Auto-select the new active draft's version
-        const newActiveDraft = drafts.find(d => d.id === draftId)
+        const newActiveDraft = sortedDrafts.find(d => d.id === draftId)
         if (newActiveDraft) {
           setSelectedVersion(newActiveDraft.version)
         }
@@ -239,9 +251,9 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
     }
   }
 
-  const canCompare = drafts.length >= 2
+  const canCompare = sortedDrafts.length >= 2
 
-  if (!drafts || drafts.length === 0) {
+  if (!sortedDrafts || sortedDrafts.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-3">
@@ -261,7 +273,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
           <ArrowLeft className="size-4" />
           返回版本详情
         </button>
-        <DraftVersionCompare drafts={drafts} />
+        <DraftVersionCompare drafts={sortedDrafts} />
       </div>
     )
   }
@@ -272,13 +284,13 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center justify-between">
             <span>版本历史</span>
-            <Badge variant="secondary" className="text-xs">{drafts.length}</Badge>
+            <Badge variant="secondary" className="text-xs">{sortedDrafts.length}</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="flex flex-col">
-            {drafts.map((draft, index) => (
-              <button key={draft.id} onClick={() => setSelectedVersion(draft.version)} className={cn('flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/50', 'border-l-2', selectedVersion === draft.version ? 'border-l-primary bg-accent/30' : 'border-l-transparent', index !== drafts.length - 1 && 'border-b')}>
+            {sortedDrafts.map((draft, index) => (
+              <button key={draft.id} onClick={() => setSelectedVersion(draft.version)} className={cn('flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/50', 'border-l-2', selectedVersion === draft.version ? 'border-l-primary bg-accent/30' : 'border-l-transparent', index !== sortedDrafts.length - 1 && 'border-b')}>
                 <FileText className="size-4 shrink-0 text-muted-foreground" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -345,7 +357,7 @@ export function DraftVersionHistory({ drafts, activeDraftId, topicId }: DraftVer
                 <span>v{selectedDraft.version}</span>
                 <Badge variant={getVersionBadgeVariant(selectedDraft.status)}>{getVersionLabel(selectedDraft.version, selectedDraft.status)}</Badge>
               </CardTitle>
-              {selectedVersion === drafts[0]?.version && (
+              {selectedVersion === sortedDrafts[0]?.version && (
                 <Badge variant="default" className="gap-1"><Star className="size-3" />最新</Badge>
               )}
             </div>

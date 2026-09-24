@@ -168,8 +168,9 @@ describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
       expect(historySource).toContain("import { DraftVersionCompare } from './draft-version-compare'")
     })
 
-    it('canCompare still gated on drafts.length >= 2', () => {
-      expect(historySource).toContain('drafts.length >= 2')
+    it('canCompare still gated on sortedDrafts.length >= 2', () => {
+      // P0.5.2: Now uses sortedDrafts for version ordering
+      expect(historySource).toContain('sortedDrafts.length >= 2')
     })
 
     it('compare button still exists', () => {
@@ -178,9 +179,9 @@ describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
   })
 
   describe('Auto-select New Version', () => {
-    it('directly sets selected version in handleRestoreSuccess', () => {
-      expect(historySource).toContain('setSelectedVersion(newVersion)')
-    })
+it('directly sets selected version in handleRestoreSuccess', () => {
+expect(historySource).toContain('setSelectedVersion(result.version)')
+})
 
     it('handleRestoreSuccess calls router.refresh for data refetch', () => {
       expect(historySource).toContain('router.refresh()')
@@ -282,11 +283,11 @@ describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
     })
   })
 
-  describe('P0.4.5 — Restore Success Shows Lineage After Refresh', () => {
-    it('handleRestoreSuccess selects new version and triggers refresh', () => {
-      expect(historySource).toContain('setSelectedVersion(newVersion)')
-      expect(historySource).toContain('router.refresh()')
-    })
+describe('P0.4.5 — Restore Success Shows Lineage After Refresh', () => {
+it('handleRestoreSuccess selects new version and triggers refresh', () => {
+expect(historySource).toContain('setSelectedVersion(result.version)')
+expect(historySource).toContain('router.refresh()')
+})
 
     it('after refresh, router refetches data including parentDraftId', () => {
       expect(historySource).toContain('router.refresh()')
@@ -406,17 +407,20 @@ describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
 
     it('computes parentDraft via useMemo', () => {
       expect(historySource).toContain('parentDraft')
-      expect(historySource).toContain('getParentDraft(selectedDraft, drafts)')
+      // P0.5.2: Now passes sortedDrafts instead of drafts
+      expect(historySource).toContain('getParentDraft(selectedDraft, sortedDrafts)')
     })
 
     it('computes childDrafts via useMemo', () => {
       expect(historySource).toContain('childDrafts')
-      expect(historySource).toContain('getChildDrafts(selectedDraft, drafts)')
+      // P0.5.2: Now passes sortedDrafts instead of drafts
+      expect(historySource).toContain('getChildDrafts(selectedDraft, sortedDrafts)')
     })
 
     it('computes lineageChain via useMemo', () => {
       expect(historySource).toContain('lineageChain')
-      expect(historySource).toContain('getLineageChain(selectedDraft, drafts)')
+      // P0.5.2: Now passes sortedDrafts instead of drafts
+      expect(historySource).toContain('getLineageChain(selectedDraft, sortedDrafts)')
     })
   })
 
@@ -553,7 +557,8 @@ describe('P0.4.3/P0.4.4 — Draft Version Restore Component', () => {
 
     it('resolves active draft via getActiveDraft in useMemo', () => {
       // P0.4.9: Uses localActiveDraftId for cross-tab sync (server → local → render)
-      expect(historySource).toContain('getActiveDraft(drafts, localActiveDraftId)')
+      // P0.5.2: Uses sortedDrafts for consistent version ordering
+      expect(historySource).toContain('getActiveDraft(sortedDrafts, localActiveDraftId)')
     })
   })
 

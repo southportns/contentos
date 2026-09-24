@@ -17,7 +17,8 @@ import { toast } from 'sonner'
 interface DraftVersionRestoreButtonProps {
   draftId: string
   version: number
-  onRestoreSuccess?: (newVersion: number) => void
+  /** P0.5.2 — Callback receives both version (for selection) and draftId (for broadcast) */
+  onRestoreSuccess?: (result: { version: number; draftId: string }) => void
 }
 
 export function DraftVersionRestoreButton({
@@ -40,7 +41,7 @@ export function DraftVersionRestoreButton({
       if (result.success && result.draft) {
         toast.success(`已创建新版本 v${result.draft.version}`)
         setIsDialogOpen(false)
-        onRestoreSuccess?.(result.draft.version)
+        onRestoreSuccess?.({ version: result.draft.version, draftId: result.draft.id })
       } else {
         toast.error(result.error ?? '恢复失败，请稍后重试')
       }

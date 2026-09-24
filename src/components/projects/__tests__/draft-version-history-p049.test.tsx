@@ -76,7 +76,8 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
     })
 
     it('resolves activeDraft from local state (not server prop)', () => {
-      expect(historySource).toContain('getActiveDraft(drafts, localActiveDraftId)')
+      // P0.5.2: sortedDrafts replaces drafts for version ordering
+      expect(historySource).toContain('getActiveDraft(sortedDrafts, localActiveDraftId)')
     })
   })
 
@@ -143,12 +144,13 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
   // ── Test N: View does not equal Switch ──────────────────────────────────
 
   describe('Test N: Viewing History Version Does NOT Broadcast', () => {
-    it('version list click handler does not contain broadcast', () => {
-      const hasVersionClick = historySource.includes('setSelectedVersion(draft.version)')
-      expect(hasVersionClick).toBe(true)
-      const broadcastCount = (historySource.match(/broadcastActiveDraftChange/g) || []).length
-      expect(broadcastCount).toBe(2)
-    })
+it('version list click handler does not contain broadcast', () => {
+const hasVersionClick = historySource.includes('setSelectedVersion(draft.version)')
+expect(hasVersionClick).toBe(true)
+// P0.5.2: 3 occurrences = import + handleSetActiveDraft + handleRestoreSuccess
+const broadcastCount = (historySource.match(/broadcastActiveDraftChange/g) || []).length
+expect(broadcastCount).toBe(3)
+})
 
     it('e.stopPropagation prevents list click from bubbling to set-active button', () => {
       expect(historySource).toContain('e.stopPropagation()')
@@ -265,19 +267,21 @@ describe('P0.4.9 — Active Draft Cross-Tab Sync Component', () => {
       expect(historySource).match(/broadcastActiveDraftChange\(\s*topicId\s*,\s*draftId\s*,\s*sourceId\s*\)/)
     })
 
-    it('broadcast count is exactly 2: import + call in handleSetActiveDraft', () => {
-      const broadcastCount = (historySource.match(/broadcastActiveDraftChange/g) || []).length
-      expect(broadcastCount).toBe(2)
-    })
+it('broadcast count is exactly 3: import + handleSetActiveDraft + handleRestoreSuccess', () => {
+// P0.5.2: Now broadcasts after successful Restore too
+const broadcastCount = (historySource.match(/broadcastActiveDraftChange/g) || []).length
+expect(broadcastCount).toBe(3)
+})
   })
 
   // ── Test Q: P0.4.9.1 — selectedVersion sync for remote Restore ──────────
 
   describe('Test Q: P0.4.9.1 — selectedVersion Sync After Remote Change', () => {
-    it('has useEffect that watches drafts and localActiveDraftId for version sync', () => {
-      const useEffectMatch = historySource.match(/useEffect\(\(\)\s*=>\s*\{[\s\S]*?localActiveDraftId[\s\S]*?selectedVersion[\s\S]*?\}\s*,\s*\[\s*drafts\s*,\s*localActiveDraftId\s*\]\)/)
-      expect(useEffectMatch).not.toBeNull()
-    })
+it('has useEffect that watches sortedDrafts and localActiveDraftId for version sync', () => {
+// P0.5.2: Now watches sortedDrafts instead of drafts
+const useEffectMatch = historySource.match(/useEffect\(\(\)\s*=>\s*\{[\s\S]*?localActiveDraftId[\s\S]*?selectedVersion[\s\S]*?\}\s*,\s*\[\s*sortedDrafts\s*,\s*localActiveDraftId\s*\]\)/)
+expect(useEffectMatch).not.toBeNull()
+})
 
     it('new useEffect only updates selectedVersion when version differs', () => {
       expect(historySource).match(/selectedVersion\s*!==\s*activeDraft\.version/)

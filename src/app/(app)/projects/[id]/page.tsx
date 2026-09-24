@@ -104,7 +104,11 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
 
       {/* Version History (only show if topic exists) */}
       {topic && (
-        <DraftVersionHistory drafts={drafts} />
+        <DraftVersionHistory
+          drafts={drafts}
+          activeDraftId={topic.activeDraftId}
+          topicId={topic.id}
+        />
       )}
 
       {/* Edit shortcut */}

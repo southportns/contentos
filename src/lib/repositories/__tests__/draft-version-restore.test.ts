@@ -919,4 +919,16 @@ describe('P0.4.3/P0.4.4 — createRestoredDraft', () => {
               createdAt: new Date(), updatedAt: new Date(),
             }),
           },
-</longcat_think>
+          topic: {
+            update: vi.fn().mockRejectedValue(new Error('Topic update failed')),
+          },
+        }
+        return callback(tx)
+      })
+
+      await expect(
+        topicRepository.createRestoredDraft('draft_v1', 'default'),
+      ).rejects.toThrow('Topic update failed')
+    })
+  })
+})

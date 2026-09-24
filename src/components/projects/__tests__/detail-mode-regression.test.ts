@@ -89,9 +89,10 @@ describe('P0.4.2 Compare Mode still intact', () => {
     'utf-8'
   )
 
-  it('canCompare still gated on drafts.length >= 2', () => {
-    expect(source).toContain('drafts.length >= 2')
-  })
+it('canCompare still gated on sortedDrafts.length >= 2', () => {
+// P0.5.2: Now uses sortedDrafts for version ordering
+expect(source).toContain('sortedDrafts.length >= 2')
+})
 
   it('setViewMode compare button still exists', () => {
     expect(source).toContain("setViewMode('compare')")
@@ -101,9 +102,10 @@ describe('P0.4.2 Compare Mode still intact', () => {
     expect(source).toContain("import { DraftVersionCompare } from './draft-version-compare'")
   })
 
-  it('DraftVersionCompare is rendered in compare mode', () => {
-    expect(source).toContain('<DraftVersionCompare drafts={drafts} />')
-  })
+it('DraftVersionCompare is rendered in compare mode', () => {
+// P0.5.2: Now passes sortedDrafts for consistent ordering
+expect(source).toContain('<DraftVersionCompare drafts={sortedDrafts} />')
+})
 
   it('Detail Mode and Compare Mode share the same DraftVersionHistory wrapper', () => {
     // Both view modes must coexist in the same component
