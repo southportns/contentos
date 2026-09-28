@@ -5,14 +5,29 @@
  * - upsertDraftEvaluation (Evaluation persistence)
  * - createRefinedDraft (Refine → New Draft)
  * - createHumanizedDraft (Humanization Adopt → New Draft)
+ * - OCC protection inside transaction (P0.5.3 Hardening Fix 3)
  *
  * These are unit tests against the repository functions with mocked Prisma.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { Prisma, Draft } from '@/generated/prisma'
 
 // ── Mock Prisma ──────────────────────────────────────────────────────────
+
+/** Transaction callback parameter type for mock transactions */
+type TxMock = {
+  draft: {
+    findFirst: ReturnType<typeof vi.fn>
+    create: ReturnType<typeof vi.fn>
+  }
+  topic: {
+    findUnique: ReturnType<typeof vi.fn>
+    update: ReturnType<typeof vi.fn>
+  }
+  humanization: {
+    create: ReturnType<typeof vi.fn>
+  }
+}
 
 const mockEvaluation = {
   upsert: vi.fn(),
@@ -43,6 +58,29 @@ vi.mock('@/lib/prisma', () => ({
     $transaction: mockTransaction,
   },
 }))
+
+type TxCallback = (tx: TxMock) => Promise<unknown>
+
+const createTxMock = (sourceDraftId: string, currentMaxVersion: number): TxMock => {
+  return {
+    draft: {
+      findFirst: vi.fn().mockResolvedValue({ version: currentMaxVersion }),
+      create: vi.fn().mockImplementation((args: { data: Record<string, unknown> }) =>
+        Promise.resolve({ id: `draft-v${currentMaxVersion + 1}`, ...args.data })
+      ),
+    },
+    topic: {
+      // P0.5.3 Hardening: OCC check reads activeDraftId inside transaction
+      findUnique: vi.fn().mockResolvedValue({ activeDraftId: sourceDraftId }),
+      update: vi.fn().mockResolvedValue({ id: 'topic-1', activeDraftId: `draft-v${currentMaxVersion + 1}` }),
+    },
+    humanization: {
+      create: vi.fn().mockImplementation((args: { data: Record<string, unknown> }) =>
+        Promise.resolve({ id: 'human-1', ...args.data })
+      ),
+    },
+  }
+}
 
 // ── Tests ────────────────────────────────────────────────────────────────
 
@@ -174,21 +212,8 @@ describe('P0.5.3 — createRefinedDraft', () => {
       },
     })
 
-    mockTransaction.mockImplementation(async (callback: (tx: any) => Promise<any>) => {
-      return callback({
-        draft: {
-          findFirst: vi.fn().mockResolvedValue({ version: 5 }),
-          create: vi.fn().mockResolvedValue({
-            id: 'draft-v6',
-            topicId: 'topic-1',
-            version: 6,
-            changeType: 'REFINE',
-          }),
-        },
-        topic: {
-          update: vi.fn().mockResolvedValue({ id: 'topic-1', activeDraftId: 'draft-v6' }),
-        },
-      })
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      return callback(createTxMock('draft-v5', 5))
     })
 
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
@@ -216,23 +241,15 @@ describe('P0.5.3 — createRefinedDraft', () => {
       },
     })
 
-    mockTransaction.mockImplementation(async (callback: (tx: any) => Promise<any>) => {
-      return callback({
-        draft: {
-          findFirst: vi.fn().mockResolvedValue({ version: 3 }),
-          create: vi.fn().mockImplementation((args) => {
-            // Verify parentDraftId is set correctly
-            expect(args.data.parentDraftId).toBe('draft-src')
-            return Promise.resolve({
-              id: 'draft-child',
-              ...args.data,
-            })
-          }),
-        },
-        topic: {
-          update: vi.fn().mockResolvedValue({ id: 'topic-1' }),
-        },
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      const tx = createTxMock('draft-src', 3)
+      const originalCreate = tx.draft.create
+      tx.draft.create = vi.fn().mockImplementation((args: { data: Record<string, unknown> }) => {
+        // Verify parentDraftId is set correctly
+        expect(args.data.parentDraftId).toBe('draft-src')
+        return originalCreate(args)
       })
+      return callback(tx)
     })
 
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
@@ -259,19 +276,8 @@ describe('P0.5.3 — createRefinedDraft', () => {
       },
     })
 
-    mockTransaction.mockImplementation(async (callback: (tx: any) => Promise<any>) => {
-      return callback({
-        draft: {
-          findFirst: vi.fn().mockResolvedValue({ version: 1 }),
-          create: vi.fn().mockImplementation((args) => {
-            expect(args.data.changeType).toBe('REFINE')
-            return Promise.resolve({ id: 'draft-v2', ...args.data })
-          }),
-        },
-        topic: {
-          update: vi.fn().mockResolvedValue({ id: 'topic-1' }),
-        },
-      })
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      return callback(createTxMock('draft-v1', 1))
     })
 
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
@@ -299,23 +305,18 @@ describe('P0.5.3 — createRefinedDraft', () => {
     })
 
     let topicUpdateCalled = false
-    mockTransaction.mockImplementation(async (callback: (tx: any) => Promise<any>) => {
-      return callback({
-        draft: {
-          findFirst: vi.fn().mockResolvedValue({ version: 2 }),
-          create: vi.fn().mockResolvedValue({
-            id: 'draft-new',
-            version: 3,
-          }),
-        },
-        topic: {
-          update: vi.fn().mockImplementation((args) => {
-            topicUpdateCalled = true
-            expect(args.data.activeDraftId).toBe('draft-new')
-            return Promise.resolve({ id: 'topic-1', activeDraftId: 'draft-new' })
-          }),
-        },
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      const tx = createTxMock('draft-old', 2)
+      tx.topic.update = vi.fn().mockImplementation((args: { data: { activeDraftId: string } }) => {
+        topicUpdateCalled = true
+        expect(args.data.activeDraftId).toBe('draft-new')
+        return Promise.resolve({ id: 'topic-1', activeDraftId: 'draft-new' })
       })
+      tx.draft.create = vi.fn().mockResolvedValue({
+        id: 'draft-new',
+        version: 3,
+      })
+      return callback(tx)
     })
 
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
@@ -349,22 +350,14 @@ describe('P0.5.3 — createHumanizedDraft', () => {
       },
     })
 
-    mockTransaction.mockImplementation(async (callback: (tx: any) => Promise<any>) => {
-      return callback({
-        draft: {
-          findFirst: vi.fn().mockResolvedValue({ version: 6 }),
-          create: vi.fn().mockImplementation((args) => {
-            expect(args.data.parentDraftId).toBe('draft-v6')
-            return Promise.resolve({ id: 'draft-v7', ...args.data })
-          }),
-        },
-        topic: {
-          update: vi.fn().mockResolvedValue({ id: 'topic-1', activeDraftId: 'draft-v7' }),
-        },
-        humanization: {
-          create: vi.fn().mockResolvedValue({ id: 'human-1' }),
-        },
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      const tx = createTxMock('draft-v6', 6)
+      const originalCreate = tx.draft.create
+      tx.draft.create = vi.fn().mockImplementation((args: { data: Record<string, unknown> }) => {
+        expect(args.data.parentDraftId).toBe('draft-v6')
+        return originalCreate(args)
       })
+      return callback(tx)
     })
 
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
@@ -393,22 +386,8 @@ describe('P0.5.3 — createHumanizedDraft', () => {
       },
     })
 
-    mockTransaction.mockImplementation(async (callback: (tx: any) => Promise<any>) => {
-      return callback({
-        draft: {
-          findFirst: vi.fn().mockResolvedValue({ version: 6 }),
-          create: vi.fn().mockImplementation((args) => {
-            expect(args.data.changeType).toBe('HUMANIZATION')
-            return Promise.resolve({ id: 'draft-v7', ...args.data })
-          }),
-        },
-        topic: {
-          update: vi.fn().mockResolvedValue({ id: 'topic-1' }),
-        },
-        humanization: {
-          create: vi.fn().mockResolvedValue({ id: 'human-1' }),
-        },
-      })
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      return callback(createTxMock('draft-v6', 6))
     })
 
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
@@ -442,23 +421,16 @@ describe('P0.5.3 — createHumanizedDraft', () => {
       return Promise.resolve({ id: 'human-1', ...args.data })
     })
 
-    mockTransaction.mockImplementation(async (callback: (tx: any) => Promise<any>) => {
-      return callback({
-        draft: {
-          findFirst: vi.fn().mockResolvedValue({ version: 6 }),
-          create: vi.fn().mockResolvedValue({
-            id: 'draft-v7',
-            version: 7,
-            changeType: 'HUMANIZATION',
-          }),
-        },
-        topic: {
-          update: vi.fn().mockResolvedValue({ id: 'topic-1' }),
-        },
-        humanization: {
-          create: txHumanizationCreate,
-        },
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      const tx = createTxMock('draft-v6', 6)
+      tx.humanization.create = txHumanizationCreate
+      // Override create to return draft-v7
+      tx.draft.create = vi.fn().mockResolvedValue({
+        id: 'draft-v7',
+        version: 7,
+        changeType: 'HUMANIZATION',
       })
+      return callback(tx)
     })
 
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
@@ -494,7 +466,7 @@ describe('P0.5.3 — OCC Protection', () => {
     vi.clearAllMocks()
   })
 
-  it('Test 12: ACTIVE_DRAFT_CONFLICT when source is not active', async () => {
+  it('Test 12: ACTIVE_DRAFT_CONFLICT when source is not active (createRefinedDraft)', async () => {
     mockDraft.findUnique.mockResolvedValue({
       id: 'draft-old',
       topicId: 'topic-1',
@@ -508,6 +480,21 @@ describe('P0.5.3 — OCC Protection', () => {
       },
     })
 
+    // P0.5.3 Hardening Fix 3: OCC check now happens INSIDE the transaction
+    // via tx.topic.findUnique. Mock that to return stale activeDraftId.
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      return callback({
+        draft: {
+          findFirst: vi.fn().mockResolvedValue({ version: 3 }),
+          create: vi.fn(),
+        },
+        topic: {
+          findUnique: vi.fn().mockResolvedValue({ activeDraftId: 'draft-new' }), // Stale!
+          update: vi.fn(),
+        },
+      })
+    })
+
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
 
     await expect(
@@ -519,7 +506,7 @@ describe('P0.5.3 — OCC Protection', () => {
     ).rejects.toThrow('ACTIVE_DRAFT_CONFLICT')
   })
 
-  it('Test 13: createHumanizedDraft also checks OCC', async () => {
+  it('Test 13: createHumanizedDraft also checks OCC (in-transaction)', async () => {
     mockDraft.findUnique.mockResolvedValue({
       id: 'draft-stale',
       topicId: 'topic-1',
@@ -533,6 +520,22 @@ describe('P0.5.3 — OCC Protection', () => {
       },
     })
 
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      return callback({
+        draft: {
+          findFirst: vi.fn().mockResolvedValue({ version: 2 }),
+          create: vi.fn(),
+        },
+        topic: {
+          findUnique: vi.fn().mockResolvedValue({ activeDraftId: 'draft-current' }), // Stale!
+          update: vi.fn(),
+        },
+        humanization: {
+          create: vi.fn(),
+        },
+      })
+    })
+
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
 
     await expect(
@@ -542,5 +545,173 @@ describe('P0.5.3 — OCC Protection', () => {
         userId: 'user-1',
       }),
     ).rejects.toThrow('ACTIVE_DRAFT_CONFLICT')
+  })
+
+  // ── P0.5.3 Hardening: In-transaction OCC Tests ──────────────────────
+
+  it('Test 14: createRefinedDraft calls tx.topic.findUnique inside transaction', async () => {
+    mockDraft.findUnique.mockResolvedValue({
+      id: 'draft-v1',
+      topicId: 'topic-1',
+      version: 1,
+      content: 'content',
+      outline: null,
+      topic: {
+        id: 'topic-1',
+        activeDraftId: 'draft-v1',
+        project: { id: 'proj-1', userId: 'user-1' },
+      },
+    })
+
+    let txTopicFindUniqueCalled = false
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      const tx = createTxMock('draft-v1', 1)
+      const originalFindUnique = tx.topic.findUnique
+      tx.topic.findUnique = vi.fn().mockImplementation((args: { where: { id: string } }) => {
+        txTopicFindUniqueCalled = true
+        // Verify it queries the correct topic
+        expect(args.where.id).toBe('topic-1')
+        return originalFindUnique(args)
+      })
+      return callback(tx)
+    })
+
+    const { topicRepository } = await import('@/lib/repositories/topic-repository')
+    await topicRepository.createRefinedDraft({
+      sourceDraftId: 'draft-v1',
+      content: 'refined',
+      userId: 'user-1',
+    })
+
+    // P0.5.3 Hardening Fix 3: OCC check must be called INSIDE the transaction
+    expect(txTopicFindUniqueCalled).toBe(true)
+    // mockTransaction should have been called (the OCC check is inside it)
+    expect(mockTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('Test 15: createHumanizedDraft calls tx.topic.findUnique inside transaction', async () => {
+    mockDraft.findUnique.mockResolvedValue({
+      id: 'draft-v2',
+      topicId: 'topic-1',
+      version: 2,
+      content: 'content',
+      outline: null,
+      topic: {
+        id: 'topic-1',
+        activeDraftId: 'draft-v2',
+        project: { id: 'proj-1', userId: 'user-1' },
+      },
+    })
+
+    let txTopicFindUniqueCalled = false
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      const tx = createTxMock('draft-v2', 2)
+      const originalFindUnique = tx.topic.findUnique
+      tx.topic.findUnique = vi.fn().mockImplementation((args: { where: { id: string } }) => {
+        txTopicFindUniqueCalled = true
+        expect(args.where.id).toBe('topic-1')
+        return originalFindUnique(args)
+      })
+      return callback(tx)
+    })
+
+    const { topicRepository } = await import('@/lib/repositories/topic-repository')
+    await topicRepository.createHumanizedDraft({
+      sourceDraftId: 'draft-v2',
+      content: 'humanized',
+      userId: 'user-1',
+    })
+
+    expect(txTopicFindUniqueCalled).toBe(true)
+    expect(mockTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('Test 16: ACTIVE_DRAFT_CONFLICT is fatal — no retry (createRefinedDraft)', async () => {
+    mockDraft.findUnique.mockResolvedValue({
+      id: 'draft-old',
+      topicId: 'topic-1',
+      version: 1,
+      content: 'old',
+      outline: null,
+      topic: {
+        id: 'topic-1',
+        activeDraftId: 'draft-new', // stale
+        project: { id: 'proj-1', userId: 'user-1' },
+      },
+    })
+
+    let transactionCallCount = 0
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      transactionCallCount++
+      return callback({
+        draft: {
+          findFirst: vi.fn().mockResolvedValue({ version: 1 }),
+          create: vi.fn(),
+        },
+        topic: {
+          findUnique: vi.fn().mockResolvedValue({ activeDraftId: 'draft-new' }), // stale
+          update: vi.fn(),
+        },
+      })
+    })
+
+    const { topicRepository } = await import('@/lib/repositories/topic-repository')
+
+    await expect(
+      topicRepository.createRefinedDraft({
+        sourceDraftId: 'draft-old',
+        content: 'new',
+        userId: 'user-1',
+      }),
+    ).rejects.toThrow('ACTIVE_DRAFT_CONFLICT')
+
+    // P0.5.3 Hardening: ACTIVE_DRAFT_CONFLICT must NOT retry — only 1 transaction call
+    expect(transactionCallCount).toBe(1)
+  })
+
+  it('Test 17: ACTIVE_DRAFT_CONFLICT is fatal — no retry (createHumanizedDraft)', async () => {
+    mockDraft.findUnique.mockResolvedValue({
+      id: 'draft-stale',
+      topicId: 'topic-1',
+      version: 2,
+      content: 'stale',
+      outline: null,
+      topic: {
+        id: 'topic-1',
+        activeDraftId: 'draft-active', // stale
+        project: { id: 'proj-1', userId: 'user-1' },
+      },
+    })
+
+    let transactionCallCount = 0
+    mockTransaction.mockImplementation(async (callback: TxCallback) => {
+      transactionCallCount++
+      return callback({
+        draft: {
+          findFirst: vi.fn().mockResolvedValue({ version: 2 }),
+          create: vi.fn(),
+        },
+        topic: {
+          findUnique: vi.fn().mockResolvedValue({ activeDraftId: 'draft-active' }), // stale
+          update: vi.fn(),
+        },
+        humanization: {
+          create: vi.fn(),
+        },
+      })
+    })
+
+    const { topicRepository } = await import('@/lib/repositories/topic-repository')
+
+    await expect(
+      topicRepository.createHumanizedDraft({
+        sourceDraftId: 'draft-stale',
+        content: 'humanized',
+        userId: 'user-1',
+      }),
+    ).rejects.toThrow('ACTIVE_DRAFT_CONFLICT')
+
+    // P0.5.3 Hardening: ACTIVE_DRAFT_CONFLICT must NOT retry
+    expect(transactionCallCount).toBe(1)
   })
 })

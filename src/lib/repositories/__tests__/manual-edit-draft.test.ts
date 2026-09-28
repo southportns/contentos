@@ -80,7 +80,7 @@ function createP2002Error(): Error {
 }
 
 function setupTransactionMock(maxVersion: number, newDraftData: Record<string, unknown>) {
-  mockTransaction.mockImplementation(async (callback: (tx: { draft: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }; topic: { update: ReturnType<typeof vi.fn> } }) => Promise<unknown>) => {
+  mockTransaction.mockImplementation(async (callback: (tx: { draft: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }; topic: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> } }) => Promise<unknown>) => {
     const tx = {
       draft: {
         findFirst: vi.fn().mockResolvedValue({ version: maxVersion }),
@@ -101,6 +101,8 @@ function setupTransactionMock(maxVersion: number, newDraftData: Record<string, u
         }),
       },
       topic: {
+        // P0.5.3 Hardening: OCC check inside transaction via tx.topic.findUnique
+        findUnique: vi.fn().mockResolvedValue({ activeDraftId: 'draft_v4' }),
         update: vi.fn().mockResolvedValue({ id: 'topic_1', activeDraftId: 'draft_v5' }),
       },
     }
@@ -150,6 +152,8 @@ describe('P0.5.1 — createManualEditDraft', () => {
             create: txDraftCreate,
           },
           topic: {
+            // P0.5.3 Hardening: OCC check inside transaction
+            findUnique: vi.fn().mockResolvedValue({ activeDraftId: 'draft_v4' }),
             update: txTopicUpdate,
           },
         }
@@ -296,7 +300,7 @@ describe('P0.5.1 — createManualEditDraft', () => {
       mockDraftFindUnique.mockResolvedValue(sourceDraft)
 
       let callCount = 0
-      mockTransaction.mockImplementation(async (callback: (tx: { draft: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }; topic: { update: ReturnType<typeof vi.fn> } }) => Promise<unknown>) => {
+      mockTransaction.mockImplementation(async (callback: (tx: { draft: { findFirst: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> }; topic: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> } }) => Promise<unknown>) => {
         callCount++
         if (callCount <= 2) throw createP2002Error()
         // Third attempt succeeds
@@ -312,7 +316,11 @@ describe('P0.5.1 — createManualEditDraft', () => {
               wordCount: 100, createdAt: new Date(), updatedAt: new Date(),
             }),
           },
-          topic: { update: vi.fn().mockResolvedValue({ id: 'topic_1', activeDraftId: 'draft_v6' }) },
+          topic: {
+            // P0.5.3 Hardening: OCC check inside transaction
+            findUnique: vi.fn().mockResolvedValue({ activeDraftId: 'draft_v4' }),
+            update: vi.fn().mockResolvedValue({ id: 'topic_1', activeDraftId: 'draft_v6' }),
+          },
         }
         return callback(tx)
       })
@@ -442,14 +450,30 @@ describe('P0.5.1 — createManualEditDraft', () => {
       })
       mockDraftFindUnique.mockResolvedValue(sourceDraft)
 
+      // P0.5.3 Hardening: OCC check now happens INSIDE the transaction.
+      // Mock tx.topic.findUnique to return the stale activeDraftId.
+      mockTransaction.mockImplementation(async (callback: (tx: any) => Promise<unknown>) => {
+        return callback({
+          draft: {
+            findFirst: vi.fn(),
+            create: vi.fn(),
+          },
+          topic: {
+            findUnique: vi.fn().mockResolvedValue({ activeDraftId: 'draft_v5' }), // Stale!
+            update: vi.fn(),
+          },
+        })
+      })
+
       await expect(topicRepository.createManualEditDraft({
         sourceDraftId: 'draft_v4',
         content: '测试sourceDraft已不是activeDraft时是否正确抛出ACTIVE_DRAFT_CONFLICT异常。',
         userId: 'default',
       })).rejects.toThrow('ACTIVE_DRAFT_CONFLICT')
 
-      // Transaction must NOT be entered when active draft check fails
-      expect(mockTransaction).not.toHaveBeenCalled()
+      // P0.5.3 Hardening: Transaction IS entered, but OCC check fails inside it.
+      // ACTIVE_DRAFT_CONFLICT is fatal — transaction must NOT be retried.
+      expect(mockTransaction).toHaveBeenCalledTimes(1)
     })
   })
 })

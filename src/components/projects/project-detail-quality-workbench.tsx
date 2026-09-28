@@ -4,22 +4,23 @@
  * P0.5.3 — Project Detail Quality Workbench
  *
  * Orchestrates the full quality & optimization workflow on the Project Detail page:
- * - Evaluation panel (with persistence + upsert)
- * - Evaluation → Refine conversion
- * - Evaluation → Refine → New Draft Version (atomic)
+ * - Evaluation panel (with persistence + upsert + hydration from DB)
+ * - Evaluation → Refine conversion (with strategy/angle context)
+ * - Evaluation → Refine → New Draft Version (atomic, OCC inside transaction)
  * - Humanization preview (no draft created)
- * - Humanization adopt → New Draft Version (atomic)
+ * - Humanization adopt → New Draft Version (atomic, OCC inside transaction)
  * - Cross-tab broadcast after draft-creating operations
- * - Dirty editor protection via useActiveDraftSync
+ * - Dirty editor protection via useActiveDraftSync + shared dirty state store
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
-import type { Draft } from '@/generated/prisma'
+import type { Draft, Evaluation, ContentStrategy, Angle } from '@/generated/prisma'
 import { DraftQualityPanel } from './draft-quality-panel'
 import { DraftHumanizationPanel } from './draft-humanization-panel'
 import { broadcastActiveDraftChange, useActiveDraftSync } from './use-active-draft-sync'
+import { isEditorDirty, subscribeDirtyState } from './dirty-state-store'
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ interface Suggestion {
   priority: 'high' | 'medium' | 'low'
 }
 
-interface EvaluationData {
+export interface EvaluationData {
   overallScore?: number
   emotionalImpactScore?: number
   logicalClarityScore?: number
@@ -52,32 +53,74 @@ interface ProjectDetailQualityWorkbenchProps {
   topicTitle?: string
   selectedAngleTitle?: string
   platform?: string
-  /** Whether the editor has unsaved changes */
+  /** Whether the editor has unserved changes — optional, falls back to shared store */
   isEditorDirty?: boolean
+  /** P0.5.3 Hardening — Strategy data for evaluation context */
+  strategy?: ContentStrategy | null
+  /** P0.5.3 Hardening — Selected angle for evaluation context */
+  selectedAngle?: Angle | null
+  /** P0.5.3 Hardening — Persisted evaluation from DB for hydration */
+  persistedEvaluation?: Evaluation | null
+}
+
+// ── Helper: Convert DB Evaluation to EvaluationData ───────────────────────
+
+function evaluationToData(ev: Evaluation | null): EvaluationData | null {
+  if (!ev) return null
+  return {
+    overallScore: ev.overallScore ?? undefined,
+    emotionalImpactScore: ev.emotionalImpactScore ?? undefined,
+    logicalClarityScore: ev.logicalClarityScore ?? undefined,
+    noveltyScore: ev.noveltyScore ?? undefined,
+    readabilityScore: ev.readabilityScore ?? undefined,
+    utilityScore: ev.utilityScore ?? undefined,
+    platformFitScore: ev.platformFitScore ?? undefined,
+    strengths: (ev.strengths as string[]) ?? [],
+    issues: (ev.issues as string[]) ?? [],
+    conclusion: ev.conclusion ?? undefined,
+  }
 }
 
 // ── Component ────────────────────────────────────────────────────────────
 
 export function ProjectDetailQualityWorkbench({
   activeDraft,
-  allDrafts,
+  allDrafts: _allDrafts,
   topicId,
   topicTitle,
   selectedAngleTitle,
   platform,
-  isEditorDirty,
+  isEditorDirty: isEditorDirtyProp,
+  strategy,
+  selectedAngle,
+  persistedEvaluation,
 }: ProjectDetailQualityWorkbenchProps) {
   const router = useRouter()
-  const [evaluation, setEvaluation] = useState<EvaluationData | null>(null)
+
+  // P0.5.3 Hardening Fix 2: Hydrate evaluation state from persisted DB record
+  const [evaluation, setEvaluation] = useState<EvaluationData | null>(
+    () => evaluationToData(persistedEvaluation ?? null)
+  )
   const [isRefining, setIsRefining] = useState(false)
   const [refineError, setRefineError] = useState<string | null>(null)
+
+  // P0.5.3 Hardening Fix 4: Read dirty state from shared store
+  // Subscribes to DraftEditor's dirty state so cross-tab refresh is blocked when editor has unsaved changes
+  const sharedDirtyState = useSyncExternalStore(
+    subscribeDirtyState,
+    () => isEditorDirty(topicId),
+    () => isEditorDirty(topicId)
+  )
+
+  // Use prop if provided, otherwise fall back to shared store
+  const effectiveIsDirty = isEditorDirtyProp ?? sharedDirtyState
 
   // Cross-tab sync for dirty editor protection
   const { sourceId } = useActiveDraftSync({
     topicId,
     currentDraftId: activeDraft.id,
-    onRemoteChange: (draftId) => {
-      if (isEditorDirty) {
+    onRemoteChange: (_draftId) => {
+      if (effectiveIsDirty) {
         // Dirty editor — don't silently overwrite, let user decide
         return
       }
@@ -95,6 +138,22 @@ export function ProjectDetailQualityWorkbench({
       content: activeDraft.content,
       title: activeDraft.title ?? '',
       platform,
+      // P0.5.3 Hardening Fix 1: Pass strategy and selectedAngle for evaluation context
+      strategy: strategy ? {
+        title: strategy.hookStrategy ?? '',
+        keyArguments: (strategy.contentStructure as string[]) ?? [],
+        emotionalArc: {
+          start: strategy.storyStrategy ?? '',
+          middle: strategy.conflict ?? '',
+          end: strategy.endingStrategy ?? '',
+        },
+        callToAction: strategy.ctaStrategy ?? '',
+      } : undefined,
+      selectedAngle: selectedAngle ? {
+        title: selectedAngle.title ?? '',
+        targetEmotion: selectedAngle.targetEmotion ?? '',
+        keyPoints: (selectedAngle.keyPoints as string[]) ?? [],
+      } : undefined,
     })
 
     if (result.success && result.evaluation) {
@@ -107,13 +166,12 @@ export function ProjectDetailQualityWorkbench({
         readabilityScore: ev.readabilityScore ?? undefined,
         utilityScore: ev.utilityScore ?? undefined,
         platformFitScore: ev.platformFitScore ?? undefined,
-        aiStyleScore: ev.aiStyleScore ?? undefined,
         strengths: (ev.strengths as string[]) ?? [],
         issues: (ev.issues as string[]) ?? [],
         conclusion: ev.conclusion ?? undefined,
       })
     }
-  }, [activeDraft.id, activeDraft.content, activeDraft.title, topicId, platform])
+  }, [activeDraft.id, activeDraft.content, activeDraft.title, topicId, platform, strategy, selectedAngle])
 
   // ── Refine (Evaluation Issues → Refine → New Draft) ─
 
@@ -164,7 +222,8 @@ export function ProjectDetailQualityWorkbench({
     } finally {
       setIsRefining(false)
     }
-  }, [activeDraft, topicId, topicTitle, selectedAngleTitle, platform, evaluation?.issues, sourceId, router])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDraft, topicId, topicTitle, selectedAngleTitle, platform, evaluation, sourceId, router])
 
   return (
     <div className="space-y-4">

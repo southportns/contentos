@@ -107,13 +107,21 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
       {topic && (() => {
         const activeDraft = topic.activeDraft
         if (!activeDraft) return null
+        // Find the activeDraft's evaluation from the drafts array (which includes evaluation relation)
+        const activeDraftWithEval = drafts.find(d => d.id === activeDraft.id)
+        const persistedEvaluation = activeDraftWithEval?.evaluation ?? null
         return (
           <ProjectDetailQualityWorkbench
+            key={activeDraft.id}
             activeDraft={activeDraft}
             allDrafts={drafts}
             topicId={topic.id}
             topicTitle={topic.topic}
             platform={topic.platform ?? undefined}
+            strategy={topic.strategy}
+            selectedAngle={topic.angles?.[0] ?? null}
+            selectedAngleTitle={topic.angles?.[0]?.title ?? undefined}
+            persistedEvaluation={persistedEvaluation}
           />
         )
       })()}

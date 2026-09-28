@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils'
 import type { Draft } from '@/generated/prisma'
 import { getChangeTypeLabel } from './draft-version-utils'
 import { useActiveDraftSync, broadcastActiveDraftChange } from './use-active-draft-sync'
+import { setEditorDirty } from './dirty-state-store'
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -109,7 +110,9 @@ export function DraftEditor({ activeDraft, allDrafts, topicId }: DraftEditorProp
     const titleChanged = title !== initialTitleRef.current
     const contentChanged = content !== initialContentRef.current
     setIsDirty(titleChanged || contentChanged)
-  }, [title, content])
+    // P0.5.3 Hardening — Report dirty state to shared store
+    setEditorDirty(topicId, titleChanged || contentChanged)
+  }, [title, content, topicId])
 
   // Handlers
   const handleTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,6 +145,8 @@ export function DraftEditor({ activeDraft, allDrafts, topicId }: DraftEditorProp
         initialTitleRef.current = title
         initialContentRef.current = content
         setIsDirty(false)
+        // P0.5.3 Hardening — Clear dirty state in shared store
+        setEditorDirty(topicId, false)
         // Broadcast to other tabs AFTER successful save
         broadcastActiveDraftChange(topicId, result.draft.id, sourceId)
         // Refresh to update props (new active draft)
@@ -175,10 +180,12 @@ export function DraftEditor({ activeDraft, allDrafts, topicId }: DraftEditorProp
     initialTitleRef.current = activeDraft.title ?? ''
     initialContentRef.current = activeDraft.content
     setIsDirty(false)
+    // P0.5.3 Hardening — Clear dirty state in shared store
+    setEditorDirty(topicId, false)
     setErrorMessage(null)
     setRemoteConflict({ detected: false, remoteDraftId: '' })
     router.refresh()
-  }, [router, activeDraft])
+  }, [router, activeDraft, topicId])
 
   // Compute parent version info (useMemo reads ref initial value; subsequent updates via useEffect re-render)
   const parentVersion = useMemo(
