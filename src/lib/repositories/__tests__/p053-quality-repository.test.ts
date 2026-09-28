@@ -457,7 +457,7 @@ describe('P0.5.3 — createHumanizedDraft', () => {
     const { topicRepository } = await import('@/lib/repositories/topic-repository')
 
     // Verify topicRepository has no 'previewHumanization' method
-    expect((topicRepository as any).previewHumanization).toBeUndefined()
+    expect((topicRepository as Record<string, unknown>).previewHumanization).toBeUndefined()
   })
 })
 

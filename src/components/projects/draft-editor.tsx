@@ -91,9 +91,9 @@ export function DraftEditor({ activeDraft, allDrafts, topicId }: DraftEditorProp
 
   // Sync editor when active draft changes from props (e.g., after router.refresh())
   // Only sync if NOT dirty to avoid overwriting user's current work
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => {
     if (!isDirty) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle(activeDraft.title ?? '')
       setContent(activeDraft.content)
       initialTitleRef.current = activeDraft.title ?? ''
