@@ -3,7 +3,7 @@
 import { isDatabaseConfigured } from '@/lib/utils/db-safe'
 import { revalidatePath } from 'next/cache'
 import { getDefaultUserId } from '@/lib/utils/default-user'
-import type { Draft, Topic } from '@/generated/prisma'
+import type { Draft, Topic, Evaluation, Humanization } from '@/generated/prisma'
 
 export async function getProjects() {
   if (!isDatabaseConfigured()) return []
@@ -234,6 +234,331 @@ export async function saveManualDraftEdit(
     }
 
     return { success: false, error: '保存失败，请稍后重试' }
+  }
+}
+
+// ─── P0.5.3 — Active Draft Quality & Optimization ──────
+
+/**
+ * P0.5.3 — Evaluate the active draft.
+ *
+ * Calls the evaluation skill and persists the result to the database,
+ * bound to the active draft's ID. Uses upsert so re-evaluations update
+ * the existing record instead of creating duplicates.
+ *
+ * @param params - Evaluation parameters
+ * @returns { success: boolean, evaluation?: Evaluation, error?: string }
+ */
+export async function evaluateActiveDraft(params: {
+  draftId: string
+  topicId: string
+  content: string
+  title?: string
+  strategy?: {
+    title: string
+    keyArguments: string[]
+    emotionalArc: { start: string; middle: string; end: string }
+    callToAction: string
+  }
+  selectedAngle?: {
+    title: string
+    targetEmotion: string
+    keyPoints: string[]
+  }
+  platform?: string
+}): Promise<{ success: boolean; evaluation?: Evaluation; error?: string }> {
+  if (!isDatabaseConfigured()) {
+    return { success: false, error: '数据库未配置' }
+  }
+
+  if (!params.draftId || !params.topicId) {
+    return { success: false, error: '参数不完整' }
+  }
+
+  try {
+    const { runEvaluation } = await import('@/skills/evaluation')
+    const { topicRepository } = await import('@/lib/repositories/topic-repository')
+
+    const result = await runEvaluation({
+      content: params.content,
+      title: params.title ?? '',
+      strategy: params.strategy,
+      selectedAngle: params.selectedAngle,
+      platform: params.platform,
+    })
+
+    const evaluation = await topicRepository.upsertDraftEvaluation({
+      draftId: params.draftId,
+      topicId: params.topicId,
+      overallScore: result.overallScore,
+      emotionalImpactScore: result.scores.emotionalImpact,
+      logicalClarityScore: result.scores.logicalClarity,
+      noveltyScore: result.scores.novelty,
+      readabilityScore: result.scores.readability,
+      utilityScore: result.scores.utility,
+      platformFitScore: result.scores.platformFit,
+      strengths: result.strengths,
+      issues: result.weaknesses,
+      suggestions: result.suggestions,
+      emotionalArcAnalysis: result.emotionalArcAnalysis,
+      conclusion: result.conclusion,
+    })
+
+    return { success: true, evaluation }
+  } catch (error) {
+    console.error('[Server Action] evaluateActiveDraft failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '评估失败，请稍后重试',
+    }
+  }
+}
+
+/**
+ * P0.5.3 — Refine the active draft using AI issue_fix.
+ *
+ * Calls the refine skill with the selected issues, then creates a new
+ * REFINE draft version (never overwrites the old version).
+ *
+ * @param params - Refine parameters
+ * @returns { success: boolean, draft?: Draft, topic?: Topic, error?: string }
+ */
+export async function refineActiveDraft(params: {
+  sourceDraftId: string
+  topicId: string
+  content: string
+  title?: string
+  hook?: string
+  wordCount?: number
+  outline?: unknown
+  topic?: string
+  selectedAngleTitle?: string
+  platform?: string
+  evaluationContext?: {
+    suggestions: Array<{
+      id?: string
+      section: string
+      issue: string
+      suggestion: string
+      priority: 'high' | 'medium' | 'low'
+    }>
+    weaknesses: string[]
+    scores?: {
+      emotionalImpact?: number
+      logicalClarity?: number
+      novelty?: number
+      readability?: number
+      utility?: number
+      platformFit?: number
+    }
+  }
+  changeReason?: string
+}): Promise<{ success: boolean; draft?: Draft; topic?: Topic; error?: string }> {
+  if (!isDatabaseConfigured()) {
+    return { success: false, error: '数据库未配置' }
+  }
+
+  if (!params.sourceDraftId || !params.topicId) {
+    return { success: false, error: '参数不完整' }
+  }
+
+  try {
+    const { runRefine } = await import('@/skills/refine')
+    const { topicRepository } = await import('@/lib/repositories/topic-repository')
+    const defaultUserId = getDefaultUserId()
+
+    // Step 1: Call refine skill with issue_fix mode
+    const result = await runRefine({
+      content: params.content,
+      title: params.title ?? '',
+      hook: params.hook ?? '',
+      wordCount: params.wordCount ?? params.content.length,
+      mode: 'issue_fix',
+      platform: params.platform,
+      topic: params.topic,
+      selectedAngleTitle: params.selectedAngleTitle,
+      evaluationContext: params.evaluationContext,
+    })
+
+    // Step 2: Create new REFINE draft version
+    const { draft, topic } = await topicRepository.createRefinedDraft({
+      sourceDraftId: params.sourceDraftId,
+      content: result.content,
+      title: result.title,
+      hook: result.hook,
+      outline: params.outline,
+      changeReason: params.changeReason,
+      userId: defaultUserId,
+    })
+
+    // Step 3: Revalidate
+    revalidatePath('/projects/(app)', 'layout')
+
+    return { success: true, draft, topic }
+  } catch (error) {
+    console.error('[Server Action] refineActiveDraft failed:', error)
+
+    if (error instanceof Error) {
+      switch (error.message) {
+        case 'SOURCE_DRAFT_NOT_FOUND':
+          return { success: false, error: '该版本不存在或已不可用' }
+        case 'TOPIC_NOT_FOUND':
+          return { success: false, error: '项目上下文不存在' }
+        case 'OWNERSHIP_DENIED':
+          return { success: false, error: '无权操作此版本' }
+        case 'DRAFT_VERSION_CONFLICT':
+          return { success: false, error: '版本创建冲突，请重试' }
+        case 'ACTIVE_DRAFT_CONFLICT':
+          return { success: false, error: '当前版本已在其他标签页更新，请刷新后重试' }
+        default:
+          return { success: false, error: '精修失败，请稍后重试' }
+      }
+    }
+
+    return { success: false, error: '精修失败，请稍后重试' }
+  }
+}
+
+/**
+ * P0.5.3 — Preview humanization for the active draft.
+ *
+ * Calls the humanization skill. Does NOT create any draft or persist any data.
+ * Returns the humanized preview for the user to review before deciding.
+ *
+ * @param params - Humanization parameters
+ * @returns { success: boolean, result?, error?: string }
+ */
+export async function previewHumanization(params: {
+  content: string
+  title?: string
+  platform?: string
+  tone?: string
+}): Promise<{
+  success: boolean
+  content?: string
+  title?: string
+  changes?: Array<{ original: string; revised: string; reason: string; type: string }>
+  issues?: Array<{ type: string; description: string; severity: 'high' | 'medium' | 'low' }>
+  aiStyleScore?: number
+  humanizedScore?: number
+  error?: string
+}> {
+  if (!params.content) {
+    return { success: false, error: '内容不能为空' }
+  }
+
+  try {
+    const { runHumanization } = await import('@/skills/humanization')
+
+    const result = await runHumanization({
+      content: params.content,
+      title: params.title,
+      platform: params.platform,
+      tone: params.tone,
+    })
+
+    return {
+      success: true,
+      content: result.content,
+      title: result.title,
+      changes: result.changes,
+      issues: result.issues,
+      aiStyleScore: result.aiStyleScore,
+      humanizedScore: result.humanizedScore,
+    }
+  } catch (error) {
+    console.error('[Server Action] previewHumanization failed:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '人性化预览失败，请稍后重试',
+    }
+  }
+}
+
+/**
+ * P0.5.3 — Adopt the humanized version.
+ *
+ * Creates a new HUMANIZATION draft from the humanized content, persists
+ * the Humanization record bound to the new draft, and switches the active draft.
+ *
+ * @param params - Adopt parameters
+ * @returns { success: boolean, draft?: Draft, topic?: Topic, humanization?: Humanization, error?: string }
+ */
+export async function adoptHumanizedDraft(params: {
+  sourceDraftId: string
+  topicId: string
+  content: string
+  title?: string
+  hook?: string
+  outline?: unknown
+  aiStyleScore?: number
+  humanizedScore?: number
+  changes?: unknown
+  issues?: unknown
+  changeReason?: string
+}): Promise<{
+  success: boolean
+  draft?: Draft
+  topic?: Topic
+  humanization?: Humanization
+  error?: string
+}> {
+  if (!isDatabaseConfigured()) {
+    return { success: false, error: '数据库未配置' }
+  }
+
+  if (!params.sourceDraftId || !params.topicId) {
+    return { success: false, error: '参数不完整' }
+  }
+
+  try {
+    const { topicRepository } = await import('@/lib/repositories/topic-repository')
+    const defaultUserId = getDefaultUserId()
+
+    const result = await topicRepository.createHumanizedDraft({
+      sourceDraftId: params.sourceDraftId,
+      content: params.content,
+      title: params.title,
+      hook: params.hook,
+      outline: params.outline,
+      aiStyleScore: params.aiStyleScore,
+      humanizedScore: params.humanizedScore,
+      changes: params.changes,
+      issues: params.issues,
+      changeReason: params.changeReason,
+      userId: defaultUserId,
+    })
+
+    // Revalidate project detail page
+    revalidatePath('/projects/(app)', 'layout')
+
+    return {
+      success: true,
+      draft: result.draft,
+      topic: result.topic,
+      humanization: result.humanization,
+    }
+  } catch (error) {
+    console.error('[Server Action] adoptHumanizedDraft failed:', error)
+
+    if (error instanceof Error) {
+      switch (error.message) {
+        case 'SOURCE_DRAFT_NOT_FOUND':
+          return { success: false, error: '该版本不存在或已不可用' }
+        case 'TOPIC_NOT_FOUND':
+          return { success: false, error: '项目上下文不存在' }
+        case 'OWNERSHIP_DENIED':
+          return { success: false, error: '无权操作此版本' }
+        case 'DRAFT_VERSION_CONFLICT':
+          return { success: false, error: '版本创建冲突，请重试' }
+        case 'ACTIVE_DRAFT_CONFLICT':
+          return { success: false, error: '当前版本已在其他标签页更新，请刷新后重试' }
+        default:
+          return { success: false, error: '采用失败，请稍后重试' }
+      }
+    }
+
+    return { success: false, error: '采用失败，请稍后重试' }
   }
 }
 
