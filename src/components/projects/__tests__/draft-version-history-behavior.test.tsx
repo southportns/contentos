@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react'
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -540,5 +540,35 @@ describe('P0.5.2 — DraftVersionHistory Enhancements: Real Behavior', () => {
     // Default selected version should be from activeDraftId (v2)
     // The detail view should show v2's content
     expect(screen.getAllByText('v2').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('Test D: when highest version != Active Draft, badges are independent', () => {
+    // Active draft is v3, but highest version is v5
+    const drafts = [
+      makeDraft(1, 'draft_v1'),
+      makeDraft(3, 'draft_v3'),
+      makeDraft(5, 'draft_v5'),
+    ]
+
+    render(
+      <DraftVersionHistory
+        drafts={drafts}
+        activeDraftId="draft_v3"
+        topicId="topic_1"
+      />
+    )
+
+    // "当前" badge appears exactly once — tied to activeDraftId (v3), NOT highest version
+    const currentBadges = screen.getAllByText('当前')
+    expect(currentBadges.length).toBe(1)
+
+    // "最新" badge is NOT visible initially because selectedVersion = active = v3,
+    // and "最新" only shows when selected version IS the highest version (v5)
+    expect(screen.queryByText('最新')).toBeNull()
+
+    // Verify there are 3 versions rendered (sorted: v5, v3, v1)
+    expect(screen.getAllByText('v5').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('v3').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('v1').length).toBeGreaterThanOrEqual(1)
   })
 })
