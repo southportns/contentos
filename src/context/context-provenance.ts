@@ -19,6 +19,23 @@
  */
 
 /**
+ * Scope classification for Context Objects.
+ *
+ * Determines the boundary within which a context can be used:
+ * - global: Can be cross-project (e.g., global knowledge base)
+ * - project: Must match projectId
+ * - topic: Must match topicId (and projectId if specified)
+ * - unknown: Default — excluded from cross-project use
+ *
+ * Scope is RUNTIME metadata — NOT a database field.
+ */
+export type ContextScope =
+  | 'global'
+  | 'project'
+  | 'topic'
+  | 'unknown';
+
+/**
  * Describes the origin and ownership of a Context Object.
  *
  * This is a contract, not a database schema.
@@ -54,6 +71,20 @@ export interface ContextProvenance {
    * Maps to Topic.id. Most context is topic-scoped.
    */
   topicId?: string | null;
+
+  /**
+   * Scope boundary for this context.
+   * Determines cross-project/cross-topic usage rules.
+   *
+   * - global: Can be used across projects (e.g., global knowledge)
+   * - project: Scoped to projectId — only matching project can use
+   * - topic: Scoped to topicId (and projectId) — only matching topic can use
+   * - unknown: Undetermined — excluded from cross-project use by default
+   *
+   * Default behavior: If scope is unknown and projectId is requested,
+   * the context is excluded unless allowUnknownScope is true.
+   */
+  scope?: ContextScope;
 
   /**
    * IDs of Context Objects this was derived from.

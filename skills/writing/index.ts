@@ -4,6 +4,7 @@ import { writingInputSchema, writingOutputSchema } from './schema'
 import { WRITING_SYSTEM_PROMPT, WRITING_PROMPT } from './prompts'
 import type { WritingInput, WritingOutput } from './schema'
 import type { ExpressionPlan } from '@/lib/expression/types'
+import { runWritingShadow } from '@/lib/services/context-assembly-shadow'
 
 /**
  * LLM 常见的前缀确认语句，需要从初稿内容中移除
@@ -71,6 +72,38 @@ export async function runWriting(
 ): Promise<WritingOutput> {
   const validated = writingInputSchema.parse(input)
   const model = getModel()
+
+  // ── P0.6.2-R1: Context Assembly Shadow (non-breaking) ──
+  // Runs the Assembly Engine in parallel as a shadow.
+  // Result is for observability only — does NOT modify the Writing path.
+  // All errors are caught to ensure Writing never fails due to shadow.
+  try {
+    const shadowMetadata = runWritingShadow({
+      topic: validated.topic,
+      strategy: {
+        title: validated.strategy.title,
+        hook: validated.strategy.hook,
+        callToAction: validated.strategy.callToAction,
+        tone: validated.strategy.tone,
+      },
+      selectedAngle: {
+        title: validated.selectedAngle.title,
+        angle: validated.selectedAngle.angle,
+        targetEmotion: validated.selectedAngle.targetEmotion,
+        keyPoints: validated.selectedAngle.keyPoints,
+      },
+      platform: validated.platform,
+      persona: validated.persona,
+      audience: validated.audience,
+      knowledgeContext: validated.knowledgeContext ?? null,
+    });
+    // Log shadow metadata for observability (no-op in production unless enabled)
+    if (shadowMetadata.assemblyEnabled) {
+      console.debug('[ContextAssembly Shadow]', JSON.stringify(shadowMetadata));
+    }
+  } catch {
+    // Shadow failure must NEVER block Writing — silently continue
+  }
 
   const { text } = await generateText({
     model,

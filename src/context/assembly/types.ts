@@ -159,13 +159,20 @@ export interface ExcludedContext {
   /** ID of the excluded context */
   contextId: string;
 
-  /** Why it was excluded */
+  /** Why it was excluded.
+   *
+   * P0.6.2-R1 additions:
+   * - scope_mismatch: Context scope does not match assembly request scope
+   * - unknown_scope: Context has unknown scope and assembly has project boundary
+   */
   reason:
     | 'duplicate'
     | 'budget'
     | 'excluded_kind'
     | 'low_relevance'
-    | 'invalid';
+    | 'invalid'
+    | 'scope_mismatch'
+    | 'unknown_scope';
 
   /** Optional detail */
   detail?: string;
