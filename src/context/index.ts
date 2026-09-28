@@ -7,7 +7,7 @@
  * all context in the system as ContextObjects.
  *
  * Architecture:
- *   Database Entity → Adapter → ContextObject → Collection → (future) Assembly → Prompt
+ *   Database Entity → Adapter → ContextObject → Collection → Assembly → Prompt
  *
  * Usage:
  *   import { createIdentityContext, topicAdapter, isContextObject } from '@/context';
@@ -59,6 +59,7 @@ export {
   createDecisionContext,
   createOutcomeContext,
   createMemoryContext,
+  createKnowledgeContext,
 } from './context-factory';
 
 // Adapters
@@ -108,3 +109,63 @@ export {
   hasSourceType,
   isAtOrBeyondLifecycleStage,
 } from './context-utils';
+
+// Assembly Engine (P0.6.2)
+
+export type {
+  AssemblyPurpose,
+  ContextBudget,
+  ContextAssemblyRequest,
+  ScoredContext,
+  ExcludedContext,
+  AssemblyWarning,
+  ContextAssemblyResult,
+  ContextPackage,
+  RetrievalRequest,
+  ContextRetriever,
+} from './assembly';
+
+export { ASSEMBLY_PURPOSES } from './assembly';
+
+export { assembleContexts, quickAssemble } from './assembly';
+export { buildContextPackage } from './assembly';
+
+export {
+  selectContexts,
+  PURPOSE_RELEVANT_KINDS,
+} from './assembly';
+
+export {
+  rankContexts,
+  getBasePriority,
+  getPurposeAdjustment,
+  getConfidenceAdjustment,
+  getRelevanceAdjustment,
+  getRecencyAdjustment,
+  BASE_PRIORITY,
+} from './assembly';
+
+export {
+  deduplicateContexts,
+  getContextFingerprint,
+  getSourceTypeFingerprint,
+} from './assembly';
+
+export {
+  estimateContextTokens,
+  estimateCollectionTokens,
+  applyBudget,
+  createDefaultBudget,
+  CHARS_PER_TOKEN,
+} from './assembly';
+
+export { serializeContextPackage } from './assembly';
+
+export {
+  getPackageContextByKind,
+  getPackageArrayByKind,
+  getPackageContextCount,
+  isPackageEmpty,
+} from './assembly';
+
+export { KnowledgeRetriever, knowledgeContextToObject } from './assembly';
