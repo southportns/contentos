@@ -7,6 +7,7 @@ import { isDatabaseConfigured } from '@/lib/utils/db-safe'
 import { ProjectDetailHeader } from '@/components/projects/project-detail-header'
 import { DraftVersionHistory } from '@/components/projects/draft-version-history'
 import { DraftEditor } from '@/components/projects/draft-editor'
+import { ProjectDetailQualityWorkbench } from '@/components/projects/project-detail-quality-workbench'
 import type { Topic, Draft, Evaluation, Humanization, StrategyEvaluation, Angle, ContentStrategy } from '@/generated/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -98,6 +99,21 @@ export default async function ProjectDetailPage({ params }: ProjectDetailPagePro
             activeDraft={activeDraft}
             allDrafts={drafts}
             topicId={topic.id}
+          />
+        )
+      })()}
+
+      {/* P0.5.3 — Quality & Optimization Workbench (only show if there is an active draft) */}
+      {topic && (() => {
+        const activeDraft = topic.activeDraft
+        if (!activeDraft) return null
+        return (
+          <ProjectDetailQualityWorkbench
+            activeDraft={activeDraft}
+            allDrafts={drafts}
+            topicId={topic.id}
+            topicTitle={topic.topic}
+            platform={topic.platform ?? undefined}
           />
         )
       })()}
