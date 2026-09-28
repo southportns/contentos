@@ -222,7 +222,6 @@ export function ProjectDetailQualityWorkbench({
     } finally {
       setIsRefining(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDraft, topicId, topicTitle, selectedAngleTitle, platform, evaluation, sourceId, router])
 
   return (
