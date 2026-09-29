@@ -43,7 +43,7 @@ function setupTestDatabase(): void {
 // ─── Import after DATABASE_URL is set ──────────────────────────────────────
 
 import { PrismaMemoryStore } from '../prisma-memory-store';
-import { MemoryConcurrencyError, MemoryNotFoundError } from '../memory-persistence-types';
+import { MemoryConcurrencyError, MemoryNotFoundError, MemoryAuthorizationError } from '../memory-persistence-types';
 import type { MemoryRecord } from '../../memory-record';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -244,6 +244,7 @@ describe('update', () => {
 
     const updated = await store.update(
       { ...record, type: 'updated_type', confidence: 0.95 },
+      'user_A',
       1,
     );
 
@@ -257,17 +258,17 @@ describe('update', () => {
     await store.create(record);
 
     // First update succeeds (version 1 → 2)
-    await store.update({ ...record, type: 'first_update' }, 1);
+    await store.update({ ...record, type: 'first_update' }, 'user_A', 1);
 
     // Second update with same expectedVersion should fail
     await expect(
-      store.update({ ...record, type: 'second_update' }, 1),
+      store.update({ ...record, type: 'second_update' }, 'user_A', 1),
     ).rejects.toThrow(MemoryConcurrencyError);
   });
 
   it('should reject update for non-existent record', async () => {
     const record = createTestRecord({ id: 'mem_nonexistent', version: 1 });
-    await expect(store.update(record, 1)).rejects.toThrow(MemoryNotFoundError);
+    await expect(store.update(record, 'user_A', 1)).rejects.toThrow(MemoryNotFoundError);
   });
 
   it('should preserve ownerId during update', async () => {
@@ -280,11 +281,156 @@ describe('update', () => {
 
     const updated = await store.update(
       { ...record, ownerId: 'user_A', source: 'updated_source' },
+      'user_A',
       1,
     );
 
     expect(updated.ownerId).toBe('user_A');
     expect(updated.source).toBe('updated_source');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.6.3.2.1-R1 — Update Owner Authorization (Security Hardening)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('update owner authorization (P0.6.3.2.1-R1)', () => {
+  it('Test 1: User A cannot update User B memory', async () => {
+    const record = createTestRecord({
+      id: 'mem_auth_1',
+      ownerId: 'user_B',
+      version: 1,
+    });
+    await store.create(record);
+
+    // User A authenticated, but memory belongs to user B
+    await expect(
+      store.update(record, 'user_A', 1),
+    ).rejects.toThrow(MemoryAuthorizationError);
+
+    // Verify record was NOT modified
+    const unchanged = await store.getById('mem_auth_1', 'user_B');
+    expect(unchanged).not.toBeNull();
+    expect(unchanged!.version).toBe(1);
+  });
+
+  it('Test 2: User B can update User B memory', async () => {
+    const record = createTestRecord({
+      id: 'mem_auth_2',
+      ownerId: 'user_B',
+      version: 1,
+    });
+    await store.create(record);
+
+    // User B authenticated, memory belongs to user B — should succeed
+    const updated = await store.update(
+      { ...record, source: 'legitimate_update' },
+      'user_B',
+      1,
+    );
+
+    expect(updated.source).toBe('legitimate_update');
+    expect(updated.version).toBe(2);
+    expect(updated.ownerId).toBe('user_B');
+  });
+
+  it('Test 3: Changing record.ownerId cannot bypass authorization', async () => {
+    // Create memory owned by user_B
+    const storedRecord = createTestRecord({
+      id: 'mem_auth_3',
+      ownerId: 'user_B',
+      version: 1,
+    });
+    await store.create(storedRecord);
+
+    // Attacker (user_A) tampers record.ownerId to claim ownership
+    const tamperedRecord = {
+      ...storedRecord,
+      ownerId: 'user_A', // Spoof owner
+    };
+
+    await expect(
+      store.update(tamperedRecord, 'user_B', 1),
+    ).rejects.toThrow(MemoryAuthorizationError);
+
+    // Verify original owner is preserved in DB
+    const original = await store.getById('mem_auth_3', 'user_B');
+    expect(original).not.toBeNull();
+    expect(original!.ownerId).toBe('user_B');
+    expect(original!.version).toBe(1);
+  });
+
+  it('Test 4: Authenticated owner is the DB authorization boundary', async () => {
+    const record = createTestRecord({
+      id: 'mem_auth_4',
+      ownerId: 'user_A',
+      version: 1,
+    });
+    await store.create(record);
+
+    // Even if record.ownerId and authenticated owner match,
+    // tampering with the authenticated ownerId parameter should fail
+    await expect(
+      store.update(record, 'user_B', 1), // authenticated = user_B, resource = user_A
+    ).rejects.toThrow(MemoryAuthorizationError);
+
+    // Verify record unchanged
+    const unchanged = await store.getById('mem_auth_4', 'user_A');
+    expect(unchanged).not.toBeNull();
+    expect(unchanged!.version).toBe(1);
+  });
+
+  it('Test 5: Owner cannot be changed by update', async () => {
+    const record = createTestRecord({
+      id: 'mem_auth_5',
+      ownerId: 'user_A',
+      version: 1,
+    });
+    await store.create(record);
+
+    // Successful update should NOT change ownerId
+    const updated = await store.update(
+      { ...record, source: 'changed_source' },
+      'user_A',
+      1,
+    );
+
+    expect(updated.ownerId).toBe('user_A');
+    expect(updated.source).toBe('changed_source');
+
+    // Verify in DB that ownerId is unchanged
+    const retrieved = await store.getById('mem_auth_5', 'user_A');
+    expect(retrieved).not.toBeNull();
+    expect(retrieved!.ownerId).toBe('user_A');
+
+    // Verify user_B cannot read it (owner didn't change)
+    const otherUserRead = await store.getById('mem_auth_5', 'user_B');
+    expect(otherUserRead).toBeNull();
+  });
+
+  it('Test 6: Cross-user stale version cannot bypass owner isolation', async () => {
+    const record = createTestRecord({
+      id: 'mem_auth_6',
+      ownerId: 'user_B',
+      version: 1,
+    });
+    await store.create(record);
+
+    // user_A authenticated, memory belongs to user_B
+    // Authorization check fires BEFORE version check
+    await expect(
+      store.update(
+        record, // unchanged — ownerId = 'user_B'
+        'user_A', // authenticated caller
+        999, // wrong version (also wrong owner)
+      ),
+    ).rejects.toThrow(MemoryAuthorizationError);
+
+    // Verify record completely unchanged
+    const unchanged = await store.getById('mem_auth_6', 'user_B');
+    expect(unchanged).not.toBeNull();
+    expect(unchanged!.version).toBe(1);
+    expect(unchanged!.ownerId).toBe('user_B');
   });
 });
 
@@ -403,10 +549,16 @@ describe('cross-user isolation', () => {
     });
     await store.create(record);
 
-    // User A tries to update with wrong ownerId
+    // User A authenticated, but memory belongs to user B
+    // record.ownerId stays 'user_B' (unchanged), ownerId param is 'user_A'
     await expect(
-      store.update({ ...record, ownerId: 'user_A' }, 1),
-    ).rejects.toThrow();
+      store.update(record, 'user_A', 1),
+    ).rejects.toThrow(MemoryAuthorizationError);
+
+    // Verify record was NOT modified
+    const unchanged = await store.getById('mem_iso_update', 'user_B');
+    expect(unchanged).not.toBeNull();
+    expect(unchanged!.version).toBe(1);
   });
 });
 
@@ -589,10 +741,10 @@ describe('version and optimistic concurrency', () => {
     const record = createTestRecord({ id: 'mem_ver_2', version: 1 });
     await store.create(record);
 
-    const v2 = await store.update(record, 1);
+    const v2 = await store.update(record, 'user_A', 1);
     expect(v2.version).toBe(2);
 
-    const v3 = await store.update(v2, 2);
+    const v3 = await store.update(v2, 'user_A', 2);
     expect(v3.version).toBe(3);
   });
 
@@ -601,8 +753,8 @@ describe('version and optimistic concurrency', () => {
     await store.create(record);
 
     // Both try to update from version 1
-    const p1 = store.update({ ...record, source: 'update_1' }, 1);
-    const p2 = store.update({ ...record, source: 'update_2' }, 1);
+    const p1 = store.update({ ...record, source: 'update_1' }, 'user_A', 1);
+    const p2 = store.update({ ...record, source: 'update_2' }, 'user_A', 1);
 
     const results = await Promise.allSettled([p1, p2]);
 
