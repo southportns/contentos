@@ -97,3 +97,19 @@ export { InMemoryRetriever } from './memory-retriever';
 // ─── Memory → Context Bridge ────────────────────────────────────────────────
 
 export { memoryRecordToContext, memoryRecordsToContexts } from './memory-utils';
+
+// ─── Persistence Layer (P0.6.3.2.1) ────────────────────────────────────────
+
+export type { MemoryStore } from './persistence/memory-store';
+export { PrismaMemoryStore } from './persistence/prisma-memory-store';
+export {
+  memoryRecordToPersistence,
+  persistenceToMemoryRecord,
+} from './persistence/memory-persistence-mapper';
+export { validateMemoryRecord } from './persistence/memory-persistence-validation';
+export {
+  MemoryConcurrencyError,
+  MemoryNotFoundError,
+  MemoryValidationError,
+} from './persistence/memory-persistence-types';
+export type { MemoryRecordRow } from './persistence/memory-persistence-types';
