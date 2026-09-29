@@ -18,6 +18,7 @@
 import type { MemoryRecord } from '../memory-record';
 import type { MemoryAdapter, MemoryAdapterOptions } from '../memory-adapter';
 import { createDynamicMemory } from '../memory-factory';
+import { resolveMemoryScope } from '../memory-scope';
 
 /**
  * Minimal input type for the adapter.
@@ -25,7 +26,8 @@ import { createDynamicMemory } from '../memory-factory';
  */
 export interface DraftInput {
   id: string;
-  topicId: string;
+  topicId?: string | null;
+  projectId?: string | null;
   version: number;
   parentDraftId?: string | null;
   changeType: string;
@@ -82,14 +84,20 @@ export const draftAdapter: MemoryAdapter<DraftInput, DraftPayload> = {
       parentDraftId: entity.parentDraftId,
     };
 
+    const resolvedScope = resolveMemoryScope({
+      topicId: options?.topicId ?? entity.topicId ?? null,
+      projectId: options?.projectId ?? entity.projectId ?? null,
+      scope: options?.scope,
+    });
+
     return createDynamicMemory({
       id: `mem_draft_${entity.id}`,
       type: 'draft',
       payload,
-      scope: options?.scope ?? 'topic',
+      scope: resolvedScope,
       ownerId: options?.ownerId ?? null,
-      projectId: options?.projectId ?? null,
-      topicId: options?.topicId ?? entity.topicId,
+      projectId: options?.projectId ?? entity.projectId ?? null,
+      topicId: options?.topicId ?? entity.topicId ?? null,
       source: `draft:${entity.id}`,
       sourceType: 'draft',
       confidence: options?.confidence ?? 0.7,
