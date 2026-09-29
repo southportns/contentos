@@ -554,6 +554,50 @@ model UserContentArchive {
   @@index([platform])
 }
 
+// ─── Memory Record ────────────────────────────────────
+// P0.6.3.2.1 — Persistent Memory Store
+// 领域模型: src/memory/memory-record.ts (MemoryRecord)
+// 注意: ownerId 必须 NOT NULL — 持久化 Memory 必须属于明确用户
+
+model MemoryRecord {
+  id             String   @id
+  kind           String
+  type           String
+  payload        Json
+  scope          String
+
+  ownerId        String
+  projectId      String?
+  topicId        String?
+
+  source         String
+  sourceType     String
+  derivedFrom    Json?
+
+  confidence     Float
+  importance     Float
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lastAccessedAt DateTime?
+  accessCount    Int      @default(0)
+
+  expiresAt      DateTime?
+  version        Int      @default(1)
+  status         String   @default("active")
+
+  @@index([ownerId])
+  @@index([projectId])
+  @@index([topicId])
+  @@index([scope])
+  @@index([status])
+  @@index([kind])
+  @@index([ownerId, scope])
+  @@index([ownerId, projectId])
+  @@index([ownerId, topicId])
+}
+
 // ─── User Writing Profile ─────────────────────────────
 // 蒸馏后的用户写作画像，供 Writing Skill 参照
 
