@@ -13,6 +13,7 @@ export {
   MemoryConcurrencyError,
   MemoryNotFoundError,
   MemoryValidationError,
+  MemoryAuthorizationError,
 } from './memory-persistence-types';
 
 // Mapper

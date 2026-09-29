@@ -111,5 +111,6 @@ export {
   MemoryConcurrencyError,
   MemoryNotFoundError,
   MemoryValidationError,
+  MemoryAuthorizationError,
 } from './persistence/memory-persistence-types';
 export type { MemoryRecordRow } from './persistence/memory-persistence-types';
