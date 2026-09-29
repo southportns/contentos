@@ -61,6 +61,13 @@ export const writingInputSchema = z.object({
    * 不提供时，行为与之前完全一致。
    */
   knowledgeContext: z.custom<KnowledgeContext>().optional(),
+  /**
+   * P0.6.2-R1.2 — Project/topic scope for Context Assembly Shadow.
+   * Optional: when provided, the shadow assembly uses these for
+   * scope-aware filtering (topic boundary, global knowledge pass-through).
+   */
+  projectId: z.string().optional(),
+  topicId: z.string().optional(),
 })
 
 export const writingOutputSchema = z.object({

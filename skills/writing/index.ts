@@ -78,6 +78,7 @@ export async function runWriting(
   // Result is for observability only — does NOT modify the Writing path.
   // All errors are caught to ensure Writing never fails due to shadow.
   try {
+    // P0.6.2-R1.2 — Propagate projectId/topicId for scope-aware shadow assembly
     const shadowMetadata = runWritingShadow({
       topic: validated.topic,
       strategy: {
@@ -96,6 +97,8 @@ export async function runWriting(
       persona: validated.persona,
       audience: validated.audience,
       knowledgeContext: validated.knowledgeContext ?? null,
+      projectId: validated.projectId,
+      topicId: validated.topicId,
     });
     // Log shadow metadata for observability (no-op in production unless enabled)
     if (shadowMetadata.assemblyEnabled) {
