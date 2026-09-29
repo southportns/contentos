@@ -147,3 +147,19 @@ export class MemoryValidationError extends Error {
     this.name = 'MemoryValidationError';
   }
 }
+
+/**
+ * Error thrown when an authenticated caller attempts to modify a memory
+ * they do not own.
+ *
+ * This error is thrown BEFORE any database write occurs, ensuring that
+ * authorization failures never visibly touch persisted data.
+ */
+export class MemoryAuthorizationError extends Error {
+  constructor(
+    public readonly id: string,
+  ) {
+    super(`Memory authorization denied: id=${id}, caller is not the owner`);
+    this.name = 'MemoryAuthorizationError';
+  }
+}

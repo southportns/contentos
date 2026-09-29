@@ -55,19 +55,29 @@ export interface MemoryStore {
   getById(id: string, ownerId: string): Promise<MemoryRecord | null>;
 
   /**
-   * Update an existing memory record with optimistic concurrency control.
+   * Update an existing memory record with optimistic concurrency control
+   * and authenticated owner authorization.
    *
-   * The update only succeeds if the version in the database matches
-   * expectedVersion. On success, the version is incremented by 1.
+   * Security model:
+   * - record.ownerId = resource owner (from domain model)
+   * - authenticatedOwnerId = authenticated caller (authorization boundary)
    *
-   * @param record - The updated MemoryRecord
+   * Flow:
+   * 1. Verify record.ownerId === authenticatedOwnerId
+   * 2. UPDATE WHERE: id + ownerId (= authenticatedOwnerId) + version
+   * 3. On failure: query scoped to authenticated owner to avoid leaking existence
+   *
+   * @param record - The updated MemoryRecord (record.ownerId = resource owner)
+   * @param authenticatedOwnerId - Authenticated caller's user ID (authorization boundary)
    * @param expectedVersion - The version expected in the database
    * @return The updated MemoryRecord (with incremented version)
+   * @throws MemoryAuthorizationError if record.ownerId !== authenticatedOwnerId
    * @throws MemoryConcurrencyError if version mismatch
-   * @throws MemoryNotFoundError if record not found
+   * @throws MemoryNotFoundError if record not found for this owner
    */
   update(
     record: MemoryRecord,
+    authenticatedOwnerId: string,
     expectedVersion: number,
   ): Promise<MemoryRecord>;
 

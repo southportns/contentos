@@ -21,7 +21,7 @@
 
 import type { MemoryStore } from './memory-store';
 import type { MemoryRecord } from '../memory-record';
-import { MemoryConcurrencyError, MemoryNotFoundError } from './memory-persistence-types';
+import { MemoryConcurrencyError, MemoryNotFoundError, MemoryAuthorizationError } from './memory-persistence-types';
 import { memoryRecordToPersistence, persistenceToMemoryRecord } from './memory-persistence-mapper';
 import { validateMemoryRecord } from './memory-persistence-validation';
 import { prisma } from '@/lib/prisma';
@@ -116,34 +116,59 @@ export class PrismaMemoryStore implements MemoryStore {
   }
 
   /**
-   * Update an existing memory record with optimistic concurrency control.
+   * Update an existing memory record with optimistic concurrency control
+   * and authenticated owner authorization.
    *
-   * The update WHERE clause includes id + ownerId + version.
-   * If no record matches (version mismatch or wrong owner), throws.
+   * Security model:
+   * - record.ownerId = resource owner (from domain model)
+   * - ownerId = authenticated caller (authorization boundary)
    *
-   * On success, version is incremented by 1 in the database.
+   * Flow:
+   * 1. Validate record data
+   * 2. Validate authenticated ownerId (non-empty)
+   * 3. Verify record.ownerId === ownerId (authorization check)
+   * 4. UPDATE WHERE: id + ownerId + version
+   * 5. On failure: query scoped to authenticated owner to avoid leaking existence
    *
-   * @param record - Updated MemoryRecord
+   * IMPORTANT: The UPDATE WHERE uses the authenticated ownerId, NOT record.ownerId.
+   * The data clause does NOT include ownerId (owner cannot be changed via update).
+   *
+   * @param record - Updated MemoryRecord (record.ownerId = resource owner)
+   * @param ownerId - Authenticated caller's user ID (authorization boundary)
    * @param expectedVersion - Expected current version in DB
    * @return Updated MemoryRecord (version incremented)
    */
   async update(
     record: MemoryRecord,
+    ownerId: string,
     expectedVersion: number,
   ): Promise<MemoryRecord> {
-    // Validate before write
+    // Step 1: Validate record data
     validateMemoryRecord(record);
 
-    // New version = expectedVersion + 1
+    // Step 2: Validate authenticated ownerId
+    if (!ownerId || typeof ownerId !== 'string') {
+      throw new MemoryAuthorizationError(record.id);
+    }
+
+    // Step 3: Authorization check — resource owner must match authenticated caller
+    if (record.ownerId !== ownerId) {
+      throw new MemoryAuthorizationError(record.id);
+    }
+
+    // Step 4: Optimistic concurrency update
     const newVersion = expectedVersion + 1;
 
     try {
+      // CRITICAL: WHERE uses authenticated ownerId, NOT record.ownerId
+      // This prevents a tampered record.ownerId from bypassing authorization
       const updated = await prisma.memoryRecord.updateMany({
         where: {
           id: record.id,
-          ownerId: record.ownerId ?? '',
+          ownerId: ownerId, // <-- authenticated caller IS the DB authorization
           version: expectedVersion,
         },
+        // IMPORTANT: data does NOT include ownerId — owner cannot be changed
         data: {
           kind: record.kind,
           type: record.type,
@@ -167,25 +192,27 @@ export class PrismaMemoryStore implements MemoryStore {
         },
       });
 
-      // If no rows were updated, either:
-      // 1. Record doesn't exist
-      // 2. Owner doesn't match
-      // 3. Version doesn't match (concurrency conflict)
+      // Step 5: Handle update failure
       if (updated.count === 0) {
-        // Determine the specific cause
-        const existing = await prisma.memoryRecord.findFirst({
-          where: { id: record.id },
+        // Query scoped to the AUTHENTICATED owner to avoid leaking
+        // whether the record exists under a different owner
+        const existingForCaller = await prisma.memoryRecord.findFirst({
+          where: {
+            id: record.id,
+            ownerId: ownerId, // scoped to authenticated caller
+          },
         });
 
-        if (!existing) {
+        if (!existingForCaller) {
+          // Record doesn't exist for this authenticated owner
           throw new MemoryNotFoundError(record.id);
         }
 
-        // Record exists but version mismatch or owner mismatch
+        // Record exists for this owner but version mismatch
         throw new MemoryConcurrencyError(
           record.id,
           expectedVersion,
-          existing.version,
+          existingForCaller.version,
         );
       }
 
@@ -201,7 +228,11 @@ export class PrismaMemoryStore implements MemoryStore {
       return persistenceToMemoryRecord(refreshed);
     } catch (error: unknown) {
       // Re-throw our own errors
-      if (error instanceof MemoryConcurrencyError || error instanceof MemoryNotFoundError) {
+      if (
+        error instanceof MemoryAuthorizationError ||
+        error instanceof MemoryConcurrencyError ||
+        error instanceof MemoryNotFoundError
+      ) {
         throw error;
       }
       throw error;
