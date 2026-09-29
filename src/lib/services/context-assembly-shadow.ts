@@ -182,7 +182,10 @@ export function buildShadowContexts(input: ShadowInput): ContextObject[] {
         source: 'shadow:writing_knowledge',
         sourceType: 'knowledge',
         projectId: null,
-        topicId: input.topicId ?? null,
+        // Knowledge contexts are intentionally global — they are not topic-scoped.
+        // Even when a real topicId exists, we keep it null here so that
+        // resolveContextScope() correctly infers 'global' scope.
+        topicId: null,
       },
       lifecycleStage: 'retrieved',
     });

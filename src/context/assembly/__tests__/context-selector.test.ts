@@ -204,6 +204,142 @@ describe('ContextSelector', () => {
   });
 
   // ═══════════════════════════════════════════════════════════════════════════════
+  // P0.6.2-R1.1: Scope Inference Hardening
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  describe('P0.6.2-R1.1 Scope Inference Hardening', () => {
+    // 5.1 Implicit Topic
+    it('should infer topic scope when topicId exists but scope is undefined (topicId=T1, projectId=P1)', () => {
+      const ctx = makeContext({
+        provenance: { source: 'test', topicId: 'T1', projectId: 'P1' },
+      });
+      expect(resolveContextScope(ctx)).toBe('topic');
+    });
+
+    // 5.2 Implicit Project
+    it('should infer project scope when topicId is null and projectId exists (topicId=null, projectId=P1)', () => {
+      const ctx = makeContext({
+        provenance: { source: 'test', topicId: null, projectId: 'P1' },
+      });
+      expect(resolveContextScope(ctx)).toBe('project');
+    });
+
+    it('should infer project scope when topicId is absent and projectId exists', () => {
+      const ctx = makeContext({
+        provenance: { source: 'test', projectId: 'P1' },
+      });
+      expect(resolveContextScope(ctx)).toBe('project');
+    });
+
+    // 5.3 Implicit Global
+    it('should infer global scope when topicId is null and projectId is null', () => {
+      const ctx = makeContext({
+        provenance: { source: 'test', topicId: null, projectId: null },
+      });
+      expect(resolveContextScope(ctx)).toBe('global');
+    });
+
+    it('should infer global scope when both topicId and projectId are absent', () => {
+      const ctx = makeContext({
+        provenance: { source: 'test' },
+      });
+      expect(resolveContextScope(ctx)).toBe('global');
+    });
+
+    // 5.4 Explicit Override
+    it('should keep explicit global scope even when topicId and projectId exist', () => {
+      const ctx = makeContext({
+        provenance: { source: 'test', topicId: 'T1', projectId: 'P1', scope: 'global' },
+      });
+      expect(resolveContextScope(ctx)).toBe('global');
+    });
+
+    it('should keep explicit project scope even when topicId exists', () => {
+      const ctx = makeContext({
+        provenance: { source: 'test', topicId: 'T1', projectId: 'P1', scope: 'project' },
+      });
+      expect(resolveContextScope(ctx)).toBe('project');
+    });
+
+    it('should keep explicit topic scope when set explicitly', () => {
+      const ctx = makeContext({
+        provenance: { source: 'test', topicId: 'T1', projectId: 'P1', scope: 'topic' },
+      });
+      expect(resolveContextScope(ctx)).toBe('topic');
+    });
+
+    // 5.5 Actual Topic Boundary
+    it('should exclude cross-topic contexts with scope_mismatch reason (Topic T2 context in Topic T1 assembly)', () => {
+      // Project P1 → Topic T1 (Context A) + Topic T2 (Context B)
+      const contextA = makeContext({
+        id: 'ctx_topic_A',
+        provenance: { source: 'test', topicId: 'T1', projectId: 'P1' },
+      });
+      const contextB = makeContext({
+        id: 'ctx_topic_B',
+        provenance: { source: 'test', topicId: 'T2', projectId: 'P1' },
+      });
+
+      const result = selectContexts(makeRequest({
+        contexts: [contextA, contextB],
+        projectId: 'P1',
+        topicId: 'T1',
+      }));
+
+      // Context A (Topic T1) → included
+      expect(result.selected).toHaveLength(1);
+      expect(result.selected[0].id).toBe('ctx_topic_A');
+
+      // Context B (Topic T2) → excluded with scope_mismatch
+      expect(result.excluded).toHaveLength(1);
+      expect(result.excluded[0].contextId).toBe('ctx_topic_B');
+      expect(result.excluded[0].reason).toBe('scope_mismatch');
+    });
+
+    it('should include global knowledge contexts in topic-scoped assembly', () => {
+      const contextA = makeContext({
+        id: 'ctx_topic_A',
+        provenance: { source: 'test', topicId: 'T1', projectId: 'P1' },
+      });
+      const globalKnowledge = makeContext({
+        id: 'ctx_global_knowledge',
+        provenance: { source: 'test', topicId: null, projectId: null },
+      });
+
+      const result = selectContexts(makeRequest({
+        contexts: [contextA, globalKnowledge],
+        projectId: 'P1',
+        topicId: 'T1',
+      }));
+
+      // Both should be included: topic context + global knowledge
+      expect(result.selected).toHaveLength(2);
+    });
+
+    it('should exclude project-scoped contexts from different project even with matching topicId', () => {
+      const contextA = makeContext({
+        id: 'ctx_topic_A',
+        provenance: { source: 'test', topicId: 'T1', projectId: 'P1' },
+      });
+      const foreignProjectContext = makeContext({
+        id: 'ctx_foreign_project',
+        provenance: { source: 'test', projectId: 'P2' }, // inferred as project scope
+      });
+
+      const result = selectContexts(makeRequest({
+        contexts: [contextA, foreignProjectContext],
+        projectId: 'P1',
+        topicId: 'T1',
+      }));
+
+      expect(result.selected).toHaveLength(1);
+      expect(result.excluded).toHaveLength(1);
+      expect(result.excluded[0].contextId).toBe('ctx_foreign_project');
+      expect(result.excluded[0].reason).toBe('scope_mismatch');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════════
   // P0.6.2-R1: Scope Compatibility
   // ═══════════════════════════════════════════════════════════════════════════════
 

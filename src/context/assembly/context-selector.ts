@@ -53,26 +53,37 @@ export interface SelectionResult {
 /**
  * Resolve the effective scope of a context object.
  *
- * Resolution rules:
+ * Resolution rules (P0.6.2-R1.1 — Topic scope inference hardening):
  * 1. If scope is explicitly set in provenance → use it
- * 2. If scope is not set but projectId exists → infer 'project'
- * 3. If scope is not set and no projectId → infer 'global'
+ * 2. If scope is not set but topicId exists → infer 'topic'
+ * 3. If scope is not set, no topicId, but projectId exists → infer 'project'
+ * 4. If scope is not set and no topicId/projectId → infer 'global'
+ *
+ * Rationale: Entities that carry topicId (Intent, Strategy, Draft, Evaluation)
+ * should default to 'topic' scope rather than 'project'. This prevents
+ * cross-topic leakage: a Context from Topic T2 inside Project P1 would be
+ * excluded when assembling for Topic T1 of the same Project.
  *
  * @param ctx - The context object
  * @return Resolved scope
  */
 export function resolveContextScope(ctx: ContextObject): ContextScope {
-  // 1. Explicit scope takes priority
+  // 1. Explicit scope takes priority (always highest precedence)
   if (ctx.provenance.scope) {
     return ctx.provenance.scope;
   }
 
-  // 2. Infer from provenance fields
+  // 2. Topic affinity: topicId present → infer 'topic' scope (P0.6.2-R1.1)
+  if (ctx.provenance.topicId) {
+    return 'topic';
+  }
+
+  // 3. Project affinity: no topicId but projectId → infer 'project'
   if (ctx.provenance.projectId) {
     return 'project';
   }
 
-  // 3. Default: global (no project affinity)
+  // 4. Default: global (no topic/project affinity)
   return 'global';
 }
 

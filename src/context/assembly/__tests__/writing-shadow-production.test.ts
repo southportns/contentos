@@ -300,13 +300,25 @@ describe('buildShadowContexts', () => {
     expect(kinds).toContain('knowledge');
   });
 
-  it('should set correct provenance for all contexts', () => {
+  it('should set correct provenance for intent/strategy/identity contexts', () => {
     const contexts = buildShadowContexts(makeShadowInput());
-    for (const ctx of contexts) {
+    const topicScoped = contexts.filter(
+      (c) => c.kind === 'intent' || c.kind === 'strategy' || c.kind === 'identity'
+    );
+    for (const ctx of topicScoped) {
       expect(ctx.provenance.source).toBeDefined();
       expect(ctx.provenance.sourceType).toBeDefined();
       expect(ctx.provenance.topicId).toBe('topic_test_1');
     }
+  });
+
+  it('should set knowledge provenance topicId to null (global scope)', () => {
+    const contexts = buildShadowContexts(makeShadowInput());
+    const knowledgeCtx = contexts.find((c) => c.kind === 'knowledge');
+    expect(knowledgeCtx).toBeDefined();
+    expect(knowledgeCtx!.provenance.source).toBeDefined();
+    expect(knowledgeCtx!.provenance.sourceType).toBeDefined();
+    expect(knowledgeCtx!.provenance.topicId).toBeNull();
   });
 
   it('should set sourceType adapter for intent/strategy/identity', () => {
@@ -483,5 +495,64 @@ describe('Integration with Assembly Engine', () => {
     // Foreign context should be excluded
     expect(result.excluded.length).toBeGreaterThan(0);
     expect(result.excluded.some((e) => e.contextId === 'ctx_foreign')).toBe(true);
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // P0.6.2-R1.1: Scope Inference Shadow Verification
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  it('should infer topic scope for intent/strategy/identity contexts with topicId', () => {
+    const input = makeShadowInput({ topicId: 'topic_test_1', projectId: 'proj_test_1' });
+    const contexts = buildShadowContexts(input);
+
+    const intentCtx = contexts.find((c) => c.kind === 'intent');
+    const strategyCtx = contexts.find((c) => c.kind === 'strategy');
+    const identityCtx = contexts.find((c) => c.kind === 'identity');
+
+    // All should have topicId set (will infer topic scope)
+    expect(intentCtx!.provenance.topicId).toBe('topic_test_1');
+    expect(strategyCtx!.provenance.topicId).toBe('topic_test_1');
+    expect(identityCtx!.provenance.topicId).toBe('topic_test_1');
+  });
+
+  it('should infer global scope for knowledge context (topicId=null, projectId=null)', () => {
+    const input = makeShadowInput({ topicId: 'topic_test_1', projectId: 'proj_test_1' });
+    const contexts = buildShadowContexts(input);
+
+    const knowledgeCtx = contexts.find((c) => c.kind === 'knowledge');
+
+    // Knowledge provenance must NOT carry topicId — stays global
+    expect(knowledgeCtx).toBeDefined();
+    expect(knowledgeCtx!.provenance.topicId).toBeNull();
+    expect(knowledgeCtx!.provenance.projectId).toBeNull();
+  });
+
+  it('should exclude contexts from different topic with scope_mismatch reason', () => {
+    const input = makeShadowInput({ topicId: 'topic_test_1', projectId: 'proj_test_1' });
+    const contexts = buildShadowContexts(input);
+
+    // Add a context from a different topic in the same project
+    const otherTopicCtx = createKnowledgeContext(makeKnowledgeContext(), {
+      id: 'ctx_other_topic',
+      provenance: {
+        source: 'shadow:other_topic',
+        sourceType: 'knowledge',
+        topicId: 'topic_other',  // Different topic
+        projectId: 'proj_test_1',
+      },
+    });
+
+    const result = assembleContexts({
+      contexts: [...contexts, otherTopicCtx],
+      purpose: 'writing',
+      maxTokens: 4000,
+      projectId: 'proj_test_1',
+      topicId: 'topic_test_1',
+    });
+
+    // Other topic context should be excluded
+    expect(result.excluded.length).toBeGreaterThan(0);
+    expect(result.excluded.some((e) => e.contextId === 'ctx_other_topic')).toBe(true);
+    expect(result.excluded.find((e) => e.contextId === 'ctx_other_topic')!.reason).toBe('scope_mismatch');
   });
 });
