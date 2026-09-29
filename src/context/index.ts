@@ -42,8 +42,6 @@ export type {
   OutcomeContext,
   OutcomeContextPayload,
   MemoryContext,
-  MemoryContextPayload,
-  MemoryKind,
 } from './context-types';
 
 // Factory
@@ -169,3 +167,7 @@ export {
 } from './assembly';
 
 export { KnowledgeRetriever, knowledgeContextToObject } from './assembly';
+
+// Memory Bridge (P0.6.3.1)
+
+export { memoryRecordToContext } from '@/memory/memory-utils';
