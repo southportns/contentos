@@ -1,24 +1,35 @@
 /**
- * P0.6.3.1 — Memory Utilities
+ * P0.6.3.3 — Memory Utilities
  *
- * Provides the critical Memory → Context bridge.
+ * Provides the critical Memory → Context bridge, including Decision Memory
+ * to Decision Context conversion.
  *
  * Architecture Position:
  *
  *   MemoryRecord
  *       ↓ (memoryRecordToContext)
- *   ContextObject<MemoryContextPayload>
- *       ↓
- *   Context Assembly
+ *   ContextObject<MemoryContextPayload>  (kind='memory')
  *
- * This is the ONLY bridge between Memory Layer and Context Layer.
+ *   DecisionMemory
+ *       ↓ (decisionMemoryToContext)
+ *   ContextObject<DecisionContextPayload>  (kind='decision')
+ *
+ * These bridges connect Memory Layer to Context Layer.
  * Memory Layer does NOT depend on Context Assembly — only on ContextObject construction.
  */
 
 import type { MemoryRecord } from './memory-record';
 import type { ContextObject } from '@/context/context-object';
 import type { MemoryContextPayload } from './memory-types';
-import { createMemoryContext } from '@/context/context-factory';
+import type { DecisionMemoryPayload, DecisionMemory } from './decision-memory';
+import type { DecisionContextPayload, DecisionContext } from '@/context/context-types';
+import type { DecisionAlternative, DecisionEvidence } from './memory-types';
+import { createMemoryContext, createDecisionContext } from '@/context/context-factory';
+import { isDecisionMemory } from './decision-memory';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Generic Memory → Context Bridge (existing, unchanged)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * Convert a MemoryRecord to a ContextObject<MemoryContextPayload>.
@@ -89,4 +100,102 @@ export function memoryRecordsToContexts(
   records: MemoryRecord[]
 ): ContextObject<MemoryContextPayload>[] {
   return records.map(memoryRecordToContext);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Decision Memory → Decision Context Bridge (P0.6.3.3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Convert a DecisionMemory to a ContextObject<DecisionContextPayload>.
+ *
+ * This bridge repackages structured decision data from the Memory Layer
+ * into a Decision Context for consumption by Context Assembly.
+ *
+ * Field mapping:
+ *   DecisionMemory.id             → ContextObject.id
+ *   DecisionMemory.type           → 'decision'
+ *   DecisionMemory.payload.decision  → DecisionContextPayload.selected
+ *   DecisionMemory.payload.rationale → DecisionContextPayload.reason
+ *   DecisionMemory.payload.alternatives → DecisionContextPayload.rejected
+ *   DecisionMemory.evidence       → DecisionContextPayload (alternatives field)
+ *   DecisionMemory.status         → DecisionContextPayload (decisionType)
+ *
+ * @param record - The DecisionMemory to convert
+ * @return A DecisionContext (ContextObject<DecisionContextPayload>)
+ * @throws Error if record is not a DecisionMemory
+ */
+export function decisionMemoryToContext(
+  record: DecisionMemory
+): DecisionContext {
+  const payload = record.payload as DecisionMemoryPayload;
+
+  // Map DecisionMemory fields to DecisionContextPayload
+  const decisionPayload: DecisionContextPayload = {
+    decisionType: payload.decision,
+    actor: record.ownerId ?? null,
+    selected: payload.decision,
+    rejected: extractRejectedAlternatives(payload.alternatives),
+    reason: payload.rationale ?? null,
+    alternatives: extractAlternativeDescriptions(payload.alternatives),
+  };
+
+  return createDecisionContext(decisionPayload, {
+    id: `ctx_dec_${record.id}`,
+    provenance: {
+      source: record.source,
+      sourceType: record.sourceType,
+      ownerId: record.ownerId,
+      projectId: record.projectId,
+      topicId: record.topicId,
+      derivedFrom: record.derivedFrom,
+      confidence: record.confidence,
+    },
+    lifecycleStage: 'retrieved',
+    confidence: record.confidence,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  });
+}
+
+/**
+ * Check if a MemoryRecord is a Decision Memory and convert it.
+ * Returns null if not a Decision Memory.
+ *
+ * @param record - MemoryRecord to try converting
+ * @return DecisionContext or null
+ */
+export function tryDecisionMemoryToContext(
+  record: MemoryRecord
+): DecisionContext | null {
+  if (isDecisionMemory(record)) {
+    return decisionMemoryToContext(record);
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Extract rejected alternatives as string array.
+ */
+function extractRejectedAlternatives(
+  alternatives?: DecisionAlternative[]
+): string[] | null {
+  if (!alternatives || alternatives.length === 0) return null;
+  const rejected = alternatives.filter((a) => a.rejectionReason);
+  if (rejected.length === 0) return null;
+  return rejected.map((a) => a.rejectionReason!);
+}
+
+/**
+ * Extract alternative descriptions.
+ */
+function extractAlternativeDescriptions(
+  alternatives?: DecisionAlternative[]
+): string[] | null {
+  if (!alternatives || alternatives.length === 0) return null;
+  return alternatives.map((a) => a.description);
 }
