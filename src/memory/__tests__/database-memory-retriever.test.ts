@@ -12,7 +12,7 @@
  *   4. Run integration tests
  *   5. Cleanup temp DB
  *
- * Test Coverage (15 categories, 40+ tests):
+ * Test Coverage (18 categories, 50+ tests):
  *   A. Owner isolation (cross-user)
  *   B. Global cross-project (global + project/A only)
  *   C. Topic isolation (same project, different topics)
@@ -28,6 +28,9 @@
  *   M. maxResults (LIMIT)
  *   N. Deterministic ordering (tie-breaking)
  *   O. Persistence roundtrip
+ *   P. Session scope boundary (R2)
+ *   Q. AllowedScopes empty intersection (R2)
+ *   R. Cross-project/topic regression safety (R2)
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
@@ -540,6 +543,7 @@ describe('M. maxResults', () => {
     });
 
     expect(result).toHaveLength(5);
+    // Verify ordering preserved: highest importance first
     expect(result[0].id).toBe('max_0');
     expect(result[4].id).toBe('max_4');
   });
@@ -551,6 +555,7 @@ describe('M. maxResults', () => {
 
 describe('N. Deterministic ordering', () => {
   it('should use id ASC as tie-breaker', async () => {
+    // Create records with identical importance, confidence, updatedAt
     await insertRecords(
       makeRecord({ id: 'tie_c', ownerId: 'user_A', importance: 0.5, confidence: 0.5, updatedAt: '2026-09-29T10:00:00.000Z', scope: 'global' }),
       makeRecord({ id: 'tie_a', ownerId: 'user_A', importance: 0.5, confidence: 0.5, updatedAt: '2026-09-29T10:00:00.000Z', scope: 'global' }),
@@ -560,6 +565,7 @@ describe('N. Deterministic ordering', () => {
     const result = await retriever.retrieve({ ownerId: 'user_A' });
     const ids = result.map((r) => r.id);
 
+    // Should be sorted alphabetically by id: tie_a, tie_b, tie_c
     expect(ids).toEqual(['tie_a', 'tie_b', 'tie_c']);
   });
 });
@@ -612,5 +618,235 @@ describe('O. Persistence roundtrip', () => {
     expect(retrieved.importance).toBeCloseTo(0.88, 5);
     expect(retrieved.version).toBe(3);
     expect(retrieved.status).toBe('active');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P. Session Scope Boundary (R2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('P. Session scope boundary (R2)', () => {
+  it('Test 5: must return [] for scope=session (no Prisma query)', async () => {
+    await insertRecords(
+      makeRecord({ id: 'sess_global', ownerId: 'user_A', scope: 'global', importance: 0.9 }),
+      makeRecord({ id: 'sess_project', ownerId: 'user_A', scope: 'project', projectId: 'P1', importance: 0.8 }),
+    );
+
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      scope: 'session',
+    });
+
+    // Session scope must return empty — never reach the database layer
+    expect(result).toHaveLength(0);
+  });
+
+  it('scope=session with projectId must still return []', async () => {
+    await insertRecords(
+      makeRecord({ id: 'sess_ctx_proj', ownerId: 'user_A', scope: 'project', projectId: 'P1', importance: 0.9 }),
+    );
+
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      projectId: 'P1',
+      scope: 'session',
+    });
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('scope=session with policy.allowedScopes must still return []', async () => {
+    await insertRecords(
+      makeRecord({ id: 'sess_pol', ownerId: 'user_A', scope: 'global', importance: 0.9 }),
+    );
+
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      scope: 'session',
+      policy: { allowedScopes: ['global', 'project', 'topic'] },
+    });
+
+    expect(result).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Q. AllowedScopes Empty Intersection (R2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Q. AllowedScopes empty intersection (R2)', () => {
+  it('Test 1: allowedScopes=[topic] without projectId/topicId must return []', async () => {
+    await insertRecords(
+      makeRecord({ id: 'ei_global', ownerId: 'user_A', scope: 'global', importance: 0.9 }),
+      makeRecord({ id: 'ei_topic', ownerId: 'user_A', scope: 'topic', projectId: 'P1', topicId: 'T1', importance: 0.8 }),
+    );
+
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      policy: { allowedScopes: ['topic'] },
+    });
+
+    // No projectId/topicId → intersection with allowedScopes=[topic] is empty → []
+    expect(result).toHaveLength(0);
+  });
+
+  it('Test 2: allowedScopes=[topic] with projectId but no topicId must return []', async () => {
+    await insertRecords(
+      makeRecord({ id: 'ei_proj', ownerId: 'user_A', scope: 'project', projectId: 'P1', importance: 0.9 }),
+      makeRecord({ id: 'ei_topic2', ownerId: 'user_A', scope: 'topic', projectId: 'P1', topicId: 'T1', importance: 0.8 }),
+      makeRecord({ id: 'ei_global2', ownerId: 'user_A', scope: 'global', importance: 0.7 }),
+    );
+
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      projectId: 'P1',
+      policy: { allowedScopes: ['topic'] },
+    });
+
+    // projectId only → inferred scopes [global, project], intersect [topic] = [] → []
+    expect(result).toHaveLength(0);
+  });
+
+  it('Test 3: allowedScopes=[topic] with projectId+topicId returns only matching topic', async () => {
+    await insertRecords(
+      makeRecord({ id: 'ei3_global', ownerId: 'user_A', scope: 'global', importance: 0.9 }),
+      makeRecord({ id: 'ei3_proj', ownerId: 'user_A', scope: 'project', projectId: 'P1', importance: 0.85 }),
+      makeRecord({ id: 'ei3_topic', ownerId: 'user_A', scope: 'topic', projectId: 'P1', topicId: 'T1', importance: 0.8 }),
+      makeRecord({ id: 'ei3_topicX', ownerId: 'user_A', scope: 'topic', projectId: 'P1', topicId: 'T2', importance: 0.75 }),
+    );
+
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      projectId: 'P1',
+      topicId: 'T1',
+      policy: { allowedScopes: ['topic'] },
+    });
+
+    // Only T1 topic record
+    const ids = result.map((r) => r.id);
+    expect(ids).toContain('ei3_topic');
+    expect(ids).not.toContain('ei3_global');
+    expect(ids).not.toContain('ei3_proj');
+    expect(ids).not.toContain('ei3_topicX');
+    expect(result).toHaveLength(1);
+  });
+
+  it('Test 4: allowedScopes=[global] with projectId+topicId returns only global', async () => {
+    await insertRecords(
+      makeRecord({ id: 'ei4_global', ownerId: 'user_A', scope: 'global', importance: 0.9 }),
+      makeRecord({ id: 'ei4_proj', ownerId: 'user_A', scope: 'project', projectId: 'P1', importance: 0.85 }),
+      makeRecord({ id: 'ei4_topic', ownerId: 'user_A', scope: 'topic', projectId: 'P1', topicId: 'T1', importance: 0.8 }),
+    );
+
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      projectId: 'P1',
+      topicId: 'T1',
+      policy: { allowedScopes: ['global'] },
+    });
+
+    // Only global record
+    const ids = result.map((r) => r.id);
+    expect(ids).toContain('ei4_global');
+    expect(ids).not.toContain('ei4_proj');
+    expect(ids).not.toContain('ei4_topic');
+    expect(result).toHaveLength(1);
+  });
+
+  it('allowedScopes=[project] with only topicId match should return []', async () => {
+    await insertRecords(
+      makeRecord({ id: 'ei5_proj', ownerId: 'user_A', scope: 'project', projectId: 'P1', importance: 0.9 }),
+      makeRecord({ id: 'ei5_topic', ownerId: 'user_A', scope: 'topic', projectId: 'P1', topicId: 'T1', importance: 0.8 }),
+    );
+
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      projectId: 'P1',
+      topicId: 'T1',
+      policy: { allowedScopes: ['global', 'topic'] },
+    });
+
+    // Inferred [global, project, topic], intersect [global, topic] = [global, topic]
+    // But only topic record matches P1+T1
+    const ids = result.map((r) => r.id);
+    expect(ids).toContain('ei5_topic');
+    expect(ids).not.toContain('ei5_proj');
+    expect(result).toHaveLength(1);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// R. Cross-Project/Topic Regression Safety (R2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('R. Cross-project/topic regression safety (R2)', () => {
+  it('must not leak Project B / Topic B data when querying Project A / Topic A', async () => {
+    await insertRecords(
+      // User A, Project A, Topic A
+      makeRecord({ id: 'reg_A_A', ownerId: 'user_A', scope: 'global', importance: 0.9 }),
+      makeRecord({ id: 'reg_PA_A', ownerId: 'user_A', scope: 'project', projectId: 'PA', importance: 0.85 }),
+      makeRecord({ id: 'reg_TA_A', ownerId: 'user_A', scope: 'topic', projectId: 'PA', topicId: 'TA', importance: 0.8 }),
+      // User A, Project B, Topic B
+      makeRecord({ id: 'reg_PB_B', ownerId: 'user_A', scope: 'project', projectId: 'PB', importance: 0.75 }),
+      makeRecord({ id: 'reg_TB_B', ownerId: 'user_A', scope: 'topic', projectId: 'PB', topicId: 'TB', importance: 0.7 }),
+    );
+
+    // Query Project A + Topic A → only PA/TA data returned
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      projectId: 'PA',
+      topicId: 'TA',
+    });
+    const ids = result.map((r) => r.id);
+
+    expect(ids).toContain('reg_A_A');
+    expect(ids).toContain('reg_PA_A');
+    expect(ids).toContain('reg_TA_A');
+    expect(ids).not.toContain('reg_PB_B');
+    expect(ids).not.toContain('reg_TB_B');
+    expect(result).toHaveLength(3);
+  });
+
+  it('must not leak Project B / Topic B data with allowedScopes=[topic]', async () => {
+    await insertRecords(
+      makeRecord({ id: 'reg_tb_global', ownerId: 'user_A', scope: 'global', importance: 0.9 }),
+      makeRecord({ id: 'reg_tb_PA', ownerId: 'user_A', scope: 'project', projectId: 'PA', importance: 0.85 }),
+      makeRecord({ id: 'reg_tb_TA', ownerId: 'user_A', scope: 'topic', projectId: 'PA', topicId: 'TA', importance: 0.8 }),
+      makeRecord({ id: 'reg_tb_PB', ownerId: 'user_A', scope: 'project', projectId: 'PB', importance: 0.75 }),
+      makeRecord({ id: 'reg_tb_TB', ownerId: 'user_A', scope: 'topic', projectId: 'PB', topicId: 'TB', importance: 0.7 }),
+    );
+
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      projectId: 'PA',
+      topicId: 'TA',
+      policy: { allowedScopes: ['topic'] },
+    });
+    const ids = result.map((r) => r.id);
+
+    // Only TA topic record — no PB/TB leakage
+    expect(ids).toContain('reg_tb_TA');
+    expect(ids).not.toContain('reg_tb_global');
+    expect(ids).not.toContain('reg_tb_PA');
+    expect(ids).not.toContain('reg_tb_PB');
+    expect(ids).not.toContain('reg_tb_TB');
+    expect(result).toHaveLength(1);
+  });
+
+  it('empty intersection policy must return [] even when data exists', async () => {
+    await insertRecords(
+      makeRecord({ id: 'reg_empty_global', ownerId: 'user_A', scope: 'global', importance: 0.9 }),
+      makeRecord({ id: 'reg_empty_proj', ownerId: 'user_A', scope: 'project', projectId: 'P1', importance: 0.8 }),
+    );
+
+    // Request with only projectId but policy restricts to topic only
+    const result = await retriever.retrieve({
+      ownerId: 'user_A',
+      projectId: 'P1',
+      policy: { allowedScopes: ['topic'] },
+    });
+
+    // Inferred scopes [global, project], allowedScopes [topic] → intersection empty → []
+    expect(result).toHaveLength(0);
   });
 });
