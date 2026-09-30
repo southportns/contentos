@@ -1,7 +1,7 @@
 /**
- * P0.6.3.1 — Memory Layer Foundation
+ * P0.6.3.3 — Memory Layer Foundation
  *
- * Unified Memory Layer for ContextOS.
+ * Unified Memory Layer for ContextOS with Decision Memory support.
  *
  * Architecture:
  *   Existing Sources → Adapters → MemoryRecord → Collection → Retriever → ContextObject
@@ -120,3 +120,54 @@ export {
   MemoryAuthorizationError,
 } from './persistence/memory-persistence-types';
 export type { MemoryRecordRow } from './persistence/memory-persistence-types';
+
+// ─── Decision Memory Types (P0.6.3.3) ────────────────────────────────────────
+
+export type {
+  DecisionMemoryPayload,
+  DecisionAlternative,
+  DecisionEvidence,
+  DecisionStatus,
+} from './memory-types';
+export {
+  DECISION_MEMORY_TYPE,
+  DECISION_MEMORY_KIND,
+  DECISION_STATUSES,
+} from './memory-types';
+
+// ─── Decision Memory Helpers (P0.6.3.3) ─────────────────────────────────────
+
+export type { DecisionMemory } from './decision-memory';
+export {
+  isDecisionMemory,
+  decisionStatusToMemoryStatus,
+  memoryStatusesForDecisionStatus,
+} from './decision-memory';
+export { DECISION_TYPE, DECISION_KIND } from './decision-memory';
+
+// ─── Decision Memory Factory (P0.6.3.3) ─────────────────────────────────────
+
+export type { CreateDecisionMemoryOptions } from './decision-memory-factory';
+export { createDecisionMemory } from './decision-memory-factory';
+
+// ─── Decision Memory Service (P0.6.3.3) ─────────────────────────────────────
+
+export type { DecisionMemoryService } from './decision-memory-service';
+export { DecisionMemoryServiceImpl } from './decision-memory-service';
+export { DecisionTransitionError } from './decision-memory-service';
+
+// ─── Decision Memory Retrieval (P0.6.3.3) ───────────────────────────────────
+
+export type { DecisionRetrievalParams } from './decision-memory-retrieval';
+export {
+  retrieveDecisionMemories,
+  getActiveDecisions,
+  getDecisionHistory,
+} from './decision-memory-retrieval';
+
+// ─── Decision Memory → Context Bridge (P0.6.3.3) ────────────────────────────
+
+export {
+  decisionMemoryToContext,
+  tryDecisionMemoryToContext,
+} from './memory-utils';
