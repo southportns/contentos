@@ -47,7 +47,7 @@ import type { MemoryStore } from './persistence/memory-store';
 import type { MemoryQueryCriteria } from './persistence/memory-query';
 import type { MemoryRecord } from './memory-record';
 import type { MemoryStatus } from './memory-record';
-import type { MemoryScope } from './memory-scope';
+import type { PersistentMemoryScope } from './memory-scope';
 import { resolveMemoryPolicy } from './memory-policy';
 import { DEFAULT_MEMORY_POLICY } from './memory-policy';
 
@@ -107,8 +107,23 @@ export class DatabaseMemoryRetriever implements MemoryRetriever {
       );
     }
 
+    // ─── Session scope boundary ──────────────────────────────────────────
+    // session-scoped memories are ephemeral and MUST NOT be retrieved from
+    // persistent storage. Return empty immediately — never reach the DB layer.
+    if (request.scope === 'session') {
+      return [];
+    }
+
     const policy = resolveMemoryPolicy(request.policy);
     const criteria = this.buildCriteria(request, policy);
+
+    // ─── Empty scope intersection ────────────────────────────────────────
+    // If policy.allowedScopes eliminated all inferred scopes, the intersection
+    // is empty → zero results. Do NOT fall back to a broader query that would
+    // loosen scope isolation by only filtering on ownerId.
+    if (criteria.allowedScopes && criteria.allowedScopes.length === 0) {
+      return [];
+    }
 
     return this._store.findMany(criteria);
   }
@@ -140,11 +155,13 @@ export class DatabaseMemoryRetriever implements MemoryRetriever {
     const { ownerId, projectId, topicId } = request;
 
     // ─── Determine effective scopes ───────────────────────────────────────
+    // effectiveScopes only holds persistent scopes (never 'session' — that
+    // case is handled by early return in retrieve()).
 
-    let effectiveScopes: MemoryScope[];
+    let effectiveScopes: PersistentMemoryScope[];
 
-    if (request.scope) {
-      // Explicit scope: use only that scope
+    if (request.scope && request.scope !== 'session') {
+      // Explicit non-session scope: use only that scope
       effectiveScopes = [request.scope];
     } else if (projectId && topicId) {
       // Project + Topic context: include global, project, and topic
@@ -157,19 +174,18 @@ export class DatabaseMemoryRetriever implements MemoryRetriever {
       effectiveScopes = ['global'];
     }
 
-    // Apply allowedScopes from policy as further constraint
-    // allowedScopes narrowing: only include scopes that are BOTH in
-    // effectiveScopes AND in policy.allowedScopes
+    // Apply allowedScopes from policy as further constraint.
+    // This is a SET INTERSECTION: effectiveScopes ∩ policy.allowedScopes.
+    //
+    // CRITICAL: If the intersection is empty, leave effectiveScopes empty.
+    // Do NOT fall back to policy.allowedScopes, because that would broaden
+    // the query and potentially leak records across project/topic boundaries.
+    // The caller (retrieve()) checks for empty allowedScopes and returns [].
     if (policy.allowedScopes && policy.allowedScopes.length > 0) {
       effectiveScopes = effectiveScopes.filter((s) =>
         policy.allowedScopes!.includes(s)
       );
-      // If allowedScopes completely eliminates all scopes, preserve
-      // the policy restriction (no fallback to broader scopes)
-      if (effectiveScopes.length === 0) {
-        // Use only what policy allows (may result in empty result)
-        effectiveScopes = [...policy.allowedScopes];
-      }
+      // If intersection is empty → leave as [] (no fallback)
     }
 
     // ─── Determine status filter ──────────────────────────────────────────
