@@ -23,6 +23,7 @@
 
 import type { MemoryRecord } from './memory-record';
 import type { MemoryPolicy } from './memory-policy';
+import type { MemoryScope } from './memory-scope';
 import { resolveMemoryPolicy } from './memory-policy';
 
 /**
@@ -35,6 +36,8 @@ export interface MemoryRetrievalRequest {
   projectId?: string;
   /** Filter by topic ID */
   topicId?: string;
+  /** Explicit scope override (takes precedence over inference) */
+  scope?: MemoryScope;
   /** Future: query string for semantic search (P0.6.3.x) */
   query?: string;
   /** Policy for filtering and limiting results */
