@@ -1,1 +1,1 @@
-更新后的接口（含 5th principle 和 findMany）
+store 接口
