@@ -377,6 +377,11 @@ export class PrismaMemoryStore implements MemoryStore {
 
     if (scopeOrConditions.length > 0) {
       conditions.OR = scopeOrConditions;
+    } else {
+      // No scopes to match — force zero results by adding an always-false
+      // condition on `id`. This prevents the query from degenerating to
+      // just `WHERE ownerId = ?`, which would leak records across boundaries.
+      conditions.id = '__NEVER_MATCH__';
     }
 
     // ─── Status filtering ─────────────────────────────────────────────────
