@@ -28,6 +28,16 @@
 export type MemoryScope = 'global' | 'project' | 'topic' | 'session';
 
 /**
+ * Persistent memory scopes — scopes that participate in database retrieval.
+ *
+ * `session` is INTENTIONALLY EXCLUDED because session-scoped memories are
+ * ephemeral and must never be returned from persistent storage queries.
+ *
+ * Derived from {@link MemoryScope} to avoid redefining string literals.
+ */
+export type PersistentMemoryScope = Exclude<MemoryScope, 'session'>;
+
+/**
  * All valid MemoryScope values.
  */
 export const MEMORY_SCOPES: readonly MemoryScope[] = [
