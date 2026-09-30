@@ -16,7 +16,7 @@ export { MEMORY_KINDS, MEMORY_KIND_LABELS, MEMORY_KIND_SHORT_LABELS, STATIC, DYN
 
 export type { MemoryContextPayload } from './memory-types';
 
-export type { MemoryScope } from './memory-scope';
+export type { MemoryScope, PersistentMemoryScope } from './memory-scope';
 export { MEMORY_SCOPES } from './memory-scope';
 export { resolveMemoryScope } from './memory-scope';
 export type { MemoryScopeInput } from './memory-scope';
