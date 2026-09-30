@@ -1,3 +1,5 @@
+import type { PersistentMemoryScope } from '../memory-scope';
+
 /**
  * P0.6.3.2.2 — Memory Query Criteria
  *
@@ -35,7 +37,9 @@ export interface MemoryQueryCriteria {
   ownerId: string;
 
   /**
-   * Allowed scopes for retrieval.
+   * Allowed scopes for retrieval. Only persistent scopes are accepted;
+   * 'session' must never appear here (session is ephemeral, excluded
+   * from persistent retrieval).
    *
    * - ['global'] — only global memories (default)
    * - ['global', 'project'] — global + project-scoped
@@ -43,7 +47,7 @@ export interface MemoryQueryCriteria {
    *
    * Scope/project/topic conditions are combined with OR.
    */
-  allowedScopes?: Array<'global' | 'project' | 'topic'>;
+  allowedScopes?: PersistentMemoryScope[];
 
   /**
    * Project ID for scope filtering.
