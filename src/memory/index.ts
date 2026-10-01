@@ -171,3 +171,48 @@ export {
   decisionMemoryToContext,
   tryDecisionMemoryToContext,
 } from './memory-utils';
+
+// ─── Outcome Memory Types (P0.6.5.1) ────────────────────────────────────────
+
+export type {
+  OutcomeMemoryPayload,
+  OutcomeMetric,
+  OutcomeAttribution,
+  OutcomeType,
+  OutcomeTargetType,
+} from './outcome-memory';
+export {
+  OUTCOME_MEMORY_TYPE,
+  OUTCOME_MEMORY_KIND,
+  OUTCOME_TYPES,
+  OUTCOME_TARGET_TYPES,
+} from './outcome-memory';
+
+// ─── Outcome Memory Helpers (P0.6.5.1) ──────────────────────────────────────
+
+export type { OutcomeMemory } from './outcome-memory';
+export {
+  isOutcomeMemory,
+  validateOutcomePayload,
+} from './outcome-memory';
+
+// ─── Outcome Memory Factory (P0.6.5.1) ──────────────────────────────────────
+
+export type { CreateOutcomeMemoryOptions } from './outcome-memory-factory';
+export { createOutcomeMemory } from './outcome-memory-factory';
+
+// ─── Outcome Memory Retrieval (P0.6.5.1) ────────────────────────────────────
+
+export type { OutcomeRetrievalParams } from './outcome-memory-retrieval';
+export {
+  retrieveOutcomeMemories,
+  getOutcomeHistory,
+  getLatestOutcome,
+} from './outcome-memory-retrieval';
+
+// ─── Outcome Memory → Context Bridge (P0.6.5.1) ─────────────────────────────
+
+export {
+  outcomeMemoryToContext,
+  tryOutcomeMemoryToContext,
+} from './memory-utils';

@@ -22,10 +22,12 @@ import type { MemoryRecord } from './memory-record';
 import type { ContextObject } from '@/context/context-object';
 import type { MemoryContextPayload } from './memory-types';
 import type { DecisionMemoryPayload, DecisionMemory } from './decision-memory';
-import type { DecisionContextPayload, DecisionContext } from '@/context/context-types';
-import type { DecisionAlternative, DecisionEvidence } from './memory-types';
-import { createMemoryContext, createDecisionContext } from '@/context/context-factory';
+import type { DecisionContextPayload, DecisionContext, OutcomeContextPayload, OutcomeContext } from '@/context/context-types';
+import type { DecisionAlternative } from './memory-types';
+import type { OutcomeMemoryPayload, OutcomeMemory } from './outcome-memory';
+import { createMemoryContext, createDecisionContext, createOutcomeContext } from '@/context/context-factory';
 import { isDecisionMemory } from './decision-memory';
+import { isOutcomeMemory } from './outcome-memory';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Generic Memory → Context Bridge (existing, unchanged)
@@ -198,4 +200,79 @@ function extractAlternativeDescriptions(
 ): string[] | null {
   if (!alternatives || alternatives.length === 0) return null;
   return alternatives.map((a) => a.description);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Outcome Memory → Outcome Context Bridge (P0.6.5.1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Convert an OutcomeMemory to a ContextObject<OutcomeContextPayload>.
+ *
+ * This bridge repackages outcome observation data from the Memory Layer
+ * into an Outcome Context for consumption by Context Assembly.
+ *
+ * Field mapping:
+ *   OutcomeMemory.id                   → ContextObject.id
+ *   OutcomeMemory.type                 → 'outcome'
+ *   OutcomeMemory.kind                 → 'episodic' (ContextKind = 'outcome')
+ *   OutcomeMemory.payload.outcomeType  → OutcomeContextPayload.outcomeType
+ *   OutcomeMemory.metrics              → OutcomeContextPayload.value
+ *   OutcomeMemory.observedAt           → OutcomeContextPayload.observedAt
+ *   OutcomeMemory.source               → OutcomeContextPayload.source (via sum metric source)
+ *
+ * @param record - The OutcomeMemory to convert
+ * @return An OutcomeContext (ContextObject<OutcomeContextPayload>)
+ * @throws Error if record is not an OutcomeMemory
+ */
+export function outcomeMemoryToContext(
+  record: OutcomeMemory
+): OutcomeContext {
+  const payload = record.payload as OutcomeMemoryPayload;
+
+  // Extract the first metric source as the context source (if any)
+  const firstMetricSource = payload.metrics && payload.metrics.length > 0
+    ? payload.metrics[0].source ?? null
+    : null;
+
+  // Build the outcome context payload
+  const outcomePayload: OutcomeContextPayload = {
+    outcomeType: payload.outcomeType,
+    value: payload.metrics ?? null,
+    source: firstMetricSource,
+    observedAt: payload.observedAt,
+  };
+
+  return createOutcomeContext(outcomePayload, {
+    id: `ctx_out_${record.id}`,
+    provenance: {
+      source: record.source,
+      sourceType: record.sourceType,
+      ownerId: record.ownerId,
+      projectId: record.projectId,
+      topicId: record.topicId,
+      derivedFrom: record.derivedFrom,
+      confidence: record.confidence,
+    },
+    lifecycleStage: 'retrieved',
+    confidence: record.confidence,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  });
+}
+
+/**
+ * Check if a MemoryRecord is an Outcome Memory and convert it.
+ * Returns null if not an Outcome Memory.
+ *
+ * @param record - MemoryRecord to try converting
+ * @return OutcomeContext or null
+ */
+export function tryOutcomeMemoryToContext(
+  record: MemoryRecord
+): OutcomeContext | null {
+  if (isOutcomeMemory(record)) {
+    return outcomeMemoryToContext(record);
+  }
+  return null;
 }
