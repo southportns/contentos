@@ -1,4 +1,4 @@
-/**
+/*
  * P0.6.3.1 — Memory Retriever
  *
  * Provides retrieval interface for the Memory Layer.
@@ -123,7 +123,7 @@ export class InMemoryRetriever implements MemoryRetriever {
       if (record.status === 'active') return true;
       if (record.status === 'expired' && policy.includeExpired) return true;
       if (record.status === 'superseded' && policy.includeSuperseded) return true;
-      if (record.status === 'archived') return false; // never include archived
+      if (record.status === 'archived' && policy.includeArchived) return true;
       return false;
     });
 
