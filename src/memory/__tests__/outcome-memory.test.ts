@@ -1456,15 +1456,18 @@ describe('P0.6.5.1-R1 — Retrieval Hardening (InMemory Unit)', () => {
         limit: 50,
       });
 
-      // tB has 50 outcomes, every 4th is conversion ≈ 12-13 conversion records
-      expect(results.length).toBeGreaterThan(0);
-      expect(results.length).toBeLessThanOrEqual(50);
+      // tB has 50 outcomes, every 4th is conversion → exactly 12 conversion records
+      // (i=2,6,10,14,18,22,26,30,34,38,42,46)
+      expect(results).toHaveLength(12);
 
       // ALL must be target_B AND conversion
-      for (const r of results) {
-        expect((r.payload as { targetId: string }).targetId).toBe('tB');
-        expect((r.payload as { outcomeType: string }).outcomeType).toBe('conversion');
-      }
+      expect(results.every(r => {
+        const p = r.payload as { targetId: string; outcomeType: string };
+        return p.targetId === 'tB' && p.outcomeType === 'conversion';
+      })).toBe(true);
+
+      // No duplicate IDs
+      expect(new Set(results.map(r => r.id)).size).toBe(12);
 
       // Sorted by observedAt DESC
       for (let i = 1; i < results.length; i++) {

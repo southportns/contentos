@@ -1106,16 +1106,18 @@ describe('P0.6.5.1 — Outcome Memory Persistence (DB Integration)', () => {
           limit: 50,
         });
 
-        // tB has 20 outcomes, every 3rd is conversion ≈ 6-7 conversion records
-        expect(results.length).toBeGreaterThan(0);
-        expect(results.length).toBeLessThanOrEqual(50);
+        // tB has 20 outcomes, every 3rd is conversion → exactly 6 conversion records
+        // (i=2,5,8,11,14,17)
+        expect(results).toHaveLength(6);
 
         // ALL must be target_B AND conversion
-        for (const r of results) {
+        expect(results.every(r => {
           const payload = r.payload as { targetId: string; outcomeType: string };
-          expect(payload.targetId).toBe('tB');
-          expect(payload.outcomeType).toBe('conversion');
-        }
+          return payload.targetId === 'tB' && payload.outcomeType === 'conversion';
+        })).toBe(true);
+
+        // No duplicate IDs
+        expect(new Set(results.map(r => r.id)).size).toBe(6);
 
         // Sorted by observedAt DESC
         for (let i = 1; i < results.length; i++) {
