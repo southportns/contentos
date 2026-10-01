@@ -117,4 +117,33 @@ export interface MemoryStore {
    * @return Matching memory records, sorted and limited
    */
   findMany(criteria: MemoryQueryCriteria): Promise<MemoryRecord[]>;
+
+  /**
+   * Atomically supersede an old record with a new record.
+   *
+   * This is a CRITICAL operation that MUST be atomic:
+   * - Both old record update and new record create must succeed together
+   * - If either fails, the entire operation must roll back
+   *
+   * Safety guarantees:
+   * 1. OCC check on old record (expectedVersion must match)
+   * 2. Authorization check (authenticatedOwnerId must own old record)
+   * 3. Type check (old record must be DECISION_MEMORY_TYPE)
+   * 4. Atomicity (both operations in single database transaction)
+   *
+   * @param oldRecord - Old record with updated payload (status=superseded)
+   * @param newRecord - New record to create
+   * @param authenticatedOwnerId - Authenticated caller's user ID
+   * @param expectedVersion - Expected current version of old record in DB
+   * @return The persisted new MemoryRecord
+   * @throws MemoryAuthorizationError if old record owner mismatch
+   * @throws MemoryConcurrencyError if version mismatch
+   * @throws MemoryNotFoundError if old record not found
+   */
+  supersede(
+    oldRecord: MemoryRecord,
+    newRecord: MemoryRecord,
+    authenticatedOwnerId: string,
+    expectedVersion: number,
+  ): Promise<MemoryRecord>;
 }

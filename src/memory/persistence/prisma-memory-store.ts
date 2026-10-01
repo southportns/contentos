@@ -312,6 +312,150 @@ export class PrismaMemoryStore implements MemoryStore {
   }
 
   /**
+   * Atomically supersede an old record with a new record using Prisma transaction.
+   *
+   * Transaction flow:
+   * 1. Validate old record (authorization, OCC version)
+   * 2. Create new record with supersedes link
+   * 3. Update old record to superseded status
+   *
+   * If ANY step fails, the entire transaction rolls back:
+   * - No orphaned new record left on old update failure
+   * - No updated old record left on new create failure
+   *
+   * @param oldRecord - Old record with updated payload (status=superseded)
+   * @param newRecord - New record to create
+   * @param authenticatedOwnerId - Authenticated caller's user ID
+   * @param expectedVersion - Expected current version of old record in DB
+   * @return The persisted new MemoryRecord
+   */
+  async supersede(
+    oldRecord: MemoryRecord,
+    newRecord: MemoryRecord,
+    authenticatedOwnerId: string,
+    expectedVersion: number,
+  ): Promise<MemoryRecord> {
+    // Step 0: Validation (before transaction for early error detection)
+    validateMemoryRecord(oldRecord);
+    validateMemoryRecord(newRecord);
+
+    if (!authenticatedOwnerId || typeof authenticatedOwnerId !== 'string') {
+      throw new MemoryAuthorizationError(oldRecord.id);
+    }
+
+    if (oldRecord.ownerId !== authenticatedOwnerId) {
+      throw new MemoryAuthorizationError(oldRecord.id);
+    }
+
+    // OCC check: verify old record has expected version
+    const currentOld = await prisma.memoryRecord.findFirst({
+      where: {
+        id: oldRecord.id,
+        ownerId: authenticatedOwnerId,
+      },
+    });
+
+    if (!currentOld) {
+      throw new MemoryNotFoundError(oldRecord.id);
+    }
+
+    if (currentOld.version !== expectedVersion) {
+      throw new MemoryConcurrencyError(
+        oldRecord.id,
+        expectedVersion,
+        currentOld.version,
+      );
+    }
+
+    // Step 1-3: Atomic transaction
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Step 1: Create new record
+        const newRow = memoryRecordToPersistence(newRecord);
+        const createdNew = await tx.memoryRecord.create({
+          data: {
+            id: newRow.id,
+            kind: newRow.kind,
+            type: newRow.type,
+            payload: newRow.payload,
+            scope: newRow.scope,
+            ownerId: newRow.ownerId,
+            projectId: newRow.projectId,
+            topicId: newRow.topicId,
+            source: newRow.source,
+            sourceType: newRow.sourceType,
+            derivedFrom: newRow.derivedFrom,
+            confidence: newRow.confidence,
+            importance: newRow.importance,
+            createdAt: newRow.createdAt,
+            updatedAt: newRow.updatedAt,
+            lastAccessedAt: newRow.lastAccessedAt,
+            accessCount: newRow.accessCount,
+            expiresAt: newRow.expiresAt,
+            version: newRow.version,
+            status: newRow.status,
+          },
+        });
+
+        // Step 2: Update old record to superseded (OCC via version)
+        const oldRow = memoryRecordToPersistence(oldRecord);
+        const updatedOld = await tx.memoryRecord.updateMany({
+          where: {
+            id: oldRecord.id,
+            ownerId: authenticatedOwnerId,
+            version: expectedVersion, // OCC: version must still match
+          },
+          data: {
+            kind: oldRow.kind,
+            type: oldRow.type,
+            payload: oldRow.payload,
+            scope: oldRow.scope,
+            projectId: oldRow.projectId ?? null,
+            topicId: oldRow.topicId ?? null,
+            source: oldRow.source,
+            sourceType: oldRow.sourceType,
+            derivedFrom: oldRow.derivedFrom ?? null,
+            confidence: oldRow.confidence,
+            importance: oldRow.importance,
+            lastAccessedAt: oldRow.lastAccessedAt
+              ? new Date(oldRow.lastAccessedAt)
+              : null,
+            accessCount: oldRow.accessCount,
+            expiresAt: oldRow.expiresAt ? new Date(oldRow.expiresAt) : null,
+            version: expectedVersion + 1,
+            status: oldRow.status,
+            updatedAt: new Date(),
+          },
+        });
+
+        // If updateMany didn't match, version changed → OCC failure
+        if (updatedOld.count === 0) {
+          throw new MemoryConcurrencyError(
+            oldRecord.id,
+            expectedVersion,
+            expectedVersion + 1, // Unknown actual version
+          );
+        }
+
+        return createdNew;
+      });
+
+      return persistenceToMemoryRecord(result);
+    } catch (error: unknown) {
+      // Re-throw our own errors
+      if (
+        error instanceof MemoryAuthorizationError ||
+        error instanceof MemoryConcurrencyError ||
+        error instanceof MemoryNotFoundError
+      ) {
+        throw error;
+      }
+      // Re-throw transaction errors (will trigger rollback)
+      throw error;
+    }
+  }
+
+  /**
    * Build the Prisma WHERE clause from query criteria.
    *
    * Scope/Project/Topic logic generates an OR-based array of conditions

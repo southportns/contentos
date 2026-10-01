@@ -188,39 +188,20 @@ export class DecisionMemoryServiceImpl implements DecisionMemoryService {
       throw new MemoryNotFoundError(newDecision.id);
     }
 
-    // ─── Step 3: Set supersedes relationship and persist new decision ───────
-    // Ensure the new decision correctly references the old decision.
+    // ─── Step 3: Prepare records for atomic supersede ──────────────────────
+    // The new decision must reference the old decision via supersedes.
     const newPayload: DecisionMemoryPayload = {
       ...newDecision.payload,
       supersedes: oldDecisionId,
     };
 
-    const newDecisionWithSupersedes: DecisionMemory = {
+    const newRecord: DecisionMemory = {
       ...newDecision,
       payload: newPayload,
       updatedAt: new Date().toISOString(),
     };
 
-    // Persist new decision: use update if already exists, create if new.
-    let persistedNew: DecisionMemory;
-    const existingNew = await this._store.getById(newDecision.id, authenticatedOwnerId);
-    if (existingNew) {
-      // newDecision already persisted — update with supersedes relationship
-      const updatedNew = await this._store.update(
-        newDecisionWithSupersedes,
-        authenticatedOwnerId,
-        existingNew.version,
-      );
-      persistedNew = updatedNew as DecisionMemory;
-    } else {
-      // newDecision not yet persisted — create
-      const created = await this._store.create(newDecisionWithSupersedes);
-      persistedNew = created as DecisionMemory;
-    }
-
-    // ─── Step 4: Mark old decision as superseded ───────────────────────────
-    // Only executed AFTER new decision is persisted. If this fails, the new
-    // decision is already safely stored with the supersedes link.
+    // The old decision will be marked as superseded.
     const supersededPayload: DecisionMemoryPayload = {
       ...oldPayload,
       decisionStatus: 'superseded',
@@ -234,13 +215,18 @@ export class DecisionMemoryServiceImpl implements DecisionMemoryService {
       updatedAt: new Date().toISOString(),
     };
 
-    await this._store.update(
+    // ─── Step 4: Atomic supersede via store ────────────────────────────────
+    // store.supersede() uses database transaction to guarantee:
+    // - Both old update and new create succeed together
+    // - If either fails, the entire operation rolls back
+    // - OCC check on old record via expectedVersion
+    // - No orphaned records on failure
+    return this._store.supersede(
       supersededRecord,
+      newRecord,
       authenticatedOwnerId,
       expectedVersion,
-    );
-
-    return persistedNew;
+    ) as Promise<DecisionMemory>;
   }
 
   async reverseDecision(

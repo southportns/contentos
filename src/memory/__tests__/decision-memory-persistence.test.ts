@@ -611,6 +611,120 @@ describe('R1-R: Reversed Decision Retrieval (DB)', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// R2-A4: Transaction Rollback Integration Tests (Real DB)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('R2-A4: Supersede Atomicity (Real DB Transaction)', () => {
+  it('R2-A4: successful supersede persists both records atomically', async () => {
+    const oldDecision = createDecisionMemory({
+      decision: 'Original strategy v1',
+      ownerId: 'user_r2a4',
+      projectId: 'proj_r2a4',
+      decisionStatus: 'active',
+    });
+    const savedOld = await store.create(oldDecision);
+    // Old decision: version=1, status=active
+
+    const newDecision = createDecisionMemory({
+      decision: 'Refined strategy v2',
+      ownerId: 'user_r2a4',
+      projectId: 'proj_r2a4',
+      decisionStatus: 'active',
+    });
+
+    const result = await service.supersedeDecision(
+      oldDecision.id,
+      newDecision,
+      'user_r2a4',
+      savedOld.version,
+    );
+
+    // Atomic success: BOTH records must exist with correct state
+    const oldInDb = await store.getById(oldDecision.id, 'user_r2a4');
+    expect(oldInDb).not.toBeNull();
+    expect(oldInDb!.payload.decisionStatus).toBe('superseded');
+    expect(oldInDb!.status).toBe('superseded'); // DB status also superseded
+
+    const newInDb = await store.getById(result.id, 'user_r2a4');
+    expect(newInDb).not.toBeNull();
+    expect(newInDb!.payload.decision).toBe('Refined strategy v2');
+    expect(newInDb!.payload.supersedes).toBe(oldDecision.id);
+  });
+
+  it('R2-B1: stale version leaves no dirty data in DB (OCC real)', async () => {
+    const oldDecision = createDecisionMemory({
+      decision: 'Strategy for OCC test',
+      ownerId: 'user_r2b1',
+      decisionStatus: 'active',
+    });
+    await store.create(oldDecision); // version=1
+
+    const newDecision = createDecisionMemory({
+      decision: 'New strategy',
+      ownerId: 'user_r2b1',
+      decisionStatus: 'active',
+    });
+
+    // Use stale version — must fail
+    await expect(
+      service.supersedeDecision(oldDecision.id, newDecision, 'user_r2b1', 99),
+    ).rejects.toThrow();
+
+    // Verify old unchanged
+    const oldAfter = await store.getById(oldDecision.id, 'user_r2b1');
+    expect(oldAfter).not.toBeNull();
+    expect(oldAfter!.payload.decisionStatus).toBe('active');
+    expect(oldAfter!.version).toBe(1);
+
+    // Verify new was NEVER persisted (clean rollback)
+    const newInDb = await store.getById(newDecision.id, 'user_r2b1');
+    expect(newInDb).toBeNull();
+
+    // Verify total count for this owner is exactly 1 (only old exists)
+    const count = await store.count('user_r2b1');
+    expect(count).toBe(1);
+  });
+
+  it('R2-B2: supersede transaction linkage verified in DB', async () => {
+    const oldDecision = createDecisionMemory({
+      decision: 'Parent decision',
+      ownerId: 'user_r2b2',
+      decisionStatus: 'active',
+    });
+    const savedOld = await store.create(oldDecision);
+
+    const newDecision = createDecisionMemory({
+      decision: 'Child decision (supersedes parent)',
+      ownerId: 'user_r2b2',
+      decisionStatus: 'active',
+    });
+
+    const result = await service.supersedeDecision(
+      oldDecision.id,
+      newDecision,
+      'user_r2b2',
+      savedOld.version,
+    );
+
+    // Both records must exist
+    const allRecords = await store.count('user_r2b2');
+    expect(allRecords).toBe(2);
+
+    // Verify the supersedes linkage is persisted with correct value
+    const newInDb = await store.getById(result.id, 'user_r2b2');
+    expect(newInDb!.payload.supersedes).toBe(oldDecision.id);
+
+    // Verify old decision's supersedes field is NOT set (it's the root)
+    const oldInDb = await store.getById(oldDecision.id, 'user_r2b2');
+    expect(oldInDb!.payload.supersedes).toBeUndefined();
+
+    // Verify status separation: old=superseded, new=active
+    expect(oldInDb!.status).toBe('superseded');
+    expect(newInDb!.status).toBe('active'); // mapped from decisionStatus='active' → MemoryStatus='active'
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Full E2E Pipeline Test
 // ═══════════════════════════════════════════════════════════════════════════════
 

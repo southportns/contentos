@@ -126,6 +126,61 @@ class MockMemoryStore implements MemoryStore {
     return results;
   }
 
+  /**
+   * Atomic supersede operation with rollback support.
+   *
+   * Since this is a mock implementation, we simulate transaction behavior:
+   * 1. Validate OCC on old record
+   * 2. Create new record
+   * 3. Update old record to superseded
+   *
+   * If step 3 fails, we delete the new record to simulate rollback.
+   */
+  async supersede(
+    oldRecord: MemoryRecord,
+    newRecord: MemoryRecord,
+    authenticatedOwnerId: string,
+    expectedVersion: number,
+  ): Promise<MemoryRecord> {
+    // Step 0: Validation
+    if (!authenticatedOwnerId || typeof authenticatedOwnerId !== 'string') {
+      throw new MemoryAuthorizationError(oldRecord.id);
+    }
+
+    if (oldRecord.ownerId !== authenticatedOwnerId) {
+      throw new MemoryAuthorizationError(oldRecord.id);
+    }
+
+    // Step 1: OCC check on old record
+    const currentOld = this._records.get(oldRecord.id);
+    if (!currentOld || currentOld.ownerId !== authenticatedOwnerId) {
+      throw new MemoryNotFoundError(oldRecord.id);
+    }
+
+    if (currentOld.version !== expectedVersion) {
+      throw new MemoryConcurrencyError(
+        oldRecord.id,
+        expectedVersion,
+        currentOld.version,
+      );
+    }
+
+    // Step 2: Create new record
+    this._records.set(newRecord.id, { ...newRecord });
+
+    try {
+      // Step 3: Update old record to superseded
+      const newVersion = expectedVersion + 1;
+      this._records.set(oldRecord.id, { ...oldRecord, version: newVersion });
+
+      return { ...newRecord };
+    } catch (error) {
+      // Rollback: delete new record on failure
+      this._records.delete(newRecord.id);
+      throw error;
+    }
+  }
+
   clear(): void {
     this._records.clear();
   }
@@ -352,13 +407,12 @@ describe('F. Supersede', () => {
     store['_records'].set(oldDecision.id, { ...oldDecision, version: 2 });
   });
 
-  it('F1: supersede old active decision', async () => {
+  it('F1: supersede old active decision → old becomes superseded, returns new', async () => {
     const service = new DecisionMemoryServiceImpl(store);
     const newDecision = createDecisionMemory(makeOptions({
       decision: 'New decision',
-      decisionStatus: 'active',
+      decisionStatus: 'proposed',
     }));
-    await store.create(newDecision);
 
     const current = await store.getById(oldDecision.id, 'user_A');
     if (current) {
@@ -375,7 +429,13 @@ describe('F. Supersede', () => {
       2,
     );
 
-    expect(result.payload.decisionStatus).toBe('superseded');
+    // Result is the NEW decision (supersedes link set)
+    expect(result.payload.supersedes).toBe(oldDecision.id);
+
+    // Old decision should now be superseded in store
+    const oldAfter = await store.getById(oldDecision.id, 'user_A');
+    expect(oldAfter).not.toBeNull();
+    expect(oldAfter!.payload.decisionStatus).toBe('superseded');
   });
 
   it('F2: supersede non-active decision throws', async () => {
@@ -762,6 +822,202 @@ describe('O. No physical deletion', () => {
     const stillExists = await store.getById(decision.id, 'user_A');
     expect(stillExists).not.toBeNull();
     expect(stillExists!.payload.decisionStatus).toBe('reversed');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// R2. Supersede Atomicity Closure (P0.6.3.3-R2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Specialized MockMemoryStore for R2-A2: simulates old record update failure
+ * AFTER new record is created. Verifies atomic rollback of new record.
+ */
+class FailingOldUpdateStore extends MockMemoryStore {
+  async supersede(
+    oldRecord: MemoryRecord,
+    newRecord: MemoryRecord,
+    authenticatedOwnerId: string,
+    expectedVersion: number,
+  ): Promise<MemoryRecord> {
+    // Step 0: Validation
+    if (!authenticatedOwnerId || typeof authenticatedOwnerId !== 'string') {
+      throw new MemoryAuthorizationError(oldRecord.id);
+    }
+
+    if (oldRecord.ownerId !== authenticatedOwnerId) {
+      throw new MemoryAuthorizationError(oldRecord.id);
+    }
+
+    // Step 1: OCC check on old record
+    const currentOld = this._records.get(oldRecord.id);
+    if (!currentOld || currentOld.ownerId !== authenticatedOwnerId) {
+      throw new MemoryNotFoundError(oldRecord.id);
+    }
+
+    if (currentOld.version !== expectedVersion) {
+      throw new MemoryConcurrencyError(
+        oldRecord.id,
+        expectedVersion,
+        currentOld.version,
+      );
+    }
+
+    // Step 2: Create new record (succeeds)
+    this._records.set(newRecord.id, { ...newRecord });
+
+    // Step 3: FAIL — simulate old record update failure (e.g., version changed
+    // between check and update, or DB constraint violation)
+    try {
+      throw new MemoryConcurrencyError(
+        oldRecord.id,
+        expectedVersion,
+        expectedVersion + 99, // Simulate concurrent modification
+      );
+    } catch (error) {
+      // Rollback: delete new record on failure
+      this._records.delete(newRecord.id);
+      throw error;
+    }
+  }
+}
+
+describe('R2. Supersede Atomicity Closure', () => {
+  it('R2-A1: stale expectedVersion → no newDecision, old unchanged', async () => {
+    const store = new MockMemoryStore();
+    const oldDecision = createDecisionMemory(makeOptions({
+      decisionStatus: 'active',
+      decision: 'Old alive decision',
+    }));
+    // Store with version=2 (simulating it was activated)
+    store['_records'].set(oldDecision.id, { ...oldDecision, version: 2 });
+
+    const newDecision = createDecisionMemory(makeOptions({
+      decision: 'Should never persist',
+      decisionStatus: 'active',
+    }));
+
+    // Also persist the new decision so we can verify it's NOT superseded anyway
+    await store.create(newDecision);
+
+    const service = new DecisionMemoryServiceImpl(store);
+
+    // Use stale version (1 instead of current 2) — must reject
+    await expect(
+      service.supersedeDecision(oldDecision.id, newDecision, 'user_A', 1)
+    ).rejects.toThrow(MemoryConcurrencyError);
+
+    // Verify OLD decision unchanged (still active, version=2)
+    const oldAfter = await store.getById(oldDecision.id, 'user_A');
+    expect(oldAfter).not.toBeNull();
+    expect(oldAfter!.version).toBe(2);
+    expect(oldAfter!.payload.decisionStatus).toBe('active');
+
+    // Verify NEW decision was NOT linked (supersedes not set)
+    const newAfter = await store.getById(newDecision.id, 'user_A');
+    expect(newAfter).not.toBeNull();
+    expect(newAfter!.payload.supersedes).toBeUndefined();
+  });
+
+  it('R2-A2: old update fails mid-supersede → new record rolled back', async () => {
+    const store = new FailingOldUpdateStore();
+    const oldDecision = createDecisionMemory(makeOptions({
+      decisionStatus: 'active',
+      decision: 'Decision for rollback test',
+    }));
+    store['_records'].set(oldDecision.id, { ...oldDecision, version: 2 });
+
+    const newDecision = createDecisionMemory(makeOptions({
+      decision: 'New decision (must be rolled back)',
+      decisionStatus: 'proposed',
+    }));
+
+    const service = new DecisionMemoryServiceImpl(store);
+
+    // Supersede should THROW because old update step fails
+    await expect(
+      service.supersedeDecision(oldDecision.id, newDecision, 'user_A', 2)
+    ).rejects.toThrow(MemoryConcurrencyError);
+
+    // CRITICAL: New record must NOT exist in store (atomic rollback)
+    const newInStore = await store.getById(newDecision.id, 'user_A');
+    expect(newInStore).toBeNull();
+
+    // OLD decision must remain unchanged (active, version=2)
+    const oldAfter = await store.getById(oldDecision.id, 'user_A');
+    expect(oldAfter).not.toBeNull();
+    expect(oldAfter!.version).toBe(2);
+    expect(oldAfter!.payload.decisionStatus).toBe('active');
+  });
+
+  it('R2-A3: successful supersede → old=superseded, new exists with supersedes=old.id', async () => {
+    const store = new MockMemoryStore();
+    const oldDecision = createDecisionMemory(makeOptions({
+      decisionStatus: 'active',
+      decision: 'Old decision to supersede',
+    }));
+    store['_records'].set(oldDecision.id, { ...oldDecision, version: 2 });
+
+    const newDecision = createDecisionMemory(makeOptions({
+      decision: 'Replacement decision',
+      decisionStatus: 'proposed',
+    }));
+
+    const service = new DecisionMemoryServiceImpl(store);
+
+    const result = await service.supersedeDecision(
+      oldDecision.id,
+      newDecision,
+      'user_A',
+      2,
+    );
+
+    // Old must be superseded
+    const oldAfter = await store.getById(oldDecision.id, 'user_A');
+    expect(oldAfter).not.toBeNull();
+    expect(oldAfter!.payload.decisionStatus).toBe('superseded');
+    expect(oldAfter!.version).toBe(3); // incremented
+
+    // New must exist
+    const newAfter = await store.getById(result.id, 'user_A');
+    expect(newAfter).not.toBeNull();
+    expect(newAfter!.type).toBe('decision');
+
+    // New must reference old
+    expect(result.payload.supersedes).toBe(oldDecision.id);
+  });
+
+  it('R2-A5: cross-owner supersede → old unchanged, new not persisted', async () => {
+    const store = new MockMemoryStore();
+    const oldDecision = createDecisionMemory(makeOptions({
+      ownerId: 'user_B',
+      decisionStatus: 'active',
+      decision: 'Decision owned by user_B',
+    }));
+    store['_records'].set(oldDecision.id, { ...oldDecision, version: 2 });
+
+    const newDecision = createDecisionMemory(makeOptions({
+      ownerId: 'user_A', // Different owner
+      decision: 'New decision by user_A',
+      decisionStatus: 'active',
+    }));
+
+    const service = new DecisionMemoryServiceImpl(store);
+
+    // user_A tries to supersede user_B's decision — must fail
+    await expect(
+      service.supersedeDecision(oldDecision.id, newDecision, 'user_A', 2)
+    ).rejects.toThrow(MemoryNotFoundError);
+
+    // OLD decision must remain unchanged
+    const oldAfter = await store.getById(oldDecision.id, 'user_B');
+    expect(oldAfter).not.toBeNull();
+    expect(oldAfter!.payload.decisionStatus).toBe('active');
+    expect(oldAfter!.version).toBe(2);
+
+    // NEW decision must NOT have been persisted (not in store)
+    const newInStore = await store.getById(newDecision.id, 'user_A');
+    expect(newInStore).toBeNull();
   });
 });
 
