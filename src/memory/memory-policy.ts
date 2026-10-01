@@ -1,4 +1,4 @@
-/**
+/*
  * P0.6.3.1 — Memory Policy
  *
  * Defines filtering/retrieval policies for Memory records.
@@ -46,6 +46,9 @@ export interface MemoryPolicy {
 
   /** Whether to include superseded memories. Default false. */
   includeSuperseded?: boolean;
+
+  /** Whether to include archived memories. Default false. */
+  includeArchived?: boolean;
 }
 
 /**

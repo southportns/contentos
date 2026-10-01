@@ -1,4 +1,4 @@
-/**
+/*
  * P0.6.3.3 — Decision Memory Retrieval
  *
  * Provides domain-specific retrieval helpers for Decision Memory.
@@ -82,6 +82,7 @@ export async function retrieveDecisionMemories(
       maxResults: limit,
       includeSuperseded: params.includeSuperseded,
       includeExpired: false,
+      includeArchived: params.includeReversed ?? false,
     },
   };
 
@@ -120,6 +121,7 @@ export async function getActiveDecisions(
       maxResults: limit,
       includeSuperseded: false,
       includeExpired: false,
+      includeArchived: false,
     },
   };
 
@@ -154,6 +156,7 @@ export async function getDecisionHistory(
       maxResults: limit,
       includeSuperseded: true,
       includeExpired: true,
+      includeArchived: true,
     },
   };
 

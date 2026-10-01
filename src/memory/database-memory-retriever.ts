@@ -1,4 +1,4 @@
-/**
+/*
  * P0.6.3.2.2 — Database Memory Retriever
  *
  * Queries persistent memory records from the database with full
@@ -197,7 +197,9 @@ export class DatabaseMemoryRetriever implements MemoryRetriever {
     if (policy.includeSuperseded) {
       statusFilter.push('superseded');
     }
-    // Note: 'archived' is NEVER included by default
+    if (policy.includeArchived) {
+      statusFilter.push('archived');
+    }
 
     // ─── Determine updatedAfter (age filtering) ───────────────────────────
 

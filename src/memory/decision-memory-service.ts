@@ -1,4 +1,4 @@
-/**
+/*
  * P0.6.3.3 — Decision Memory Service
  *
  * Provides Decision lifecycle operations: activate, supersede, reverse.
@@ -76,6 +76,14 @@ export interface DecisionMemoryService {
 
   /**
    * Supersede an existing active decision with a new one.
+   *
+   * This method:
+   * 1. Validates old decision (owner, type, active status, OCC version)
+   * 2. Validates new decision (type=decision, owner=authenticated caller)
+   * 3. Persists new decision with payload.supersedes = oldDecisionId
+   * 4. Marks old decision as superseded
+   *
+   * @return The persisted new DecisionMemory
    */
   supersedeDecision(
     oldDecisionId: string,
@@ -143,13 +151,14 @@ export class DecisionMemoryServiceImpl implements DecisionMemoryService {
     authenticatedOwnerId: string,
     expectedVersion: number,
   ): Promise<DecisionMemory> {
-    const record = await this._store.getById(oldDecisionId, authenticatedOwnerId);
+    // ─── Step 1: Fetch & validate old decision ─────────────────────────────
+    const oldRecord = await this._store.getById(oldDecisionId, authenticatedOwnerId);
 
-    if (!record) {
+    if (!oldRecord) {
       throw new MemoryNotFoundError(oldDecisionId);
     }
 
-    if (record.type !== DECISION_MEMORY_TYPE) {
+    if (oldRecord.type !== DECISION_MEMORY_TYPE) {
       throw new DecisionTransitionError(
         oldDecisionId,
         'unknown' as DecisionStatus,
@@ -157,33 +166,81 @@ export class DecisionMemoryServiceImpl implements DecisionMemoryService {
       );
     }
 
-    const payload = record.payload as DecisionMemoryPayload;
-    const currentStatus = payload.decisionStatus;
+    const oldPayload = oldRecord.payload as DecisionMemoryPayload;
+    const oldStatus = oldPayload.decisionStatus;
 
-    if (currentStatus !== 'active') {
-      throw new DecisionTransitionError(oldDecisionId, currentStatus, 'superseded');
+    if (oldStatus !== 'active') {
+      throw new DecisionTransitionError(oldDecisionId, oldStatus, 'superseded');
     }
 
-    const updatedPayload: DecisionMemoryPayload = {
-      ...payload,
+    // ─── Step 2: Validate new decision ──────────────────────────────────────
+    // Enforce type constraint.
+    if (newDecision.type !== DECISION_MEMORY_TYPE) {
+      throw new DecisionTransitionError(
+        newDecision.id,
+        'unknown' as DecisionStatus,
+        'active',
+      );
+    }
+
+    // Enforce owner boundary — new decision MUST belong to authenticated caller.
+    if (newDecision.ownerId !== authenticatedOwnerId) {
+      throw new MemoryNotFoundError(newDecision.id);
+    }
+
+    // ─── Step 3: Set supersedes relationship and persist new decision ───────
+    // Ensure the new decision correctly references the old decision.
+    const newPayload: DecisionMemoryPayload = {
+      ...newDecision.payload,
+      supersedes: oldDecisionId,
+    };
+
+    const newDecisionWithSupersedes: DecisionMemory = {
+      ...newDecision,
+      payload: newPayload,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Persist new decision: use update if already exists, create if new.
+    let persistedNew: DecisionMemory;
+    const existingNew = await this._store.getById(newDecision.id, authenticatedOwnerId);
+    if (existingNew) {
+      // newDecision already persisted — update with supersedes relationship
+      const updatedNew = await this._store.update(
+        newDecisionWithSupersedes,
+        authenticatedOwnerId,
+        existingNew.version,
+      );
+      persistedNew = updatedNew as DecisionMemory;
+    } else {
+      // newDecision not yet persisted — create
+      const created = await this._store.create(newDecisionWithSupersedes);
+      persistedNew = created as DecisionMemory;
+    }
+
+    // ─── Step 4: Mark old decision as superseded ───────────────────────────
+    // Only executed AFTER new decision is persisted. If this fails, the new
+    // decision is already safely stored with the supersedes link.
+    const supersededPayload: DecisionMemoryPayload = {
+      ...oldPayload,
       decisionStatus: 'superseded',
       supersedes: undefined,
     };
 
-    const updatedRecord: DecisionMemory = {
-      ...record,
-      payload: updatedPayload,
+    const supersededRecord: DecisionMemory = {
+      ...oldRecord,
+      payload: supersededPayload,
       status: decisionStatusToMemoryStatus('superseded'),
       updatedAt: new Date().toISOString(),
     };
 
-    const result = await this._store.update(
-      updatedRecord,
+    await this._store.update(
+      supersededRecord,
       authenticatedOwnerId,
       expectedVersion,
     );
 
-    return result as DecisionMemory;
+    return persistedNew;
   }
 
   async reverseDecision(
