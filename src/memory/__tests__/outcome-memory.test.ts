@@ -1008,3 +1008,275 @@ describe('isOutcomeMemory type guard', () => {
     expect(isOutcomeMemory(record)).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.6.5.1-R1 — Retrieval Hardening Tests (InMemory)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('P0.6.5.1-R1 — Retrieval Hardening (InMemory Unit)', () => {
+  // ─── R1-T1u: InMemory type filtering ────────────────────────────────
+  describe('R1-T1u: InMemory type filtering', () => {
+    it('should only return outcome type when mixed types exist in InMemoryRetriever', async () => {
+      const outcome = createOutcomeMemory({
+        id: 'r1_u_t1_outcome',
+        outcomeType: 'engagement',
+        targetType: 'content',
+        targetId: 'target_u_t1',
+        observedAt: '2026-10-01T00:00:00.000Z',
+        ownerId: 'user_u_t1',
+        projectId: 'proj_u_t1',
+      });
+
+      // Manually create a non-outcome record
+      const decisionRecord: MemoryRecord = {
+        id: 'r1_u_t1_decision',
+        kind: 'semantic',
+        type: 'decision',
+        payload: { title: 'Test' },
+        scope: 'global',
+        ownerId: 'user_u_t1',
+        source: 'test',
+        sourceType: 'test',
+        confidence: 0.8,
+        importance: 0.7,
+        createdAt: '2026-10-01T00:00:00.000Z',
+        updatedAt: '2026-10-01T00:00:00.000Z',
+        accessCount: 0,
+        version: 1,
+        status: 'active',
+      };
+
+      const profileRecord: MemoryRecord = {
+        id: 'r1_u_t1_profile',
+        kind: 'static',
+        type: 'writing_profile',
+        payload: { tone: 'casual' },
+        scope: 'global',
+        ownerId: 'user_u_t1',
+        source: 'test',
+        sourceType: 'test',
+        confidence: 0.9,
+        importance: 0.5,
+        createdAt: '2026-10-01T00:00:00.000Z',
+        updatedAt: '2026-10-01T00:00:00.000Z',
+        accessCount: 0,
+        version: 1,
+        status: 'active',
+      };
+
+      // Use MockMemoryStore to add records, then retrieve via DatabaseMemoryRetriever
+      const mockStore = new InMemoryRetriever([outcome, decisionRecord, profileRecord]);
+
+      const results = await retrieveOutcomeMemories(mockStore, {
+        ownerId: 'user_u_t1',
+        projectId: 'proj_u_t1',
+      });
+
+      // Only outcome should be returned
+      expect(results).toHaveLength(1);
+      expect(results[0].id).toBe('r1_u_t1_outcome');
+      expect(results[0].type).toBe('outcome');
+    });
+  });
+
+  // ─── R1-T2u: Mixed memory volume (InMemory) ─────────────────────────
+  describe('R1-T2u: mixed memory volume completeness', () => {
+    it('should return exactly 10 outcomes from a pool of 100+ mixed records (InMemory)', async () => {
+      const records: MemoryRecord[] = [];
+
+      // 80 regular records
+      for (let i = 0; i < 80; i++) {
+        records.push({
+          id: `r1_u_t2_regular_${i}`,
+          kind: 'static',
+          type: 'writing_profile',
+          payload: { idx: i },
+          scope: 'global',
+          ownerId: 'user_u_t2',
+          source: 'test',
+          sourceType: 'test',
+          confidence: 0.8,
+          importance: 0.9,
+          createdAt: '2026-10-01T00:00:00.000Z',
+          updatedAt: '2026-10-01T00:00:00.000Z',
+          accessCount: 0,
+          version: 1,
+          status: 'active',
+        });
+      }
+
+      // 20 outcome records
+      for (let i = 0; i < 20; i++) {
+        records.push(
+          createOutcomeMemory({
+            id: `r1_u_t2_outcome_${i}`,
+            outcomeType: 'performance',
+            targetType: 'content',
+            targetId: 'target_u_t2',
+            observedAt: new Date(Date.UTC(2026, 9, 1, 0, 0, i)).toISOString(),
+            ownerId: 'user_u_t2',
+            projectId: 'proj_u_t2',
+          })
+        );
+      }
+
+      const retriever = new InMemoryRetriever(records);
+
+      const results = await retrieveOutcomeMemories(retriever, {
+        ownerId: 'user_u_t2',
+        projectId: 'proj_u_t2',
+        limit: 10,
+      });
+
+      expect(results).toHaveLength(10);
+      expect(results.every(r => r.type === 'outcome')).toBe(true);
+      expect(results.every(r => r.id.startsWith('r1_u_t2_outcome_'))).toBe(true);
+    });
+  });
+
+  // ─── R1-T3u: History bounded but complete within window ──────────────
+  describe('R1-T3u: history bounded window', () => {
+    it('should return exactly the requested limit when fewer exist', async () => {
+      const records: MemoryRecord[] = [];
+
+      for (let i = 0; i < 50; i++) {
+        records.push(
+          createOutcomeMemory({
+            id: `r1_u_t3_out_${i}`,
+            outcomeType: 'engagement',
+            targetType: 'content',
+            targetId: 'target_u_t3',
+            observedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+            ownerId: 'user_u_t3',
+            projectId: 'proj_u_t3',
+          })
+        );
+      }
+
+      const retriever = new InMemoryRetriever(records);
+
+      const history = await getOutcomeHistory(retriever, {
+        ownerId: 'user_u_t3',
+        projectId: 'proj_u_t3',
+        targetType: 'content',
+        targetId: 'target_u_t3',
+        limit: 100, // ask for more than exist
+      });
+
+      expect(history).toHaveLength(50);
+    });
+  });
+
+  // ─── R1-T4u: Latest outcome within high bounded window ───────────────
+  describe('R1-T4u: latest outcome correctness (bounded window)', () => {
+    it('should find latest when within window', async () => {
+      const records: MemoryRecord[] = [];
+
+      for (let i = 0; i < 120; i++) {
+        records.push(
+          createOutcomeMemory({
+            id: `r1_u_t4_out_${i}`,
+            outcomeType: 'engagement',
+            targetType: 'content',
+            targetId: 'target_u_t4',
+            observedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+            ownerId: 'user_u_t4',
+            projectId: 'proj_u_t4',
+          })
+        );
+      }
+
+      const retriever = new InMemoryRetriever(records);
+
+      const latest = await getLatestOutcome(retriever, {
+        ownerId: 'user_u_t4',
+        projectId: 'proj_u_t4',
+        targetType: 'content',
+        targetId: 'target_u_t4',
+        limit: 200,
+      });
+
+      expect(latest).not.toBeNull();
+      expect(latest!.id).toBe('r1_u_t4_out_119');
+    });
+  });
+
+  // ─── R1-T5u: Limit clamp test ────────────────────────────────────────
+  describe('R1-T5u: limit clamp to safe maximum', () => {
+    it('should clamp limit to MAX_OUTCOME_HISTORY_LIMIT (500)', async () => {
+      const records: MemoryRecord[] = [];
+
+      for (let i = 0; i < 5; i++) {
+        records.push(
+          createOutcomeMemory({
+            id: `r1_u_t5_out_${i}`,
+            outcomeType: 'performance',
+            targetType: 'content',
+            targetId: 'target_u_t5',
+            observedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+            ownerId: 'user_u_t5',
+            projectId: 'proj_u_t5',
+          })
+        );
+      }
+
+      const retriever = new InMemoryRetriever(records);
+
+      // Request limit beyond max — verify clamp works
+      const results = await retrieveOutcomeMemories(retriever, {
+        ownerId: 'user_u_t5',
+        projectId: 'proj_u_t5',
+        limit: 9999,
+      });
+
+      // Should not fail and should return all 5 outcomes (within clamped limit)
+      expect(results).toHaveLength(5);
+    });
+  });
+
+  // ─── R1-T6u: History observedAt DESC sorting ─────────────────────────
+  describe('R1-T6u: history sort order (observedAt DESC)', () => {
+    it('should return history sorted by observedAt DESC regardless of storage order', async () => {
+      const records: MemoryRecord[] = [];
+
+      // Insert out of order
+      const timestamps = [
+        '2026-06-01T00:00:00.000Z',
+        '2026-12-01T00:00:00.000Z',
+        '2026-03-01T00:00:00.000Z',
+        '2026-09-01T00:00:00.000Z',
+        '2026-01-01T00:00:00.000Z',
+      ];
+
+      for (let i = 0; i < timestamps.length; i++) {
+        records.push(
+          createOutcomeMemory({
+            id: `r1_u_t6_out_${i}`,
+            outcomeType: 'engagement',
+            targetType: 'content',
+            targetId: 'target_u_t6',
+            observedAt: timestamps[i],
+            ownerId: 'user_u_t6',
+            projectId: 'proj_u_t6',
+          })
+        );
+      }
+
+      const retriever = new InMemoryRetriever(records);
+
+      const history = await getOutcomeHistory(retriever, {
+        ownerId: 'user_u_t6',
+        projectId: 'proj_u_t6',
+        targetType: 'content',
+        targetId: 'target_u_t6',
+      });
+
+      expect(history).toHaveLength(5);
+      expect(history[0].id).toBe('r1_u_t6_out_1'); // Dec
+      expect(history[1].id).toBe('r1_u_t6_out_3'); // Sep
+      expect(history[2].id).toBe('r1_u_t6_out_0'); // Jun
+      expect(history[3].id).toBe('r1_u_t6_out_2'); // Mar
+      expect(history[4].id).toBe('r1_u_t6_out_4'); // Jan
+    });
+  });
+});

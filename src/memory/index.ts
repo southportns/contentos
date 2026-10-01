@@ -201,13 +201,14 @@ export {
 export type { CreateOutcomeMemoryOptions } from './outcome-memory-factory';
 export { createOutcomeMemory } from './outcome-memory-factory';
 
-// ─── Outcome Memory Retrieval (P0.6.5.1) ────────────────────────────────────
+// ─── Outcome Memory Retrieval (P0.6.5.1, R1) ─────────────────────────────────
 
 export type { OutcomeRetrievalParams } from './outcome-memory-retrieval';
 export {
   retrieveOutcomeMemories,
   getOutcomeHistory,
   getLatestOutcome,
+  MAX_OUTCOME_HISTORY_LIMIT,
 } from './outcome-memory-retrieval';
 
 // ─── Outcome Memory → Context Bridge (P0.6.5.1) ─────────────────────────────

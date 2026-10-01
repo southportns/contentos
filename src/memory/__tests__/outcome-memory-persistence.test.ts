@@ -627,4 +627,308 @@ describe('P0.6.5.1 — Outcome Memory Persistence (DB Integration)', () => {
       expect(metrics.find(m => m.key === 'ctr')?.value).toBe(5.5);
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // P0.6.5.1-R1 — Retrieval Hardening Tests
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('P0.6.5.1-R1 — Retrieval Hardening (DB)', () => {
+
+    // ─── R1-T1: DB-level Type Filtering ──────────────────────────────────
+    describe('R1-T1: DB-level type filtering', () => {
+      it('should return only outcome when mixed types exist (outcome + decision + profile)', async () => {
+        const owner = 'user_r1_t1';
+        const proj = 'proj_r1_t1';
+
+        // Create different memory types for the same owner/project
+        const outcome = createOutcomeMemory({
+          id: 'r1_t1_outcome',
+          outcomeType: 'engagement',
+          targetType: 'content',
+          targetId: 'target_r1_t1',
+          observedAt: '2026-10-01T00:00:00.000Z',
+          ownerId: owner,
+          projectId: proj,
+        });
+
+        // Create decision memory with type='decision'
+        const decisionRecord = {
+          id: 'r1_t1_decision',
+          kind: 'semantic' as const,
+          type: 'decision' as const,
+          payload: { title: 'Test decision' },
+          scope: 'project' as const,
+          ownerId: owner,
+          projectId: proj,
+          topicId: null,
+          source: 'test',
+          sourceType: 'integration_test',
+          derivedFrom: undefined,
+          confidence: 0.8,
+          importance: 0.7,
+          createdAt: '2026-10-01T00:00:00.000Z',
+          updatedAt: '2026-10-01T00:00:00.000Z',
+          lastAccessedAt: null,
+          accessCount: 0,
+          expiresAt: null,
+          version: 1,
+          status: 'active' as const,
+        };
+
+        // Create a writing-profile-like memory (writing_profile type)
+        const profileRecord = {
+          id: 'r1_t1_profile',
+          kind: 'static' as const,
+          type: 'writing_profile' as const,
+          payload: { tone: 'formal' },
+          scope: 'global' as const,
+          ownerId: owner,
+          projectId: null,
+          topicId: null,
+          source: 'test',
+          sourceType: 'integration_test',
+          derivedFrom: undefined,
+          confidence: 0.9,
+          importance: 0.5,
+          createdAt: '2026-10-01T00:00:00.000Z',
+          updatedAt: '2026-10-01T00:00:00.000Z',
+          lastAccessedAt: null,
+          accessCount: 0,
+          expiresAt: null,
+          version: 1,
+          status: 'active' as const,
+        };
+
+        await store.create(outcome);
+        await store.create(decisionRecord);
+        await store.create(profileRecord);
+
+        // Retrieve outcomes — should only return outcome type
+        const results = await retrieveOutcomeMemories(retriever, {
+          ownerId: owner,
+          projectId: proj,
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0].id).toBe('r1_t1_outcome');
+        expect(results[0].type).toBe('outcome');
+
+        // Decision and profile must NOT appear
+        expect(results.find(r => r.id === 'r1_t1_decision')).toBeUndefined();
+        expect(results.find(r => r.id === 'r1_t1_profile')).toBeUndefined();
+      });
+    });
+
+    // ─── R1-T2: Mixed Memory Volume ──────────────────────────────────────
+    describe('R1-T2: mixed memory volume (80 regular + 20 outcome)', () => {
+      it('should return exactly 10 outcomes from a pool of 100+ mixed records', async () => {
+        const owner = 'user_r1_t2';
+        const proj = 'proj_r1_t2';
+
+        // Create 80 regular (non-outcome) memories
+        for (let i = 0; i < 80; i++) {
+          const regularRecord = {
+            id: `r1_t2_regular_${i}`,
+            kind: 'static' as const,
+            type: 'writing_profile' as const,
+            payload: { index: i },
+            scope: 'global' as const,
+            ownerId: owner,
+            projectId: null,
+            topicId: null,
+            source: 'test',
+            sourceType: 'integration_test',
+            derivedFrom: undefined,
+            confidence: 0.8,
+            importance: 0.5,
+            createdAt: '2026-10-01T00:00:00.000Z',
+            updatedAt: '2026-10-01T00:00:00.000Z',
+            lastAccessedAt: null,
+            accessCount: 0,
+            expiresAt: null,
+            version: 1,
+            status: 'active' as const,
+          };
+          await store.create(regularRecord);
+        }
+
+        // Create 20 outcome memories (same owner/project)
+        for (let i = 0; i < 20; i++) {
+          const outcome = createOutcomeMemory({
+            id: `r1_t2_outcome_${i}`,
+            outcomeType: 'performance',
+            targetType: 'content',
+            targetId: 'target_r1_t2',
+            observedAt: new Date(Date.UTC(2026, 9, 1, 0, 0, i)).toISOString(),
+            ownerId: owner,
+            projectId: proj,
+          });
+          await store.create(outcome);
+        }
+
+        // Request limit=10 outcomes
+        const results = await retrieveOutcomeMemories(retriever, {
+          ownerId: owner,
+          projectId: proj,
+          limit: 10,
+        });
+
+        // MUST return exactly 10 outcomes — not less due to regular memory filling the slot
+        expect(results).toHaveLength(10);
+
+        // ALL results must be type=outcome
+        expect(results.every(r => r.type === 'outcome')).toBe(true);
+
+        // No regular memories in the result
+        expect(results.every(r => !r.id.startsWith('r1_t2_regular_'))).toBe(true);
+      });
+    });
+
+    // ─── R1-T3: History > 100 ────────────────────────────────────────────
+    describe('R1-T3: history > 100 (150 observations, limit=150)', () => {
+      it('should return 150 outcomes sorted by observedAt DESC when limit=150', async () => {
+        const owner = 'user_r1_t3';
+        const proj = 'proj_r1_t3';
+        const targetId = 'target_r1_t3';
+
+        // Create 150 outcome observations with sequential timestamps
+        for (let i = 0; i < 150; i++) {
+          const outcome = createOutcomeMemory({
+            id: `r1_t3_out_${i}`,
+            outcomeType: 'performance',
+            targetType: 'content',
+            targetId,
+            observedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+            ownerId: owner,
+            projectId: proj,
+          });
+          await store.create(outcome);
+        }
+
+        // Request with limit=150
+        const history = await getOutcomeHistory(retriever, {
+          ownerId: owner,
+          projectId: proj,
+          targetType: 'content',
+          targetId,
+          limit: 150,
+        });
+
+        // MUST return exactly 150
+        expect(history).toHaveLength(150);
+
+        // Sorted by observedAt DESC
+        for (let i = 0; i < history.length - 1; i++) {
+          const current = new Date(history[i].payload.observedAt).getTime();
+          const next = new Date(history[i + 1].payload.observedAt).getTime();
+          expect(current).toBeGreaterThanOrEqual(next);
+        }
+
+        // MostRecent (i=149) should be first
+        expect(history[0].id).toBe('r1_t3_out_149');
+      });
+    });
+
+    // ─── R1-T4: Latest correctness with high bounded window ──────────────
+    describe('R1-T4: latest correctness within bounded window', () => {
+      it('should find the latest observation when within the bounded window (limit)', async () => {
+        const owner = 'user_r1_t4';
+        const proj = 'proj_r1_t4';
+        const targetId = 'target_r1_t4';
+
+        // Create 120 observations; the latest is at i=119 (latest timestamp)
+        for (let i = 0; i < 120; i++) {
+          const outcome = createOutcomeMemory({
+            id: `r1_t4_out_${i}`,
+            outcomeType: 'engagement',
+            targetType: 'content',
+            targetId,
+            observedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+            ownerId: owner,
+            projectId: proj,
+          });
+          await store.create(outcome);
+        }
+
+        // Request latest with explicit limit >= total observations
+        const latest = await getLatestOutcome(retriever, {
+          ownerId: owner,
+          projectId: proj,
+          targetType: 'content',
+          targetId,
+          limit: 200, // exceeds actual count but within MAX limit
+        });
+
+        expect(latest).not.toBeNull();
+        expect(latest!.id).toBe('r1_t4_out_119');
+      });
+
+      it('should respect MAX limit clamp (prevent unbounded query)', async () => {
+        const owner = 'user_r1_t4b';
+        const proj = 'proj_r1_t4b';
+        const targetId = 'target_r1_t4b';
+
+        // Create a few observations
+        for (let i = 0; i < 5; i++) {
+          const outcome = createOutcomeMemory({
+            id: `r1_t4b_out_${i}`,
+            outcomeType: 'performance',
+            targetType: 'content',
+            targetId,
+            observedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+            ownerId: owner,
+            projectId: proj,
+          });
+          await store.create(outcome);
+        }
+
+        // Request with limit beyond max — should clamp and still return latest
+        const latest = await getLatestOutcome(retriever, {
+          ownerId: owner,
+          projectId: proj,
+          targetType: 'content',
+          targetId,
+          limit: 5000, // Will be clamped to MAX_OUTCOME_HISTORY_LIMIT (500)
+        });
+
+        expect(latest).not.toBeNull();
+        expect(latest!.id).toBe('r1_t4b_out_4');
+      });
+    });
+
+    // ─── R1-T5: Isolation (no regression) ───────────────────────────────
+    describe('R1-T5: owner/topic/project isolation (regression)', () => {
+      it('should NOT leak outcomes across owners even with type filter', async () => {
+        const outcomeA = createOutcomeMemory({
+          id: 'r1_t5_a',
+          outcomeType: 'engagement',
+          targetType: 'content',
+          targetId: 'target_r1_t5_a',
+          observedAt: '2026-10-01T00:00:00.000Z',
+          ownerId: 'user_r1_t5_a',
+          projectId: 'proj_r1_t5',
+        });
+        const outcomeB = createOutcomeMemory({
+          id: 'r1_t5_b',
+          outcomeType: 'engagement',
+          targetType: 'content',
+          targetId: 'target_r1_t5_b',
+          observedAt: '2026-10-01T00:00:00.000Z',
+          ownerId: 'user_r1_t5_b',
+          projectId: 'proj_r1_t5',
+        });
+
+        await store.create(outcomeA);
+        await store.create(outcomeB);
+
+        const results = await retrieveOutcomeMemories(retriever, {
+          ownerId: 'user_r1_t5_a',
+          projectId: 'proj_r1_t5',
+        });
+
+        const ownerIds = results.map(r => r.ownerId);
+        expect(ownerIds.every(o => o === 'user_r1_t5_a')).toBe(true);
+      });
+    });
+  });
 });

@@ -284,6 +284,7 @@ export class PrismaMemoryStore implements MemoryStore {
    * - status (active/expired/superseded)
    * - confidence/importance thresholds
    * - kind inclusion/exclusion
+   * - type inclusion (types: type IN [...])
    * - updatedAfter (age filtering based on updatedAt)
    *
    * Sorting (deterministic):
@@ -557,6 +558,15 @@ export class PrismaMemoryStore implements MemoryStore {
         ...existingKindFilter,
         notIn: criteria.excludedKinds,
       };
+    }
+
+    // ─── Type filtering ───────────────────────────────────────────────────
+    if (criteria.types && criteria.types.length > 0) {
+      if (criteria.types.length === 1) {
+        conditions.type = criteria.types[0];
+      } else {
+        conditions.type = { in: criteria.types };
+      }
     }
 
     // ─── Age filtering (based on updatedAt for consistency) ───────────────

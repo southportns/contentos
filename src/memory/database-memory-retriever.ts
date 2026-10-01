@@ -239,6 +239,9 @@ export class DatabaseMemoryRetriever implements MemoryRetriever {
     if (policy.excludedKinds && policy.excludedKinds.length > 0) {
       criteria.excludedKinds = policy.excludedKinds;
     }
+    if (policy.types && policy.types.length > 0) {
+      criteria.types = policy.types;
+    }
     if (updatedAfter) {
       criteria.updatedAfter = updatedAfter;
     }

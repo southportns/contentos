@@ -38,6 +38,9 @@ export interface MemoryPolicy {
   /** These memory kinds will be excluded. */
   excludedKinds?: MemoryKind[];
 
+  /** Only these memory types will be included (e.g., ['outcome'], ['decision']). */
+  types?: string[];
+
   /** Only these scopes will be included. */
   allowedScopes?: MemoryScope[];
 

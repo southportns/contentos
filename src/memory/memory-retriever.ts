@@ -67,6 +67,7 @@ export interface MemoryRetriever {
  * Filters by:
  * - scope (global always included, project/topic must match)
  * - kind (allowed/excluded kinds)
+ * - type (e.g., 'outcome', 'decision')
  * - status (active by default, optional include expired/superseded)
  * - confidence (minimum threshold)
  * - importance (minimum threshold)
@@ -143,6 +144,11 @@ export class InMemoryRetriever implements MemoryRetriever {
     }
     if (policy.excludedKinds && policy.excludedKinds.length > 0) {
       results = results.filter((record) => !policy.excludedKinds!.includes(record.kind));
+    }
+
+    // 6b. Type filtering
+    if (policy.types && policy.types.length > 0) {
+      results = results.filter((record) => policy.types!.includes(record.type));
     }
 
     // 7. Allowed scopes

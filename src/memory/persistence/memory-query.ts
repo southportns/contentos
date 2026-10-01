@@ -92,6 +92,13 @@ export interface MemoryQueryCriteria {
   excludedKinds?: string[];
 
   /**
+   * Only return memories of these types.
+   * e.g., ['outcome'] returns only outcome memories.
+   * Pushed to SQL WHERE clause for database-level filtering.
+   */
+  types?: string[];
+
+  /**
    * Only return memories updated after this timestamp.
    * Used for incremental sync / freshness filtering.
    */
