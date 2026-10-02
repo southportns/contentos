@@ -29,6 +29,7 @@
  *   S22 Import: duplicate ID handled (no overwrite)
  *   S23 Import: partial failure result is explicit
  *   S24 Import: existing outcomes never overwritten
+ *   S25 Import: missing ownerId rejected
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -567,6 +568,26 @@ describe('OutcomeMemoryServiceImpl - Batch Import (S15-S24)', () => {
     // Original record unchanged
     const stored = await store.getById('existing-001', OWNER_A);
     expect(stored).not.toBeNull();
+  });
+
+  it('S25: missing ownerId rejected', async () => {
+    const service = new OutcomeMemoryServiceImpl(store);
+    const outcome = createPersistedOutcome(store, OWNER_A, { id: 'missing-owner-1' });
+
+    // Delete ownerId to simulate missing field
+    delete (outcome as { ownerId?: string }).ownerId;
+
+    const result = await service.importOutcomes([outcome], OWNER_A);
+
+    expect(result.total).toBe(1);
+    expect(result.imported).toBe(0);
+    expect(result.failed).toBe(1);
+    expect(result.results[0].success).toBe(false);
+    expect(result.results[0].error).toContain('ownerId');
+
+    // Verify NOTHING was written to the store
+    const storeCount = await store.count(OWNER_A);
+    expect(storeCount).toBe(0);
   });
 });
 

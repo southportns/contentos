@@ -267,8 +267,16 @@ export class OutcomeMemoryServiceImpl implements OutcomeMemoryService {
         continue;
       }
 
-      // Owner integrity check
-      if (outcome.ownerId && outcome.ownerId !== authenticatedOwnerId) {
+      // Owner integrity check — strict: must be present AND match
+      if (!outcome.ownerId) {
+        validationErrors.set(
+          i,
+          `OutcomeMemory import: ownerId is required`,
+        );
+        continue;
+      }
+
+      if (outcome.ownerId !== authenticatedOwnerId) {
         validationErrors.set(
           i,
           `OutcomeMemory import: ownerId mismatch — expected "${authenticatedOwnerId}", got "${outcome.ownerId}"`,
@@ -331,10 +339,9 @@ export class OutcomeMemoryServiceImpl implements OutcomeMemoryService {
       }
 
       try {
-        // Prepare record: ensure owner is authenticated caller
+        // Owner already validated — preserve original, do not rewrite
         const cleanOutcome: OutcomeMemory = {
           ...outcome,
-          ownerId: authenticatedOwnerId,
           status: outcome.status ?? 'active',
           version: outcome.version ?? 1,
         };

@@ -14,6 +14,7 @@
  * D10 batch import creates all valid records
  * D11 duplicate ID does not overwrite existing outcome
  * D12 partial batch failure is reported correctly
+ * D13 Import: missing ownerId rejected
  *
  * STRICT MODE: Database initialization failure causes explicit test FAIL.
  */
@@ -345,6 +346,32 @@ describe('P0.6.5.2 — Outcome Memory Service Persistence', () => {
       expect(result.results[0].success).toBe(true);
       expect(result.results[1].success).toBe(false);
       expect(result.results[1].error).toBeDefined();
+    });
+
+    it('D13: missing ownerId rejected — no record enters database', async () => {
+      const outcome = createOutcomeMemory({
+        id: 'd13-missing-owner',
+        outcomeType: 'engagement',
+        targetType: 'content',
+        targetId: 'd13-target',
+        observedAt: '2026-01-01T00:00:00Z',
+        ownerId: OWNER_A,
+      });
+
+      // Delete ownerId to simulate missing field
+      delete (outcome as { ownerId?: string }).ownerId;
+
+      const result = await service.importOutcomes([outcome], OWNER_A);
+
+      expect(result.total).toBe(1);
+      expect(result.imported).toBe(0);
+      expect(result.failed).toBe(1);
+      expect(result.results[0].success).toBe(false);
+      expect(result.results[0].error).toContain('ownerId');
+
+      // CRITICAL: Verify no record was written to the database
+      const stored = await store.getById('d13-missing-owner', OWNER_A);
+      expect(stored).toBeNull();
     });
   });
 });
