@@ -1,4 +1,4 @@
-/**
+/*
  * P0.6.5.3 — Outcome Alert Service Unit Tests
  */
 
@@ -353,5 +353,47 @@ describe('R: Rule Validation', () => {
       [{ id: 'r1', name: 'x', enabled: true, severity: 'warning', metricConditions: [{ metricKey: 'views', operator: 'bad', threshold: 1 }] } as unknown as OutcomeAlertRule],
       OWNER_ALICE,
     )).rejects.toThrow('operator');
+  });
+});
+
+describe('E: Error Message Interpolation', () => {
+  let store: MockOutcomeAlertStore;
+  let service: OutcomeAlertServiceImpl;
+  beforeEach(() => { store = new MockOutcomeAlertStore(); service = new OutcomeAlertServiceImpl(store); });
+
+  async function createAlertViaEvaluate(): Promise<OutcomeAlert> {
+    const outcome = createTestOutcome();
+    const rules = [createLowEngagementRule()];
+    const result = await service.evaluateOutcome(outcome, rules, OWNER_ALICE);
+    return result.results[0].alert!;
+  }
+
+  it('E1: OutcomeAlertTransitionError message contains real alertId, fromStatus, toStatus', async () => {
+    const alert = await createAlertViaEvaluate();
+    await service.resolveAlert(alert.id, OWNER_ALICE, 1);
+    try {
+      await service.acknowledgeAlert(alert.id, OWNER_ALICE, 2);
+      fail('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(OutcomeAlertTransitionError);
+      const message = (err as OutcomeAlertTransitionError).message;
+      expect(message).toContain(`cannot transition alert from \"resolved\" to \"acknowledged\" — id=\${alert.id}`);
+      expect(message).not.toContain('${fromStatus}');
+      expect(message).not.toContain('${toStatus}');
+      expect(message).not.toContain('${alertId}');
+    }
+  });
+
+  it('E2: OutcomeAlertOwnerError message contains real outcomeId', async () => {
+    const testOutcome = createTestOutcome({ id: 'test-outcome-123' });
+    try {
+      await service.evaluateOutcome(testOutcome, [createLowEngagementRule()], OWNER_BOB);
+      fail('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(OutcomeAlertOwnerError);
+      const message = (err as OutcomeAlertOwnerError).message;
+      expect(message).toContain(`outcome ownerId mismatch — outcome \"\${testOutcome.id}\" does not belong to the authenticated user`);
+      expect(message).not.toContain('${outcomeId}');
+    }
   });
 });

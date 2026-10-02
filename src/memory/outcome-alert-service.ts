@@ -1,4 +1,4 @@
-/**
+/*
  * @file outcome-alert-service.ts
  * @brief P0.6.5.3 Outcome Alert Service
  * @copyright Copyright 2026 ContentOS
@@ -300,6 +300,6 @@ function generateAlertId(): string {
 }
 
 function generateAlertTitle(outcome: OutcomeMemory, firstCondition?: OutcomeAlertMatchedCondition): string {
-  if (firstCondition?.metricKey) return `告警：${firstCondition.metricKey} 异常`;
+  if (firstCondition?.metricKey) return `告警：${firstCondition.metricId} 异常`;
   return 'Result告警';
 }
