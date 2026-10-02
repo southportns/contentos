@@ -43,8 +43,6 @@ model Project {
 }
 
 // ─── Persona ───────────────────────────────────────────
-// 用户自定义人设，影响内容策略和写作风格
-
 model Persona {
   id          String   @id @default(cuid())
   userId      String
@@ -73,7 +71,7 @@ model Topic {
   goal        String?
   tone        String?
   constraints String?
-  status      String   @default("DRAFT") // DRAFT | RESEARCHING | ANALYZING | ANGLE_SELECTION | STRATEGY | WRITING | EVALUATING | OPTIMIZING | READY | PUBLISHED | FEEDBACK
+  status      String   @default("DRAFT")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -91,7 +89,6 @@ model Topic {
   contentAdaptations   ContentAdaptation[]
   persona              Persona?  @relation(fields: [personaId], references: [id], onDelete: SetNull)
   personaId            String?
-  // P0.4.8 — Active Draft (current working version)
   activeDraftId        String?   @unique
   activeDraft          Draft?    @relation("TopicActiveDraft", fields: [activeDraftId], references: [id], onDelete: SetNull)
 
@@ -105,9 +102,9 @@ model Topic {
 model ResearchSession {
   id          String   @id @default(cuid())
   topicId     String
-  status      String   @default("pending") // pending | running | completed | failed
-  queries     Json?    // search queries array
-  result      Json?    // research result summary
+  status      String   @default("pending")
+  queries     Json?
+  result      Json?
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime @default(now())
@@ -125,7 +122,7 @@ model Content {
   id                String   @id @default(cuid())
   researchSessionId String?
   topicId           String
-  platform          String? // xiaohongshu | douyin | weibo | zhihu | wechat | web
+  platform          String?
   url               String?
   title             String?
   author            String?
@@ -137,9 +134,9 @@ model Content {
   favorites         Int?
   views             Int?
   engagementRate    Float?
-  keywords          Json?    // array of keywords (stored as JSON for SQLite)
-  emotions          Json?    // array of emotions (stored as JSON for SQLite)
-  contentStructure  Json? // content structure graph
+  keywords          Json?
+  emotions          Json?
+  contentStructure  Json?
   rawHtml           String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -154,30 +151,25 @@ model Content {
 }
 
 // ─── Content Library ───────────────────────────────────────
-// 内容库：独立于 Topic 的采集内容存储，用于对标改编和参考
 
 model ContentLibraryItem {
   id              String   @id @default(cuid())
   userId          String  @default("default")
-  platform        String  @default("web") // douyin | xiaohongshu | weibo | web
+  platform        String  @default("web")
   url             String
   title           String?
   content         String?
   author          String?
   cover           String?
   publishedAt     String?
-  // 互动指标
   likes           Int?
   commentsCount   Int?
   shares          Int?
   favorites       Int?
   views           Int?
-  // 口播文案（语音转文字）
-  transcript      Json?   // { text, language, duration, model }
-  // 采集的评论数据
-  collectedComments Json? // [{ text, nickname, diggCount, createTime }]
-  // 评论分析结果
-  commentAnalysis Json?   // { topComments, keywords, sentiment, summary }
+  transcript      Json?
+  collectedComments Json?
+  commentAnalysis Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -216,11 +208,11 @@ model ContentAnalysis {
   controversyScore Int?
   utilityScore     Int?
   reasoning        String?
-  contentStructure Json? // hook, problem, emotion, insight, story, conflict, resolution, cta
-  emotionCurve     Json?  // emotion progression
-  strengths       Json?    // array of strings (stored as JSON for SQLite)
-  weaknesses       Json?    // array of strings (stored as JSON for SQLite)
-  keyFactors       Json?    // array of strings (stored as JSON for SQLite)
+  contentStructure Json?
+  emotionCurve     Json?
+  strengths       Json?
+  weaknesses       Json?
+  keyFactors       Json?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -235,20 +227,20 @@ model ContentAnalysis {
 model AudienceInsight {
   id             String   @id @default(cuid())
   topicId        String
-  painPoints     Json?    // array of strings (stored as JSON for SQLite)
-  emotions       Json?    // array of strings (stored as JSON for SQLite)
-  questions      Json?    // array of strings (stored as JSON for SQLite)
-  opinions       Json?    // array of strings (stored as JSON for SQLite)
-  controversies  Json?    // array of strings (stored as JSON for SQLite)
-  stories        Json?    // array of strings (stored as JSON for SQLite)
-  desires        Json?    // array of strings (stored as JSON for SQLite)
-  fears          Json?    // array of strings (stored as JSON for SQLite)
-  needs          Json?    // array of strings (stored as JSON for SQLite)
-  behaviors      Json?    // array of strings (stored as JSON for SQLite)
-  preferences    Json?    // array of strings (stored as JSON for SQLite)
-  contentGaps   Json?    // array of strings (stored as JSON for SQLite)
-  demographics   Json?    // { primaryAgeRange, primaryGender, secondaryAgeRange, secondaryGender }
-  emotionDetails Json?    // [{ emotion, intensity, percentage }]
+  painPoints     Json?
+  emotions       Json?
+  questions      Json?
+  opinions       Json?
+  controversies  Json?
+  stories        Json?
+  desires        Json?
+  fears          Json?
+  needs          Json?
+  behaviors      Json?
+  preferences    Json?
+  contentGaps   Json?
+  demographics   Json?
+  emotionDetails Json?
   summary        String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -272,10 +264,10 @@ model Angle {
   shareabilityScore  Int?
   risk               String?
   supportingEvidence String?
-  keyPoints          Json?    // array of strings (stored as JSON for SQLite)
+  keyPoints          Json?
   audienceAppeal     String?
   estimatedViralScore Int?
-  status             String   @default("GENERATED") // GENERATED | WAITING_FOR_APPROVAL | APPROVED | REJECTED
+  status             String   @default("GENERATED")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -300,12 +292,11 @@ model ContentStrategy {
   turningPoint     String?
   endingStrategy   String?
   ctaStrategy      String?
-  keyArguments     Json?    // array of strings (stored as JSON for SQLite)
-  suggestedReferences Json? // array of strings (stored as JSON for SQLite)
+  keyArguments     Json?
+  suggestedReferences Json?
   tone             String?
   estimatedWordCount Int?
-  // P0.3.8.4.1 — Server-side Approval State (Source of Truth)
-  approvalStatus   String   @default("pending") // pending | approved | rejected
+  approvalStatus   String   @default("pending")
   rejectionReason  String?
   approvedAt       DateTime?
   rejectedAt       DateTime?
@@ -325,14 +316,12 @@ model Draft {
   topicId       String
   version       Int      @default(1)
   parentDraftId String?
-
   changeType    String   @default("INITIAL")
   changeReason  String?
-
   title         String?
   content       String
   outline       Json?
-  status        String   @default("DRAFT") // DRAFT | HUMANIZED | FINAL
+  status        String   @default("DRAFT")
   wordCount     Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -369,10 +358,10 @@ model Evaluation {
   emotionalImpactScore Int?
   logicalClarityScore  Int?
   overallScore      Int?
-  strengths         Json?    // array of strings (stored as JSON for SQLite)
-  issues            Json?    // array of strings (stored as JSON for SQLite)
-  suggestions       Json? // array of { section, issue, suggestion, priority }
-  emotionalArcAnalysis Json? // { achieved: boolean, analysis: string }
+  strengths         Json?
+  issues            Json?
+  suggestions       Json?
+  emotionalArcAnalysis Json?
   conclusion        String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -392,8 +381,8 @@ model Humanization {
   aiStyleScore    Int?
   humanizedScore   Int?
   adopted         Boolean  @default(false)
-  changes         Json?    // [{ original, revised, reason, type }]
-  issues          Json?    // [{ type, description, severity }]
+  changes         Json?
+  issues          Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -411,15 +400,15 @@ model StrategyEvaluation {
   topicId             String
   platform            String
   overallScore        Int?
-  grade               String?   // exceptional | strong | good | average | poor
-  scores             Json?     // Record<string, number>
+  grade               String?
+  scores             Json?
   platformFit         Int?
   strategyConsistency Int?
-  strengths           Json?    // array of strings (stored as JSON for SQLite)
-  weaknesses           Json?    // array of strings (stored as JSON for SQLite)
-  criticalIssues      Json?    // array of strings (stored as JSON for SQLite)
-  improvementPriorities Json?  // [{ priority, problem, reason, suggestion }]
-  shareAnalysis       Json?    // { motivation, target, context }
+  strengths           Json?
+  weaknesses           Json?
+  criticalIssues      Json?
+  improvementPriorities Json?
+  shareAnalysis       Json?
   aiStyleRisk         Int?
   authenticityScore   Int?
   evidenceQuality     Int?
@@ -435,31 +424,23 @@ model StrategyEvaluation {
 }
 
 // ─── Content Adaptation ───────────────────────────────
-// 对标内容改编：从 Explorer 发现的内容进行二次改编创作
 
 model ContentAdaptation {
   id              String   @id @default(cuid())
   topicId         String
-  // 对标内容信息
-  referencePlatform  String?  // douyin | xiaohongshu | weibo | ...
+  referencePlatform  String?
   referenceUrl      String?
   referenceTitle    String?
   referenceAuthor   String?
-  referenceContent  String?  // 原文文案/口播文本
-  referenceMetrics  Json?    // { likes, comments, shares, favorites, views }
-  // 用户想法
-  userIdea         String?  // 用户自身的想法和补充
-  // Persona
+  referenceContent  String?
+  referenceMetrics  Json?
+  userIdea         String?
   personaId        String?
-  // 对标内容拆解结果
-  referenceAnalysis Json?    // { hookType, contentStructure, emotionalArc, keyPoints, viralFactors, weaknesses }
-  // 改编角度
-  adaptedAngles    Json?     // [{ id, title, angle, reasoning, targetEmotion, keyPoints, whatChanged, estimatedViralScore }]
-  // 改编策略建议
-  strategySuggestion Json?   // { tone, structure, hookStrategy, ctaStrategy }
-  // 选中的改编角度
+  referenceAnalysis Json?
+  adaptedAngles    Json?
+  strategySuggestion Json?
   selectedAngleId  String?
-  status           String   @default("PENDING") // PENDING | ANALYZED | ANGLE_SELECTED | COMPLETED
+  status           String   @default("PENDING")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -478,8 +459,8 @@ model AgentRun {
   output      Json?
   model       String?
   tokens      Int?
-  latency     Int? // in milliseconds
-  status      String   @default("pending") // pending | running | completed | failed | timeout
+  latency     Int?
+  status      String   @default("pending")
   error       String?
   startedAt   DateTime?
   completedAt DateTime?
@@ -503,17 +484,16 @@ model Skill {
 }
 
 // ─── Inspiration ──────────────────────────────────────
-// 用户自行添加的灵感、思路、好内容记录
 
 model Inspiration {
   id        String   @id @default(cuid())
   userId    String
   title     String
   content   String
-  source    String   @default("manual") // manual | url | imported
+  source    String   @default("manual")
   sourceUrl String?
-  tags      Json?    // array of strings (stored as JSON for SQLite)
-  category  String?  // idea | reference | angle | structure | hook | other
+  tags      Json?
+  category  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -524,7 +504,6 @@ model Inspiration {
 }
 
 // ─── User Content Archive ─────────────────────────────
-// 记录用户每次用 Content OS 生成的最终稿及微调记录，用于风格蒸馏
 
 model UserContentArchive {
   id                  String   @id @default(cuid())
@@ -534,15 +513,15 @@ model UserContentArchive {
   finalTitle          String
   finalContent        String
   finalHook           String?
-  refineChanges       Json?    // 微调变更记录 [{ type, original, revised, reason }]
-  refineData          Json?    // P0.3.9.5: 完整 Refine 信息
-  humanizationData    Json?    // P0.3.9.5: Humanization 结果
-  humanizationAdopted Boolean? // P0.3.9.5: 是否采用真人化
-  resolvedIssues      Json?    // P0.3.9.5: 已解决问题
-  unresolvedIssues    Json?    // P0.3.9.5: 未解决问题
-  preservedElements   Json?    // P0.3.9.5: 保留元素
-  draftVersion        Int?     // P0.3.9.5: 最终保存的 Draft 版本
-  refineVersion       Int?     // P0.3.9.5: Refine 版本（如果有）
+  refineChanges       Json?
+  refineData          Json?
+  humanizationData    Json?
+  humanizationAdopted Boolean?
+  resolvedIssues      Json?
+  unresolvedIssues    Json?
+  preservedElements   Json?
+  draftVersion        Int?
+  refineVersion       Int?
   selectedAngleTitle  String?
   strategyTone        String?
   wordCount           Int?
@@ -555,9 +534,6 @@ model UserContentArchive {
 }
 
 // ─── Memory Record ────────────────────────────────────
-// P0.6.3.2.1 — Persistent Memory Store
-// 领域模型: src/memory/memory-record.ts (MemoryRecord)
-// 注意: ownerId 必须 NOT NULL — 持久化 Memory 必须属于明确用户
 
 model MemoryRecord {
   id             String   @id
@@ -598,20 +574,55 @@ model MemoryRecord {
   @@index([ownerId, topicId])
 }
 
+// ─── Outcome Alert ────────────────────────────────────
+// P0.6.5.3 — Outcome Alert Store
+// 領域模型: src/memory/outcome-alert.ts (OutcomeAlert)
+// Note: Alert inherits scope (ownerId, projectId, topicId) from Outcome.
+//       Fingerprint provides deterministic dedup (ruleId:outcomeId).
+
+model OutcomeAlert {
+  id                String   @id
+  ruleId            String
+  outcomeId         String
+  ownerId           String
+  projectId         String?
+  topicId           String?
+  severity          String
+  status            String   @default("open")
+  title             String
+  message           String
+  matchedConditions Json?
+  triggeredAt       DateTime
+  acknowledgedAt    DateTime?
+  resolvedAt        DateTime?
+  suppressedAt      DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  version           Int      @default(1)
+  fingerprint       String   @unique
+
+  @@index([ownerId])
+  @@index([ownerId, projectId])
+  @@index([ownerId, topicId])
+  @@index([ownerId, status])
+  @@index([ownerId, severity])
+  @@index([ruleId])
+  @@index([outcomeId])
+}
+
 // ─── User Writing Profile ─────────────────────────────
-// 蒸馏后的用户写作画像，供 Writing Skill 参照
 
 model UserWritingProfile {
   id                  String   @id @default(cuid())
   userId              String   @unique
-  toneProfile         Json?    // 语调特征 { formality, energy, humor, directness, ... }
-  personality         Json?    // 性格标签 ["理性分析型", "情感共鸣型", ...] (stored as JSON for SQLite)
-  languagePatterns    Json?    // 语言模式 { sentenceRhythm, vocabularyTend, catchphrases, ... }
-  preferredTopics     Json?    // 偏好的主题方向 (stored as JSON for SQLite)
-  preferredStructures Json?    // 偏好的内容结构 [{ structure, frequency }]
-  hookStyles          Json?    // 偏好的钩子风格 ["悬念型", "冲突型", ...] (stored as JSON for SQLite)
-  emotionalTendencies Json?    // 情绪倾向 { primary, secondary, intensity }
-  summary             String?  // AI 生成的综合风格描述
+  toneProfile         Json?
+  personality         Json?
+  languagePatterns    Json?
+  preferredTopics     Json?
+  preferredStructures Json?
+  hookStyles          Json?
+  emotionalTendencies Json?
+  summary             String?
   version             Int      @default(1)
   lastDistillAt       DateTime?
   distillSampleCount  Int      @default(0)
