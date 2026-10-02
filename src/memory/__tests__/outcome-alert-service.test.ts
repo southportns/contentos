@@ -49,6 +49,10 @@ class MockOutcomeAlertStore implements OutcomeAlertStore {
     return alerts.map(a => ({ ...a }));
   }
 
+  async listActionable(authenticatedOwnerId: string, filters?: Omit<import('../persistence/outcome-alert-store').OutcomeAlertListFilters, 'status'>): Promise<OutcomeAlert[]> {
+    return this.list(authenticatedOwnerId, { ...filters, status: ['open', 'acknowledged'] });
+  }
+
   async update(alert: OutcomeAlert, authenticatedOwnerId: string, expectedVersion: number): Promise<OutcomeAlert> {
     if (alert.ownerId !== authenticatedOwnerId) throw new MemoryAuthorizationError(alert.id);
     const existing = this._alerts.get(alert.id);
@@ -236,5 +240,118 @@ describe('L: Lifecycle', () => {
     const beforeTime = Date.now();
     const result = await service.acknowledgeAlert(alert.id, OWNER_ALICE, 1);
     expect(new Date(result.alert.acknowledgedAt!).getTime()).toBeGreaterThanOrEqual(beforeTime);
+  });
+
+  it('L11: transition error contains alertId', async () => {
+    const alert = await createAlertViaEvaluate();
+    await service.resolveAlert(alert.id, OWNER_ALICE, 1);
+    try {
+      await service.acknowledgeAlert(alert.id, OWNER_ALICE, 2);
+      fail('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(OutcomeAlertTransitionError);
+      expect((err as OutcomeAlertTransitionError).alertId).toBe(alert.id);
+      expect((err as OutcomeAlertTransitionError).fromStatus).toBe('resolved');
+      expect((err as OutcomeAlertTransitionError).toStatus).toBe('acknowledged');
+    }
+  });
+});
+
+describe('V: Severity Propagation', () => {
+  let store: MockOutcomeAlertStore;
+  let service: OutcomeAlertServiceImpl;
+  beforeEach(() => { store = new MockOutcomeAlertStore(); service = new OutcomeAlertServiceImpl(store); });
+
+  it('V1: alert inherits severity from rule (critical)', async () => {
+    const result = await service.evaluateOutcome(createTestOutcome(), [createLowEngagementRule({ severity: 'critical' })], OWNER_ALICE);
+    expect(result.results[0].action).toBe('newlyCreated');
+    expect(result.results[0].alert!.severity).toBe('critical');
+  });
+
+  it('V2: alert inherits severity from rule (info)', async () => {
+    const result = await service.evaluateOutcome(createTestOutcome(), [createLowEngagementRule({ severity: 'info' })], OWNER_ALICE);
+    expect(result.results[0].alert!.severity).toBe('info');
+  });
+
+  it('V3: multiple rules — each alert gets its own severity', async () => {
+    const result = await service.evaluateOutcome(createTestOutcome(), [
+      createLowEngagementRule({ id: 'r-crit', severity: 'critical' }),
+      createLowEngagementRule({ id: 'r-info', severity: 'info', targetIds: [], outcomeTypes: ['engagement'] }),
+    ], OWNER_ALICE);
+    const critAlert = result.results.find(r => r.ruleId === 'r-crit')?.alert;
+    const infoAlert = result.results.find(r => r.ruleId === 'r-info')?.alert;
+    expect(critAlert!.severity).toBe('critical');
+    expect(infoAlert!.severity).toBe('info');
+  });
+});
+
+describe('T: Message Template', () => {
+  let store: MockOutcomeAlertStore;
+  let service: OutcomeAlertServiceImpl;
+  beforeEach(() => { store = new MockOutcomeAlertStore(); service = new OutcomeAlertServiceImpl(store); });
+
+  it('T1: custom messageTemplate renders variables', async () => {
+    const tmpl = '警告：{metricKey} 当前值 {actualValue} 低于阈值 {threshold}';
+    const result = await service.evaluateOutcome(
+      createTestOutcome(),
+      [createLowEngagementRule({ messageTemplate: tmpl })],
+      OWNER_ALICE,
+    );
+    const alert = result.results[0].alert!;
+    expect(alert.message).toContain('engagement_rate');
+    expect(alert.message).toContain('0.018');
+    expect(alert.message).toContain('0.03');
+  });
+
+  it('T2: no template — uses default format', async () => {
+    const result = await service.evaluateOutcome(createTestOutcome(), [createLowEngagementRule()], OWNER_ALICE);
+    const alert = result.results[0].alert!;
+    expect(alert.message).toContain('engagement_rate');
+    expect(alert.message).toContain('0.018');
+  });
+
+  it('T3: template with filter-only rule (no matched conditions)', async () => {
+    const rule = createLowEngagementRule({ metricConditions: [], messageTemplate: 'no condition' });
+    const result = await service.evaluateOutcome(createTestOutcome(), [rule], OWNER_ALICE);
+    const alert = result.results[0].alert!;
+    expect(alert.message).toContain('rule "rule-low-engagement" matched');
+  });
+});
+
+describe('R: Rule Validation', () => {
+  let store: MockOutcomeAlertStore;
+  let service: OutcomeAlertServiceImpl;
+  beforeEach(() => { store = new MockOutcomeAlertStore(); service = new OutcomeAlertServiceImpl(store); });
+
+  it('R1: invalid rule — empty id throws', async () => {
+    await expect(service.evaluateOutcome(
+      createTestOutcome(),
+      [{ id: '', name: 'x', enabled: true, severity: 'warning' }],
+      OWNER_ALICE,
+    )).rejects.toThrow('id');
+  });
+
+  it('R2: invalid rule — empty name throws', async () => {
+    await expect(service.evaluateOutcome(
+      createTestOutcome(),
+      [{ id: 'r1', name: '', enabled: true, severity: 'warning' }],
+      OWNER_ALICE,
+    )).rejects.toThrow('name');
+  });
+
+  it('R3: invalid rule — invalid severity throws', async () => {
+    await expect(service.evaluateOutcome(
+      createTestOutcome(),
+      [{ id: 'r1', name: 'x', enabled: true, severity: 'invalid' as import('../outcome-alert-rule').OutcomeAlertSeverity }],
+      OWNER_ALICE,
+    )).rejects.toThrow('severity');
+  });
+
+  it('R4: invalid rule — invalid operator in metricConditions throws', async () => {
+    await expect(service.evaluateOutcome(
+      createTestOutcome(),
+      [{ id: 'r1', name: 'x', enabled: true, severity: 'warning', metricConditions: [{ metricKey: 'views', operator: 'bad', threshold: 1 }] } as unknown as OutcomeAlertRule],
+      OWNER_ALICE,
+    )).rejects.toThrow('operator');
   });
 });
