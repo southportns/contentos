@@ -26,6 +26,7 @@
  *   8. Batch-based target-complete retrieval (R2) — ensures that when the
  *      caller requests N matching outcomes, they get N matching outcomes,
  *      not just whatever happens to be in the first N DB records
+ *   9. Retrieval metadata exposes scan statistics and completeness signals (R3)
  *
  * R1 Changes:
  *   - policy.types = ['outcome'] is passed through the retriever
@@ -41,6 +42,13 @@
  *   - Final sort: observedAt DESC applied AFTER full batch collection
  *   - Correctness guaranteed within bounded window:
  *     total scanned = MAX_OUTCOME_RETRIEVAL_BATCHES × batchSize (default 10×50=500)
+ *
+ * R3 Changes (P0.6.5.4 Hardening):
+ *   - collectOutcomeBatches returns OutcomeBatchCollectionResult with metadata
+ *   - New retrieveOutcomeMemoriesWithMetadata() exposes scanning statistics
+ *   - Original retrieveOutcomeMemories() preserved as thin wrapper
+ *   - Metadata accurately distinguishes: DB exhaustion vs limit truncation vs max-batch bound
+ *   - scannedRecords tracks ALL underlying.retriever.retrieve() returns (not just matches)
  */
 
 import type { MemoryRetriever } from './memory-retriever';
@@ -104,6 +112,69 @@ export interface OutcomeRetrievalParams {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Retrieval Metadata (R3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Metadata about the retrieval operation, exposing scan statistics and
+ * completeness signals.
+ *
+ * This metadata allows aggregation and trend analysis to correctly
+ * distinguish between "no more data exists" and "retrieval was stopped
+ * because a safety bound was reached".
+ *
+ * Key distinction:
+ * - `scannedRecords` = total records returned by the underlying retriever
+ *   (ALL records that passed DB-level filters like owner/type)
+ * - `outcomes.length` = records that also passed application-level filters
+ *   (targetType/targetId/outcomeType)
+ *
+ * Example: 500 scanned, only 20 matched a specific targetId.
+ * The aggregation layer MUST know 500 were scanned to avoid reporting
+ * "complete" when only 20 of 500 matched.
+ */
+export interface OutcomeRetrievalMetadata {
+  /**
+   * Total number of records the underlying retriever.retrieve() returned
+   * across ALL batches — before application-level filtering.
+   *
+   * This is the true measure of "how much data was examined".
+   * NOT the number of matching outcomes.
+   */
+  scannedRecords: number;
+
+  /** Number of batches fetched (1 to MAX_OUTCOME_RETRIEVAL_BATCHES) */
+  batchesFetched: number;
+
+  /**
+   * true = retrieval reached a configured bound (caller limit or max batches)
+   * before the data source was exhausted.
+   *
+   * When true, the result may not contain ALL matching records.
+   */
+  truncated: boolean;
+
+  /**
+   * true = retrieval reached data source exhaustion before any bound.
+   *
+   * When true, all matching records within the scanned window are present.
+   */
+  exhausted: boolean;
+}
+
+/**
+ * Result of an outcome retrieval operation, including both the matching
+ * outcomes and metadata about the retrieval process.
+ */
+export interface OutcomeRetrievalResult {
+  /** Matching outcomes (passed all filters) */
+  outcomes: OutcomeMemory[];
+
+  /** Metadata about the retrieval operation */
+  metadata: OutcomeRetrievalMetadata;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Public Retrieval Functions
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -136,14 +207,38 @@ export async function retrieveOutcomeMemories(
   retriever: MemoryRetriever,
   params: OutcomeRetrievalParams,
 ): Promise<OutcomeMemory[]> {
+  const result = await retrieveOutcomeMemoriesWithMetadata(retriever, params);
+  return result.outcomes;
+}
+
+/**
+ * Retrieve Outcome Memories with metadata about the retrieval process.
+ *
+ * This is the recommended entry point for aggregation and trend analysis,
+ * where correctness of completeness reporting matters.
+ *
+ * The original retrieveOutcomeMemories() is a thin wrapper that calls this
+ * function and discards the metadata.
+ *
+ * @param retriever - MemoryRetriever impl
+ * @param params - Retrieval parameters
+ * @return OutcomeRetrievalResult including outcomes and metadata
+ */
+export async function retrieveOutcomeMemoriesWithMetadata(
+  retriever: MemoryRetriever,
+  params: OutcomeRetrievalParams,
+): Promise<OutcomeRetrievalResult> {
   const limit = clampLimit(params.limit ?? 50);
 
-  const matches = await collectOutcomeBatches(retriever, params, limit);
+  const collectionResult = await collectOutcomeBatches(retriever, params, limit);
 
   // Final sort: observedAt DESC (time series — newest observations first)
-  sortByObservedAtDesc(matches);
+  sortByObservedAtDesc(collectionResult.outcomes);
 
-  return matches;
+  return {
+    outcomes: collectionResult.outcomes,
+    metadata: collectionResult.metadata,
+  };
 }
 
 /**
@@ -181,16 +276,16 @@ export async function getOutcomeHistory(
 ): Promise<OutcomeMemory[]> {
   const limit = clampLimit(params.limit ?? 100);
 
-  const matches = await collectOutcomeBatches(retriever, {
+  const collectionResult = await collectOutcomeBatches(retriever, {
     ...params,
     targetType: params.targetType,
     targetId: params.targetId,
   }, limit);
 
   // Final sort: observedAt DESC (time series)
-  sortByObservedAtDesc(matches);
+  sortByObservedAtDesc(collectionResult.outcomes);
 
-  return matches;
+  return collectionResult.outcomes;
 }
 
 /**
@@ -227,21 +322,33 @@ export async function getLatestOutcome(
   // Bounded window for latest — scan enough to find the true latest
   const limit = clampLimit(params.limit ?? 100);
 
-  const matches = await collectOutcomeBatches(retriever, {
+  const collectionResult = await collectOutcomeBatches(retriever, {
     ...params,
     targetType: params.targetType,
     targetId: params.targetId,
   }, limit);
 
   // Sort observedAt DESC and return first
-  sortByObservedAtDesc(matches);
+  sortByObservedAtDesc(collectionResult.outcomes);
 
-  return matches.length > 0 ? matches[0] : null;
+  return collectionResult.outcomes.length > 0 ? collectionResult.outcomes[0] : null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Batch Collection Engine (R2)
+// Batch Collection Engine (R2 + R3)
 // ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Result of collecting outcome batches, including both matching outcomes
+ * and metadata about the collection process.
+ */
+export interface OutcomeBatchCollectionResult {
+  /** Matching outcomes (passed all filters) */
+  outcomes: OutcomeMemory[];
+
+  /** Metadata about the batch collection */
+  metadata: OutcomeRetrievalMetadata;
+}
 
 /**
  * Collect matching outcome records using batch-based retrieval with
@@ -254,34 +361,66 @@ export async function getLatestOutcome(
  * 2. Filters each batch at the application level
  * 3. Accumulates matching records until `limit` is reached
  * 4. Stops early if DB returns empty (exhausted) or safety bound hit
- * 5. Returns all collected matches for final observedAt DESC sorting
+ * 5. Returns all collected matches + metadata about scanning process
  *
  * Safety: bounded to MAX_OUTCOME_RETRIEVAL_BATCHES iterations.
  * Never enters an infinite loop.
  *
+ * Completeness Detection (R3):
+ *
+ * Case A — DB exhausted:
+ *   records.length === 0 → exhausted = true, truncated = false
+ *
+ * Case B — Final batch smaller than batchSize:
+ *   records.length < batchSize → exhausted = true, truncated = false
+ *   (DB couldn't fill a batch, so no more data exists)
+ *
+ * Case C — Caller limit reached:
+ *   matches.length >= limit → truncated = true, exhausted = false
+ *   (can't prove there aren't more matching outcomes)
+ *
+ * Case D — MAX_OUTCOME_RETRIEVAL_BATCHES reached, last batch full:
+ *   batch === MAX && records.length === batchSize → truncated = true, exhausted = false
+ *   (safety bound reached; can't prove DB exhaustion)
+ *
+ * Case E — MAX_OUTCOME_RETRIEVAL_BATCHES reached, last batch partial:
+ *   batch === MAX && records.length < batchSize → exhausted = true, truncated = false
+ *   (partial batch proves DB didn't have more data to fill it)
+ *
  * @param retriever - MemoryRetriever impl
  * @param params - Retrieval parameters (including targetType/targetId/outcomeType)
  * @param limit - Number of matching results needed
- * @return Collected matching OutcomeMemory records (unsorted — caller sorts)
+ * @return OutcomeBatchCollectionResult with outcomes and metadata
  */
 async function collectOutcomeBatches(
   retriever: MemoryRetriever,
   params: OutcomeRetrievalParams,
   limit: number,
-): Promise<OutcomeMemory[]> {
+): Promise<OutcomeBatchCollectionResult> {
   const matches: OutcomeMemory[] = [];
   let cursor: string | undefined;
+  let scannedRecords = 0;
+  let batchesFetched = 0;
+
+  let exhausted = false;
+  let truncated = false;
 
   for (let batch = 0; batch < MAX_OUTCOME_RETRIEVAL_BATCHES; batch++) {
     // Build retrieval request with composite cursor for pagination
     const request = buildBatchRequest(params, cursor);
 
     const records = await retriever.retrieve(request);
+    batchesFetched++;
 
-    // DB returned no more records — exhausted, stop early
+    // Case A: DB returned no more records — exhausted, stop early
     if (records.length === 0) {
+      exhausted = true;
+      truncated = false;
       break;
     }
+
+    // Track total scanned records (ALL records, not just matches)
+    scannedRecords += records.length;
 
     // Filter this batch at application level (type guard narrows to OutcomeMemory)
     for (const record of records) {
@@ -290,8 +429,28 @@ async function collectOutcomeBatches(
       }
     }
 
-    // If we've collected enough matches, stop early
+    // Case C: Caller limit reached — truncated (can't prove no more matches exist)
     if (matches.length >= limit) {
+      truncated = true;
+      exhausted = false;
+      break;
+    }
+
+    // Case B: Final batch smaller than batchSize — DB exhausted
+    if (records.length < DEFAULT_OUTCOME_BATCH_SIZE) {
+      exhausted = true;
+      truncated = false;
+      break;
+    }
+
+    // Check if we've reached max batches (but haven't exhausted or hit limit)
+    if (batch === MAX_OUTCOME_RETRIEVAL_BATCHES - 1) {
+      // Last iteration: we got a full batch (records.length === batchSize)
+      // and haven't hit limit. This means safety bound stopped us.
+      // Case D: truncated = true (safety bound), exhausted = false
+      // Because we can't prove there aren't more matching outcomes
+      truncated = true;
+      exhausted = false;
       break;
     }
 
@@ -307,15 +466,23 @@ async function collectOutcomeBatches(
     );
   }
 
-  // Return only up to `limit` matches
-  return matches.slice(0, limit);
+  // Return only up to `limit` matches + metadata
+  return {
+    outcomes: matches.slice(0, limit),
+    metadata: {
+      scannedRecords,
+      batchesFetched,
+      truncated,
+      exhausted,
+    },
+  };
 }
 
 /**
  * Build a MemoryRetrievalRequest for a single batch.
  *
  * The cursor is passed via the policy extension. DatabaseMemoryRetriever
- * reads `policy.cursor` and forwards it to MemoryQueryCriteria.cursor.
+ * reads `policy.cursor` and forwards it to MemoryQueryCriteria.cursor`.
  */
 function buildBatchRequest(
   params: OutcomeRetrievalParams,

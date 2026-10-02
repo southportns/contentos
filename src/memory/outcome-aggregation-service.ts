@@ -51,7 +51,6 @@ import {
   getUtcWeekStart,
   getNextUtcWeekStart,
   calculateMetricTrend,
-  MAX_OUTCOME_RETRIEVAL_BOUND,
 } from './outcome-aggregation';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -200,7 +199,7 @@ export class OutcomeAggregationServiceImpl implements OutcomeAggregationService 
     });
 
     // Determine completeness
-    const completeness = determineCompleteness(sorted.length, retrievalLimit, firstObservedAt, params.windowStart);
+    const completeness = determineCompleteness(sorted.length, retrievalLimit);
 
     return {
       ownerId: params.ownerId,
@@ -441,14 +440,16 @@ export class OutcomeAggregationServiceImpl implements OutcomeAggregationService 
     previous: OutcomeAggregation,
   ): OutcomeMetricTrend[] {
     // Build lookup maps for metric aggregations
+    // Use a dedicated builder to correctly construct grouping keys from
+    // OutcomeMetricAggregation (which has metricKey, not key)
     const currentMetrics = new Map<string, OutcomeMetricAggregation>();
     for (const ma of current.metricAggregations) {
-      currentMetrics.set(metricGroupingKey(ma), ma);
+      currentMetrics.set(metricGroupingKey({ key: ma.metricKey, unit: ma.unit }), ma);
     }
 
     const previousMetrics = new Map<string, OutcomeMetricAggregation>();
     for (const ma of previous.metricAggregations) {
-      previousMetrics.set(metricGroupingKey(ma), ma);
+      previousMetrics.set(metricGroupingKey({ key: ma.metricKey, unit: ma.unit }), ma);
     }
 
     // Collect all unique metric keys
@@ -508,15 +509,11 @@ export const defaultOutcomeAggregationService: OutcomeAggregationService =
  *
  * @param resultCount - Number of matching results
  * @param retrievalLimit - Applied retrieval limit
- * @param firstObservedAt - Earliest observedAt in results
- * @param windowStart - Window start
  * @return 'complete' or 'bounded'
  */
 function determineCompleteness(
   resultCount: number,
   retrievalLimit: number,
-  firstObservedAt: string | undefined,
-  windowStart: string,
 ): 'complete' | 'bounded' {
   // If we got exactly the limit, we can't be sure there aren't more
   if (resultCount >= retrievalLimit) {
