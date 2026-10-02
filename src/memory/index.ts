@@ -217,3 +217,13 @@ export {
   outcomeMemoryToContext,
   tryOutcomeMemoryToContext,
 } from './memory-utils';
+
+// ─── Outcome Memory Service (P0.6.5.2) ──────────────────────────────────────
+
+export type { OutcomeMemoryService } from './outcome-memory-service';
+export { OutcomeMemoryServiceImpl } from './outcome-memory-service';
+export { OutcomeTransitionError } from './outcome-memory-service';
+export type {
+  OutcomeImportResult,
+  OutcomeImportItemResult,
+} from './outcome-memory-service';
