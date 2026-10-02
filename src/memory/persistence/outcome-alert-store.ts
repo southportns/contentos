@@ -1,7 +1,20 @@
 /**
- * P0.6.5.3 — Outcome Alert Store Interface & Prisma Implementation
- *
- * Persistence layer for OutcomeAlert records.
+ * @file outcome-alert-store.ts
+ * @brief P0.6.5.3 Outcome Alert Store Interface & Prisma Implementation
+ * @copyright Copyright 2026 ContentOS
+ * @par License MIT License
+ * 
+ * @details Persistence contract and Prisma-backed implementation for OutcomeAlert storage.
+ * Core features:
+ * - CRUD operations with OCC (optimistic concurrency control)
+ * - Owner-based data isolation (cross-user access blocked at query level)
+ * - Fingerprint-based deduplication enforcement
+ * - List filtering by status, severity, rule, outcome, project, topic
+ * - listActionable convenience method for open/acknowledged alerts
+ * 
+ * @see OutcomeAlert for domain entity structure
+ * @see OutcomeAlertService for lifecycle orchestration
+ * @see OutcomeAlertListFilters for available list filter options
  */
 
 import type { Prisma as PrismaType } from '@/generated/prisma';
@@ -10,16 +23,31 @@ import type { OutcomeAlertSeverity, OutcomeAlertStatus } from '../outcome-alert'
 import { MemoryConcurrencyError, MemoryNotFoundError, MemoryAuthorizationError } from './memory-persistence-types';
 import { prisma } from '@/lib/prisma';
 
+/**
+ * @brief Filter options for listing OutcomeAlerts
+ * @details All status/severity filters use IN clause (supports multiple values)
+ */
 export interface OutcomeAlertListFilters {
+  /** @brief Filter by alert status(es) */
   status?: OutcomeAlertStatus[];
+  /** @brief Filter by alert severity(ies) */
   severity?: OutcomeAlertSeverity[];
+  /** @brief Filter by rule ID */
   ruleId?: string;
+  /** @brief Filter by Outcome ID */
   outcomeId?: string;
+  /** @brief Filter by project ID */
   projectId?: string;
+  /** @brief Filter by topic ID */
   topicId?: string;
+  /** @brief Max number of results to return */
   limit?: number;
 }
 
+/**
+ * @brief OutcomeAlertStore interface (contract for DI/ mocking)
+ * @details All methods enforce owner isolation: authenticatedOwnerId is required for all operations
+ */
 export interface OutcomeAlertStore {
   create(alert: OutcomeAlert): Promise<OutcomeAlert>;
   getById(id: string, authenticatedOwnerId: string): Promise<OutcomeAlert | null>;
@@ -29,6 +57,11 @@ export interface OutcomeAlertStore {
   update(alert: OutcomeAlert, authenticatedOwnerId: string, expectedVersion: number): Promise<OutcomeAlert>;
 }
 
+/**
+ * @brief Prisma implementation of OutcomeAlertStore
+ * @details Uses Prisma ORM with SQLite/PostgreSQL. All queries include ownerId WHERE clause
+ * for cross-user isolation. OCC via version field on update.
+ */
 export class PrismaOutcomeAlertStore implements OutcomeAlertStore {
   async create(alert: OutcomeAlert): Promise<OutcomeAlert> {
     try {

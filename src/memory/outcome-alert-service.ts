@@ -1,7 +1,20 @@
 /**
- * P0.6.5.3 — Outcome Alert Service
- *
- * Orchestrates Outcome Alert lifecycle: evaluation, dedup, persistence, lifecycle.
+ * @file outcome-alert-service.ts
+ * @brief P0.6.5.3 Outcome Alert Service
+ * @copyright Copyright 2026 ContentOS
+ * @par License MIT License
+ * 
+ * @details Orchestrates the complete Outcome Alert lifecycle:
+ * - Outcome evaluation against rules (with upfront rule validation)
+ * - Alert deduplication via fingerprint
+ * - Alert persistence (create/update)
+ * - Alert lifecycle state transitions (acknowledge/resolve/suppress)
+ * - Owner-based authorization for all operations
+ * 
+ * @see OutcomeAlert for alert instance structure
+ * @see OutcomeAlertRule for rule definition
+ * @see OutcomeAlertStore for persistence contract
+ * @see OutcomeAlertEvaluateResult for evaluation response structure
  */
 
 import type { OutcomeMemory } from './outcome-memory';
@@ -13,49 +26,95 @@ import type { OutcomeAlertStore } from './persistence/outcome-alert-store';
 import { MemoryConcurrencyError } from './persistence/memory-persistence-types';
 import { validateAlertRule } from './outcome-alert-rule';
 
+/**
+ * @brief Error thrown when an invalid alert status transition is attempted
+ * @details Example: trying to transition an alert from resolved → suppressed
+ */
 export class OutcomeAlertTransitionError extends Error {
   constructor(
+    /** @brief ID of the alert with invalid transition */
     public readonly alertId: string,
+    /** @brief Current status of the alert */
     public readonly fromStatus: string,
+    /** @brief Attempted target status */
     public readonly toStatus: string,
   ) {
-    super(`cannot transition alert from \"${fromStatus}\" to \"${toStatus}\" — id=${alertId}`);
+    super(`cannot transition alert from \"\${fromStatus}\" to \"\${toStatus}\" — id=\${alertId}`);
     this.name = 'OutcomeAlertTransitionError';
   }
 }
 
+/**
+ * @brief Error thrown when an authenticated user does not own the target Outcome
+ * @details Security measure for owner-isolated data access
+ */
 export class OutcomeAlertOwnerError extends Error {
-  constructor(outcomeId: string) {
-    super(`outcome ownerId mismatch — outcome \"${outcomeId}\" does not belong to the authenticated user`);
+  constructor(
+    /** @brief ID of the Outcome with ownership mismatch */
+    outcomeId: string
+  ) {
+    super(`outcome ownerId mismatch — outcome \"\${outcomeId}\" does not belong to the authenticated user`);
     this.name = 'OutcomeAlertOwnerError';
   }
 }
 
+/**
+ * @brief Result of evaluating a single rule against a single Outcome
+ * @details Contains rule ID, outcome ID, action taken, and optional alert/error details
+ */
 export interface OutcomeAlertEvaluateItem {
+  /** @brief ID of the rule that was evaluated */
   ruleId: string;
+  /** @brief ID of the Outcome that was evaluated */
   outcomeId: string;
+  /** @brief Action taken for this rule */
   action: 'newlyCreated' | 'alreadyExists' | 'notMatched' | 'failed';
+  /** @brief Alert object (present if action is newlyCreated or alreadyExists) */
   alert?: OutcomeAlert;
+  /** @brief Error message (present if action is failed) */
   error?: string;
 }
 
+/**
+ * @brief Result of evaluating a single Outcome against multiple rules
+ * @details Contains outcome ID and array of per-rule evaluation results
+ */
 export interface OutcomeAlertEvaluateResult {
+  /** @brief ID of the evaluated Outcome */
   outcomeId: string;
+  /** @brief Array of per-rule evaluation results */
   results: OutcomeAlertEvaluateItem[];
 }
 
+/**
+ * @brief Result of evaluating multiple Outcomes against multiple rules (batch operation)
+ * @details Contains aggregate statistics and per-outcome evaluation results
+ */
 export interface OutcomeAlertBatchResult {
+  /** @brief Total number of Outcomes evaluated */
   totalOutcomes: number;
+  /** @brief Total number of rules evaluated per Outcome */
   totalRules: number;
+  /** @brief Total number of rules that matched any Outcome */
   matched: number;
+  /** @brief Total number of new alerts created */
   created: number;
+  /** @brief Total number of duplicate alerts skipped */
   existing: number;
+  /** @brief Total number of evaluation failures */
   failed: number;
+  /** @brief Per-outcome evaluation results */
   results: OutcomeAlertEvaluateResult[];
 }
 
+/**
+ * @brief Result of a successful alert lifecycle state transition
+ * @details Contains updated alert and previous status for audit purposes
+ */
 export interface OutcomeAlertLifecycleResult {
+  /** @brief Updated alert after transition */
   alert: OutcomeAlert;
+  /** @brief Status before transition (for logging/audit) */
   previousStatus: OutcomeAlertStatus;
 }
 
@@ -66,6 +125,10 @@ const VALID_TRANSITIONS: Record<OutcomeAlertStatus, OutcomeAlertStatus[]> = {
   suppressed: [],
 };
 
+/**
+ * @brief OutcomeAlertService interface (contract for DI/ mocking)
+ * @details Defines all operations for alert lifecycle management
+ */
 export interface OutcomeAlertService {
   evaluateOutcome(outcome: OutcomeMemory, rules: OutcomeAlertRule[], authenticatedOwnerId: string): Promise<OutcomeAlertEvaluateResult>;
   evaluateOutcomes(outcomes: OutcomeMemory[], rules: OutcomeAlertRule[], authenticatedOwnerId: string): Promise<OutcomeAlertBatchResult>;
@@ -74,6 +137,11 @@ export interface OutcomeAlertService {
   suppressAlert(alertId: string, authenticatedOwnerId: string, expectedVersion: number): Promise<OutcomeAlertLifecycleResult>;
 }
 
+/**
+ * @brief Default implementation of OutcomeAlertService
+ * @details Stateless, thread-safe (assuming store implementation is thread-safe).
+ * Constructor accepts any OutcomeAlertStore implementation (supports DI).
+ */
 export class OutcomeAlertServiceImpl implements OutcomeAlertService {
   private _store: OutcomeAlertStore;
 
@@ -85,7 +153,6 @@ export class OutcomeAlertServiceImpl implements OutcomeAlertService {
     if (outcome.ownerId !== authenticatedOwnerId) {
       throw new OutcomeAlertOwnerError(outcome.id);
     }
-    // Validate all rules before evaluation
     for (const rule of rules) {
       validateAlertRule(rule);
     }
@@ -214,6 +281,13 @@ export class OutcomeAlertServiceImpl implements OutcomeAlertService {
   }
 }
 
+/**
+ * @brief Generates a unique fingerprint for alert deduplication
+ * @param ruleId - ID of the rule
+ * @param outcomeId - ID of the Outcome
+ * @returns Base64-encoded fingerprint (ruleId:outcomeId)
+ * @details Used to prevent duplicate alerts for the same rule+outcome pair
+ */
 export function generateFingerprint(ruleId: string, outcomeId: string): string {
   const raw = `${ruleId}:${outcomeId}`;
   if (typeof Buffer !== 'undefined') return Buffer.from(raw).toString('base64');
