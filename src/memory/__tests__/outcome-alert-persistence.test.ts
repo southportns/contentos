@@ -148,7 +148,8 @@ describe('P0.6.5.3 — Outcome Alert Persistence', () => {
       await store.create(buildAlert({ ruleId: 'rule-d20-a', outcomeId: 'out-d20-a', fingerprint: 'fp-d20-a', status: 'open', severity: 'critical' }));
       await store.create(buildAlert({ ruleId: 'rule-d20-b', outcomeId: 'out-d20-b', fingerprint: 'fp-d20-b', status: 'open', severity: 'info' }));
       await store.create(buildAlert({ ruleId: 'rule-d20-c', outcomeId: 'out-d20-c', fingerprint: 'fp-d20-c', status: 'resolved', severity: 'critical' }));
-      const filtered = await store.list(OWNER_A, { status: ['open'], severity: ['critical'] });
+      // Filter by status + severity + ruleId to isolate from other tests' data
+      const filtered = await store.list(OWNER_A, { status: ['open'], severity: ['critical'], ruleId: 'rule-d20-a' });
       expect(filtered).toHaveLength(1);
     });
 
@@ -181,7 +182,7 @@ describe('P0.6.5.3 — Outcome Alert Persistence', () => {
     });
   });
 
-  describe('Service Integration (D13-D18, D22)', () => {
+  describe('Service Integration (D13-D18, D22-D23)', () => {
     it('D13: service evaluateOutcome creates alert in DB', async () => {
       const outcome = createOutcomeForAlert(OWNER_A, { targetId: 'd13-target', metrics: [{ key: 'engagement_rate', value: 1.0, unit: 'percent' }] });
       const rule = createRule({ id: 'rule-d13', name: 'D13 Engagement Low', metricConditions: [{ metricKey: 'engagement_rate', operator: 'lt', threshold: 3.0 }] });
@@ -239,6 +240,23 @@ describe('P0.6.5.3 — Outcome Alert Persistence', () => {
       const openAlerts = await store.list(OWNER_A, { status: ['open'] });
       expect(openAlerts.map(a => a.id)).toContain(r1.results[0].alert!.id);
       expect(openAlerts.map(a => a.id)).not.toContain(r2.results[0].alert!.id);
+    });
+
+    it('D23: listActionable returns open+acknowledged only', async () => {
+      const openAlert = buildAlert({ ruleId: 'rule-d23-open', outcomeId: 'out-d23-open', fingerprint: 'fp-d23-open', status: 'open' });
+      const ackAlert = buildAlert({ ruleId: 'rule-d23-ack', outcomeId: 'out-d23-ack', fingerprint: 'fp-d23-ack', status: 'acknowledged' });
+      const resolvedAlert = buildAlert({ ruleId: 'rule-d23-resolved', outcomeId: 'out-d23-resolved', fingerprint: 'fp-d23-resolved', status: 'resolved' });
+      const suppressedAlert = buildAlert({ ruleId: 'rule-d23-suppressed', outcomeId: 'out-d23-suppressed', fingerprint: 'fp-d23-suppressed', status: 'suppressed' });
+      await store.create(openAlert);
+      await store.create(ackAlert);
+      await store.create(resolvedAlert);
+      await store.create(suppressedAlert);
+      const actionable = await store.listActionable(OWNER_A);
+      const actionableIds = actionable.map(a => a.id);
+      expect(actionableIds).toContain(openAlert.id);
+      expect(actionableIds).toContain(ackAlert.id);
+      expect(actionableIds).not.toContain(resolvedAlert.id);
+      expect(actionableIds).not.toContain(suppressedAlert.id);
     });
 
     it('D22: version increments through acknowledge then resolve', async () => {
