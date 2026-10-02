@@ -377,7 +377,7 @@ describe('E: Error Message Interpolation', () => {
     } catch (err) {
       expect(err).toBeInstanceOf(OutcomeAlertTransitionError);
       const message = (err as OutcomeAlertTransitionError).message;
-      expect(message).toContain(`cannot transition alert from \"resolved\" to \"acknowledged\" — id=\${alert.id}`);
+      expect(message).toContain(`cannot transition alert from "resolved" to "acknowledged" — id=${alert.id}`);
       expect(message).not.toContain('${fromStatus}');
       expect(message).not.toContain('${toStatus}');
       expect(message).not.toContain('${alertId}');
@@ -392,7 +392,7 @@ describe('E: Error Message Interpolation', () => {
     } catch (err) {
       expect(err).toBeInstanceOf(OutcomeAlertOwnerError);
       const message = (err as OutcomeAlertOwnerError).message;
-      expect(message).toContain(`outcome ownerId mismatch — outcome \"\${testOutcome.id}\" does not belong to the authenticated user`);
+      expect(message).toContain(`outcome ownerId mismatch — outcome "${testOutcome.id}" does not belong to the authenticated user`);
       expect(message).not.toContain('${outcomeId}');
     }
   });
