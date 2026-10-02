@@ -6,11 +6,12 @@
 
 import type { OutcomeMemory } from './outcome-memory';
 import type { OutcomeAlertRule } from './outcome-alert-rule';
-import type { OutcomeAlert } from './outcome-alert';
+import type { OutcomeAlert, OutcomeAlertStatus } from './outcome-alert';
 import type { OutcomeAlertMatchedCondition, OutcomeAlertEvaluation } from './outcome-alert-evaluator';
 import { renderAlertMessage, evaluateOutcomeAgainstRules } from './outcome-alert-evaluator';
 import type { OutcomeAlertStore } from './persistence/outcome-alert-store';
 import { MemoryConcurrencyError } from './persistence/memory-persistence-types';
+import { validateAlertRule } from './outcome-alert-rule';
 
 export class OutcomeAlertTransitionError extends Error {
   constructor(
@@ -18,14 +19,14 @@ export class OutcomeAlertTransitionError extends Error {
     public readonly fromStatus: string,
     public readonly toStatus: string,
   ) {
-    super(`cannot transition alert from "${fromStatus}" to "${toStatus}" — id=${alertId}`);
+    super(`cannot transition alert from \"${fromStatus}\" to \"${toStatus}\" — id=${alertId}`);
     this.name = 'OutcomeAlertTransitionError';
   }
 }
 
 export class OutcomeAlertOwnerError extends Error {
   constructor(outcomeId: string) {
-    super(`outcome ownerId mismatch — outcome "${outcomeId}" does not belong to the authenticated user`);
+    super(`outcome ownerId mismatch — outcome \"${outcomeId}\" does not belong to the authenticated user`);
     this.name = 'OutcomeAlertOwnerError';
   }
 }
@@ -84,16 +85,22 @@ export class OutcomeAlertServiceImpl implements OutcomeAlertService {
     if (outcome.ownerId !== authenticatedOwnerId) {
       throw new OutcomeAlertOwnerError(outcome.id);
     }
+    // Validate all rules before evaluation
+    for (const rule of rules) {
+      validateAlertRule(rule);
+    }
     const evaluations = evaluateOutcomeAgainstRules(outcome, rules);
     const results: OutcomeAlertEvaluateItem[] = [];
 
-    for (const evaluation of evaluations) {
+    for (let i = 0; i < evaluations.length; i++) {
+      const evaluation = evaluations[i];
       if (!evaluation.matched) {
         results.push({ ruleId: evaluation.ruleId, outcomeId: outcome.id, action: 'notMatched' });
         continue;
       }
       try {
-        const alert = await this._createAlertIfNew(outcome, evaluation, authenticatedOwnerId);
+        const rule = rules[i];
+        const alert = await this._createAlertIfNew(outcome, evaluation, rule, authenticatedOwnerId);
         results.push({ ruleId: evaluation.ruleId, outcomeId: outcome.id, action: alert ? 'newlyCreated' : 'alreadyExists', alert });
       } catch (err) {
         results.push({ ruleId: evaluation.ruleId, outcomeId: outcome.id, action: 'failed', error: err instanceof Error ? err.message : String(err) });
@@ -130,7 +137,7 @@ export class OutcomeAlertServiceImpl implements OutcomeAlertService {
       const { MemoryNotFoundError } = await import('./persistence/memory-persistence-types');
       throw new MemoryNotFoundError(alertId);
     }
-    this._validateTransition(alert.status, 'acknowledged');
+    this._validateTransition(alert, 'acknowledged');
     return this._performTransition(alert, 'acknowledged', authenticatedOwnerId, expectedVersion);
   }
 
@@ -140,7 +147,7 @@ export class OutcomeAlertServiceImpl implements OutcomeAlertService {
       const { MemoryNotFoundError } = await import('./persistence/memory-persistence-types');
       throw new MemoryNotFoundError(alertId);
     }
-    this._validateTransition(alert.status, 'resolved');
+    this._validateTransition(alert, 'resolved');
     return this._performTransition(alert, 'resolved', authenticatedOwnerId, expectedVersion);
   }
 
@@ -150,11 +157,11 @@ export class OutcomeAlertServiceImpl implements OutcomeAlertService {
       const { MemoryNotFoundError } = await import('./persistence/memory-persistence-types');
       throw new MemoryNotFoundError(alertId);
     }
-    this._validateTransition(alert.status, 'suppressed');
+    this._validateTransition(alert, 'suppressed');
     return this._performTransition(alert, 'suppressed', authenticatedOwnerId, expectedVersion);
   }
 
-  private async _createAlertIfNew(outcome: OutcomeMemory, evaluation: OutcomeAlertEvaluation, authenticatedOwnerId: string): Promise<OutcomeAlert | undefined> {
+  private async _createAlertIfNew(outcome: OutcomeMemory, evaluation: OutcomeAlertEvaluation, rule: OutcomeAlertRule, authenticatedOwnerId: string): Promise<OutcomeAlert | undefined> {
     const fingerprint = generateFingerprint(evaluation.ruleId, outcome.id);
     const existing = await this._store.getByFingerprint(fingerprint, authenticatedOwnerId);
     if (existing) return undefined;
@@ -162,14 +169,14 @@ export class OutcomeAlertServiceImpl implements OutcomeAlertService {
     const alertId = generateAlertId();
     const now = new Date().toISOString();
     const firstCondition = evaluation.matchedConditions.find(m => m.matched);
-    const message = renderAlertMessage(evaluation.ruleId, firstCondition, undefined);
+    const message = renderAlertMessage(evaluation.ruleId, firstCondition, rule.messageTemplate);
     const title = generateAlertTitle(outcome, firstCondition);
 
     const alert: OutcomeAlert = {
       id: alertId, ruleId: evaluation.ruleId, outcomeId: outcome.id,
       ownerId: outcome.ownerId ?? authenticatedOwnerId,
       projectId: outcome.projectId ?? null, topicId: outcome.topicId ?? null,
-      severity: 'warning', status: 'open', title, message,
+      severity: rule.severity, status: 'open', title, message,
       matchedConditions: evaluation.matchedConditions,
       triggeredAt: now, acknowledgedAt: null, resolvedAt: null, suppressedAt: null,
       createdAt: now, updatedAt: now, version: 1, fingerprint,
@@ -186,10 +193,11 @@ export class OutcomeAlertServiceImpl implements OutcomeAlertService {
     }
   }
 
-  private _validateTransition(fromStatus: OutcomeAlertStatus, toStatus: OutcomeAlertStatus): void {
-    if (fromStatus === toStatus) throw new OutcomeAlertTransitionError('unknown', fromStatus, toStatus);
+  private _validateTransition(alert: { id: string; status: OutcomeAlertStatus }, toStatus: OutcomeAlertStatus): void {
+    const fromStatus = alert.status;
+    if (fromStatus === toStatus) throw new OutcomeAlertTransitionError(alert.id, fromStatus, toStatus);
     const allowed = VALID_TRANSITIONS[fromStatus];
-    if (!allowed.includes(toStatus)) throw new OutcomeAlertTransitionError('unknown', fromStatus, toStatus);
+    if (!allowed.includes(toStatus)) throw new OutcomeAlertTransitionError(alert.id, fromStatus, toStatus);
   }
 
   private async _performTransition(alert: OutcomeAlert, newStatus: OutcomeAlertStatus, authenticatedOwnerId: string, expectedVersion: number): Promise<OutcomeAlertLifecycleResult> {
