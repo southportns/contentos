@@ -1,4 +1,4 @@
-/*
+/**
  * @file outcome-alert-service.ts
  * @brief P0.6.5.3 Outcome Alert Service
  * @copyright Copyright 2026 ContentOS
@@ -39,7 +39,7 @@ export class OutcomeAlertTransitionError extends Error {
     /** @brief Attempted target status */
     public readonly toStatus: string,
   ) {
-    super(`cannot transition alert from \"\${fromStatus}\" to \"\${toStatus}\" — id=\${alertId}`);
+    super(`cannot transition alert from "${fromStatus}" to "${toStatus}" — id=${alertId}`);
     this.name = 'OutcomeAlertTransitionError';
   }
 }
@@ -53,7 +53,7 @@ export class OutcomeAlertOwnerError extends Error {
     /** @brief ID of the Outcome with ownership mismatch */
     outcomeId: string
   ) {
-    super(`outcome ownerId mismatch — outcome \"\${outcomeId}\" does not belong to the authenticated user`);
+    super(`outcome ownerId mismatch — outcome "${outcomeId}" does not belong to the authenticated user`);
     this.name = 'OutcomeAlertOwnerError';
   }
 }
@@ -300,6 +300,6 @@ function generateAlertId(): string {
 }
 
 function generateAlertTitle(outcome: OutcomeMemory, firstCondition?: OutcomeAlertMatchedCondition): string {
-  if (firstCondition?.metricKey) return `告警：${firstCondition.metricId} 异常`;
+  if (firstCondition?.metricKey) return `告警：${firstCondition.metricKey} 异常`;
   return 'Result告警';
 }
