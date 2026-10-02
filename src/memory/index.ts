@@ -1,17 +1,4 @@
-/**
- * P0.6.3.3 — Memory Layer Foundation
- *
- * Unified Memory Layer for ContextOS with Decision Memory support.
- *
- * Architecture:
- *   Existing Sources → Adapters → MemoryRecord → Collection → Retriever → ContextObject
- *
- * This module exports the complete Memory Layer public API.
- */
-
-// ─── Core Types ──────────────────────────────────────────────────────────────
-
-export type { MemoryKind } from './memory-kind';
+import type { MemoryKind } from './memory-kind';
 export { MEMORY_KINDS, MEMORY_KIND_LABELS, MEMORY_KIND_SHORT_LABELS, STATIC, DYNAMIC, EPISODIC, SEMANTIC } from './memory-kind';
 
 export type { MemoryContextPayload } from './memory-types';
@@ -201,14 +188,22 @@ export {
 export type { CreateOutcomeMemoryOptions } from './outcome-memory-factory';
 export { createOutcomeMemory } from './outcome-memory-factory';
 
-// ─── Outcome Memory Retrieval (P0.6.5.1, R1) ─────────────────────────────────
+// ─── Outcome Memory Retrieval (P0.6.5.1, R1, R3) ────────────────────────────
 
-export type { OutcomeRetrievalParams } from './outcome-memory-retrieval';
+export type {
+  OutcomeRetrievalParams,
+  OutcomeRetrievalMetadata,
+  OutcomeRetrievalResult,
+  OutcomeBatchCollectionResult,
+} from './outcome-memory-retrieval';
 export {
   retrieveOutcomeMemories,
+  retrieveOutcomeMemoriesWithMetadata,
   getOutcomeHistory,
   getLatestOutcome,
   MAX_OUTCOME_HISTORY_LIMIT,
+  MAX_OUTCOME_RETRIEVAL_BATCHES,
+  DEFAULT_OUTCOME_BATCH_SIZE,
 } from './outcome-memory-retrieval';
 
 // ─── Outcome Memory → Context Bridge (P0.6.5.1) ─────────────────────────────
