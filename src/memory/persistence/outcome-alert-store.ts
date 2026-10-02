@@ -25,6 +25,7 @@ export interface OutcomeAlertStore {
   getById(id: string, authenticatedOwnerId: string): Promise<OutcomeAlert | null>;
   getByFingerprint(fingerprint: string, authenticatedOwnerId: string): Promise<OutcomeAlert | null>;
   list(authenticatedOwnerId: string, filters?: OutcomeAlertListFilters): Promise<OutcomeAlert[]>;
+  listActionable(authenticatedOwnerId: string, filters?: Omit<OutcomeAlertListFilters, 'status'>): Promise<OutcomeAlert[]>;
   update(alert: OutcomeAlert, authenticatedOwnerId: string, expectedVersion: number): Promise<OutcomeAlert>;
 }
 
@@ -81,9 +82,14 @@ export class PrismaOutcomeAlertStore implements OutcomeAlertStore {
     return rows.map(row => this._rowToAlert(row));
   }
 
+  async listActionable(authenticatedOwnerId: string, filters?: Omit<OutcomeAlertListFilters, 'status'>): Promise<OutcomeAlert[]> {
+    return this.list(authenticatedOwnerId, { ...filters, status: ['open', 'acknowledged'] });
+  }
+
   async update(alert: OutcomeAlert, authenticatedOwnerId: string, expectedVersion: number): Promise<OutcomeAlert> {
     if (alert.ownerId !== authenticatedOwnerId) throw new MemoryAuthorizationError(alert.id);
     const newVersion = expectedVersion + 1;
+    const now = new Date().toISOString();
     try {
       const updated = await prisma.outcomeAlert.updateMany({
         where: { id: alert.id, ownerId: authenticatedOwnerId, version: expectedVersion },
@@ -92,3 +98,29 @@ export class PrismaOutcomeAlertStore implements OutcomeAlertStore {
           matchedConditions: alert.matchedConditions ? JSON.stringify(alert.matchedConditions) : null,
           acknowledgedAt: alert.acknowledgedAt ? new Date(alert.acknowledgedAt) : null,
           resolvedAt: alert.resolvedAt ? new Date(alert.resolvedAt) : null,
+          suppressedAt: alert.suppressedAt ? new Date(alert.suppressedAt) : null,
+          updatedAt: new Date(now),
+          version: newVersion,
+        },
+      });
+      if (updated.count === 0) throw new MemoryConcurrencyError(alert.id, expectedVersion, expectedVersion);
+      return { ...alert, version: newVersion, updatedAt: now };
+    } catch (error: unknown) {
+      if (error instanceof MemoryConcurrencyError) throw error;
+      throw error;
+    }
+  }
+
+  private _rowToAlert(row: PrismaType.OutcomeAlertGetPayload<{}>): OutcomeAlert {
+    return {
+      id: row.id, ruleId: row.ruleId, outcomeId: row.outcomeId, ownerId: row.ownerId,
+      projectId: row.projectId, topicId: row.topicId, severity: row.severity as import('../outcome-alert-rule').OutcomeAlertSeverity,
+      status: row.status as OutcomeAlertStatus, title: row.title, message: row.message,
+      matchedConditions: row.matchedConditions ? JSON.parse(row.matchedConditions) : [],
+      triggeredAt: row.triggeredAt.toISOString(), acknowledgedAt: row.acknowledgedAt?.toISOString() ?? null,
+      resolvedAt: row.resolvedAt?.toISOString() ?? null, suppressedAt: row.suppressedAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+      version: row.version, fingerprint: row.fingerprint,
+    };
+  }
+}
