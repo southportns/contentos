@@ -91,7 +91,7 @@ export type DecisionFeedbackStatus =
  * It does NOT judge whether the Decision was correct or successful.
  */
 export interface DecisionFeedback {
-  /** Unique ID for this feedback instance (generated) */
+  /** Stable ID: dfb_${decisionId} — deterministic for same decision */
   id: string;
 
   /** Owner (user) ID */
@@ -123,6 +123,12 @@ export interface DecisionFeedback {
 
   /** Latest observedAt among attributed Outcomes */
   lastObservedAt?: string;
+
+  /** Time window start used for aggregation/trend (inclusive) */
+  windowStart: string;
+
+  /** Time window end used for aggregation/trend (exclusive) */
+  windowEnd: string;
 
   /** Per-metric aggregated statistics */
   metricAggregations: OutcomeMetricAggregation[];
@@ -179,6 +185,28 @@ export interface DecisionFeedbackParams {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Decision Feedback Build Options
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Options for building DecisionFeedback via the service.
+ *
+ * These are resolved at the entry point and passed to the service
+ * so that the same request-scoped window and timestamp are used
+ * consistently across retrieval, aggregation, and trend.
+ */
+export interface DecisionFeedbackBuildOptions {
+  /** Resolved time window start (inclusive) */
+  windowStart: string;
+
+  /** Resolved time window end (exclusive) */
+  windowEnd: string;
+
+  /** Request-scoped "now" — generated once at entry point */
+  requestNow: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Decision Outcome Retrieval Params
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -207,6 +235,89 @@ export interface DecisionOutcomeRetrievalParams {
 
   /** Maximum number of results (default: 50, max: 500) */
   limit?: number;
+
+  /**
+   * Time window start (inclusive) — ISO 8601.
+   * Outcomes with observedAt < windowStart are excluded.
+   */
+  windowStart?: string;
+
+  /**
+   * Time window end (exclusive) — ISO 8601.
+   * Outcomes with observedAt >= windowEnd are excluded.
+   */
+  windowEnd?: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Resolve Decision Feedback Window — Pure Function
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Resolve the time window for computing Decision Feedback.
+ *
+ * Rules:
+ * - No explicit params: [decisionCreatedAt, now]
+ * - Only windowStart: [provided, now]
+ * - Only windowEnd:   [decisionCreatedAt, provided]
+ * - Both provided:    [provided, provided]
+ *
+ * Validation:
+ * - windowStart MUST be < windowEnd (strict).
+ * - Throws Error if the window is inverted or empty.
+ *
+ * @param decisionCreatedAt — ISO 8601 timestamp from the Decision
+ * @param options — optional explicit windowStart, windowEnd, and now provider
+ * @return Resolved { windowStart, windowEnd }
+ */
+export function resolveDecisionFeedbackWindow(
+  decisionCreatedAt: string,
+  options?: {
+    windowStart?: string;
+    windowEnd?: string;
+    now?: string;
+  },
+): {
+  windowStart: string;
+  windowEnd: string;
+} {
+  const now = options?.now ?? new Date().toISOString();
+
+  let windowStart = options?.windowStart ?? decisionCreatedAt;
+  let windowEnd = options?.windowEnd ?? now;
+
+  // If only windowStart provided: use [provided, now]
+  if (options?.windowStart && !options?.windowEnd) {
+    windowStart = options.windowStart;
+    windowEnd = now;
+  }
+
+  // If only windowEnd provided: use [decisionCreatedAt, provided]
+  if (!options?.windowStart && options?.windowEnd) {
+    windowStart = decisionCreatedAt;
+    windowEnd = options.windowEnd;
+  }
+
+  // If both provided: use explicit values (already set above by defaults)
+  // If neither: use [decisionCreatedAt, now] (already set above by defaults)
+
+  // Validate: windowStart must be strictly less than windowEnd
+  const startMs = new Date(windowStart).getTime();
+  const endMs = new Date(windowEnd).getTime();
+
+  if (isNaN(startMs)) {
+    throw new Error(`Invalid windowStart: "${windowStart}" is not a valid ISO 8601 date`);
+  }
+  if (isNaN(endMs)) {
+    throw new Error(`Invalid windowEnd: "${windowEnd}" is not a valid ISO 8601 date`);
+  }
+  if (startMs >= endMs) {
+    throw new Error(
+      `Invalid decision feedback window: windowStart (${windowStart}) must be strictly less than windowEnd (${windowEnd})`
+    );
+  }
+
+  return { windowStart, windowEnd };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -250,6 +361,8 @@ export function isOutcomeAttributedToDecision(
  *       ↓
  *   owner/project/topic/type filtering (DB + app level)
  *       ↓
+ *   time window filter [windowStart, windowEnd) on payload.observedAt
+ *       ↓
  *   application-level attribution.decisionId filtering
  *       ↓
  *   OutcomeRetrievalMetadata
@@ -258,6 +371,9 @@ export function isOutcomeAttributedToDecision(
  *   attribution.decisionId lives in payload JSON, so it cannot be
  *   filtered at the DB level. We retrieve via the standard outcome
  *   retrieval pipeline and filter at the application level.
+ *
+ *   Time window filtering is also at the application level because
+ *   observedAt lives in payload JSON.
  *
  * @param retriever - MemoryRetriever implementation
  * @param params - Retrieval parameters including decisionId
@@ -279,9 +395,22 @@ export async function retrieveDecisionOutcomes(
   const result = await retrieveOutcomeMemoriesWithMetadata(retriever, retrievalParams);
 
   // Step 2: Filter at application level by attribution.decisionId
-  const attributedOutcomes = result.outcomes.filter((outcome) =>
+  let attributedOutcomes = result.outcomes.filter((outcome) =>
     isOutcomeAttributedToDecision(outcome, params.decisionId)
   );
+
+  // Step 3: Filter by time window [windowStart, windowEnd) on payload.observedAt
+  if (params.windowStart || params.windowEnd) {
+    const startMs = params.windowStart ? new Date(params.windowStart).getTime() : null;
+    const endMs = params.windowEnd ? new Date(params.windowEnd).getTime() : null;
+
+    attributedOutcomes = attributedOutcomes.filter((outcome) => {
+      const observedMs = new Date(outcome.payload.observedAt).getTime();
+      if (startMs !== null && observedMs < startMs) return false;
+      if (endMs !== null && observedMs >= endMs) return false;
+      return true;
+    });
+  }
 
   return {
     outcomes: attributedOutcomes,

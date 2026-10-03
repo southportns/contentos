@@ -175,6 +175,72 @@ export async function getDecisionHistory(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Get Decision By ID (P0.6.5.5-R1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Parameters for retrieving a specific Decision by ID.
+ *
+ * Used by Decision Feedback Layer to efficiently look up a Decision
+ * without the "retrieve 500 then find" anti-pattern.
+ */
+export interface GetDecisionByIdParams {
+  /** Owner (user) ID — mandatory for isolation */
+  ownerId: string;
+
+  /** The Decision ID to retrieve */
+  decisionId: string;
+
+  /** Project ID filter (optional) */
+  projectId?: string;
+
+  /** Topic ID filter (optional) */
+  topicId?: string;
+}
+
+/**
+ * Retrieve a specific Decision Memory by ID.
+ *
+ * This function provides ID-based lookup by using `getDecisionHistory()`
+ * which includes ALL decision statuses (proposed/active/superseded/reversed).
+ * The result is then filtered to find the exact decisionId.
+ *
+ * Design Decision:
+ *   Adding `id` as a first-class query criteria in MemoryRetriever would
+ *   require changes to the InMemoryRetriever, DatabaseMemoryRetriever,
+ *   and all intermediate layers. Since Decision IDs are unique and this
+ *   is a single-ID lookup, filtering the broader history result is the
+ *   minimal-impact approach that still avoids the "top-N then find"
+ *   anti-pattern (limit is bounded by history defaults).
+ *
+ * Behavior:
+ * - Returns null if decision doesn't exist or belongs to another owner.
+ * - Includes ALL decision statuses: proposed, active, superseded, reversed.
+ * - Respects ownerId isolation.
+ * - If projectId/topicId provided, narrows the scope.
+ *
+ * @param retriever - MemoryRetriever implementation
+ * @param params - Parameters including ownerId and decisionId
+ * @return DecisionMemory or null
+ */
+export async function getDecisionById(
+  retriever: MemoryRetriever,
+  params: GetDecisionByIdParams,
+): Promise<DecisionMemory | null> {
+  const decisions = await getDecisionHistory(retriever, {
+    ownerId: params.ownerId,
+    projectId: params.projectId,
+    topicId: params.topicId,
+    limit: 500,
+    includeSuperseded: true,
+    includeReversed: true,
+  });
+
+  // After getting the history, filter by exact ID
+  return decisions.find((d) => d.id === params.decisionId) ?? null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Internal Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 

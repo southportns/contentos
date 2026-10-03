@@ -6,7 +6,7 @@
  *
  * Architecture Position:
  *
- *   DecisionMemory + OutcomeMemory[] + OutcomeRetrievalMetadata
+ *   DecisionMemory + OutcomeMemory[] + OutcomeRetrievalMetadata + BuildOptions
  *       ↓
  *   DecisionFeedbackServiceImpl.buildFeedback()
  *       ↓
@@ -19,18 +19,17 @@
  *   4. Reuses OutcomeAggregationService for metric aggregation
  *   5. Owner / Project / Topic isolation at every layer
  *   6. attribution.decisionId is the SOLE relationship source
+ *   7. Time window comes from DecisionFeedbackBuildOptions — never computed internally
  *
  * Processing Steps:
- *   1. Verify decision owner matches outcomes owner
- *   2. Filter outcomes by attribution.decisionId
- *   3. Filter outcomes by project/topic scope isolation
- *   4. Sort outcomes by observedAt ASC
- *   5. Collect outcome IDs and types
- *   6. Determine first/last observedAt
- *   7. Aggregate metrics (reuses OutcomeAggregationService)
- *   8. Calculate trends (reuses OutcomeAggregationService)
- *   9. Determine completeness
- *   10. Construct DecisionFeedback
+ *   1. Filter outcomes by attribution AND owner/project/topic isolation
+ *   2. Sort outcomes by observedAt ASC
+ *   3. Collect outcome IDs and types
+ *   4. Determine first/last observedAt
+ *   5. Aggregate metrics using feedback windowStart/windowEnd
+ *   6. Calculate trends using feedback windowStart/windowEnd
+ *   7. Determine completeness
+ *   8. Construct DecisionFeedback (stable ID: dfb_${decisionId})
  *
  * Non-goals:
  *   - No decision lifecycle modification
@@ -49,6 +48,7 @@ import type { OutcomeRetrievalMetadata } from './outcome-memory-retrieval';
 import type { OutcomeAggregationService } from './outcome-aggregation-service';
 import { OutcomeAggregationServiceImpl } from './outcome-aggregation-service';
 import type { DecisionFeedback } from './decision-feedback';
+import type { DecisionFeedbackBuildOptions } from './decision-feedback';
 import {
   determineDecisionFeedbackCompleteness,
   determineDecisionFeedbackStatus,
@@ -72,6 +72,7 @@ export interface DecisionFeedbackService {
    * @param decision - The Decision Memory
    * @param outcomes - Outcome Memories (may contain non-attributed ones)
    * @param retrievalMetadata - Metadata about the retrieval operation
+   * @param options - Build options including resolved window and request timestamp
    * @return The derived DecisionFeedback
    * @throws Error if decision owner isolation is violated
    */
@@ -79,6 +80,7 @@ export interface DecisionFeedbackService {
     decision: DecisionMemory,
     outcomes: OutcomeMemory[],
     retrievalMetadata: OutcomeRetrievalMetadata,
+    options: DecisionFeedbackBuildOptions,
   ): DecisionFeedback;
 }
 
@@ -112,10 +114,12 @@ export class DecisionFeedbackServiceImpl implements DecisionFeedbackService {
     decision: DecisionMemory,
     outcomes: OutcomeMemory[],
     retrievalMetadata: OutcomeRetrievalMetadata,
+    options: DecisionFeedbackBuildOptions,
   ): DecisionFeedback {
     const ownerId = decision.ownerId ?? '';
     const decisionId = decision.id;
     const payload = decision.payload;
+    const { windowStart, windowEnd, requestNow } = options;
 
     // Step 1: Filter outcomes by attribution AND owner/project/topic isolation
     const isolatedOutcomes = this.filterAndIsolateOutcomes(
@@ -140,11 +144,11 @@ export class DecisionFeedbackServiceImpl implements DecisionFeedbackService {
     const firstObservedAt = sorted.length > 0 ? sorted[0].payload.observedAt : undefined;
     const lastObservedAt = sorted.length > 0 ? sorted[sorted.length - 1].payload.observedAt : undefined;
 
-    // Step 6: Aggregate metrics using OutcomeAggregationService
-    const metricAggregations = this.aggregateMetrics(sorted, decision);
+    // Step 6: Aggregate metrics using FEEDBACK WINDOW (not observation range)
+    const metricAggregations = this.aggregateMetrics(sorted, decision, windowStart, windowEnd);
 
-    // Step 7: Calculate trends using OutcomeAggregationService
-    const trends = this.calculateTrends(sorted, decision);
+    // Step 7: Calculate trends using FEEDBACK WINDOW
+    const trends = this.calculateTrends(sorted, decision, windowStart, windowEnd);
 
     // Step 8: Determine completeness
     const completeness = determineDecisionFeedbackCompleteness(retrievalMetadata);
@@ -153,10 +157,12 @@ export class DecisionFeedbackServiceImpl implements DecisionFeedbackService {
     const status = determineDecisionFeedbackStatus(sorted.length, completeness);
 
     // Step 10: Construct DecisionFeedback
-    const generatedAt = new Date().toISOString();
+    // Stable ID: dfb_${decisionId} — deterministic for same decision
+    // requestNow is used ONLY for generatedAt (display/metadata), NOT for computation
+    const generatedAt = requestNow;
 
     return {
-      id: `dfb_${decisionId}_${Date.now()}`,
+      id: `dfb_${decisionId}`,
       ownerId,
       decisionId,
       decisionStatus: payload.decisionStatus,
@@ -167,6 +173,8 @@ export class DecisionFeedbackServiceImpl implements DecisionFeedbackService {
       outcomeTypes,
       firstObservedAt,
       lastObservedAt,
+      windowStart,
+      windowEnd,
       metricAggregations,
       trends,
       status,
@@ -229,22 +237,22 @@ export class DecisionFeedbackServiceImpl implements DecisionFeedbackService {
   /**
    * Aggregate metrics from outcomes using OutcomeAggregationService.
    *
+   * Uses the resolved feedback windowStart/windowEnd for aggregation,
+   * NOT the raw observation range of outcomes.
+   *
    * Reuses existing aggregation logic — no reimplementation.
    */
   private aggregateMetrics(
     outcomes: OutcomeMemory[],
     decision: DecisionMemory,
+    windowStart: string,
+    windowEnd: string,
   ): OutcomeMetricAggregation[] {
     if (outcomes.length === 0) return [];
 
     const ownerId = decision.ownerId ?? '';
 
-    // Use the outcome observation range as the aggregation window.
-    // Outcomes are already sorted by observedAt ASC at this point.
-    // Add 1ms buffer to windowEnd because isWithinWindow() uses half-open [start, end).
-    const windowStart = outcomes[0].payload.observedAt;
-    const windowEnd = new Date(new Date(outcomes[outcomes.length - 1].payload.observedAt).getTime() + 1).toISOString();
-
+    // Use the feedback window (not observation range)
     const aggregation = this.aggregationService.aggregate(outcomes, {
       ownerId,
       projectId: decision.projectId ?? undefined,
@@ -264,7 +272,7 @@ export class DecisionFeedbackServiceImpl implements DecisionFeedbackService {
   /**
    * Calculate trends from outcomes using OutcomeAggregationService.
    *
-   * Compares the current window [decision.createdAt, now] with the
+   * Compares the feedback window [windowStart, windowEnd] with the
    * previous equal-length window.
    *
    * Reuses existing trend logic — no reimplementation.
@@ -272,27 +280,22 @@ export class DecisionFeedbackServiceImpl implements DecisionFeedbackService {
   private calculateTrends(
     outcomes: OutcomeMemory[],
     decision: DecisionMemory,
+    windowStart: string,
+    windowEnd: string,
   ): OutcomeMetricTrend[] {
     if (outcomes.length === 0) return [];
 
     const ownerId = decision.ownerId ?? '';
-    const decisionTime = new Date(decision.createdAt).getTime();
-    const now = Date.now();
 
-    // Current window: [decision.createdAt, now]
-    const currentStart = decision.createdAt;
-    const currentEnd = new Date(now).toISOString();
-
-    // Only calculate trends if we have enough time range
-    const windowLength = now - decisionTime;
+    const windowLength = new Date(windowEnd).getTime() - new Date(windowStart).getTime();
     if (windowLength <= 0) return [];
 
     const trendResult = this.aggregationService.compareWindows(outcomes, {
       ownerId,
       projectId: decision.projectId ?? undefined,
       topicId: decision.topicId ?? undefined,
-      windowStart: currentStart,
-      windowEnd: currentEnd,
+      windowStart,
+      windowEnd,
       retrievalLimit: 500,
     });
 

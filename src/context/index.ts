@@ -171,3 +171,8 @@ export { KnowledgeRetriever, knowledgeContextToObject } from './assembly';
 // Memory Bridge (P0.6.3.1)
 
 export { memoryRecordToContext } from '@/memory/memory-utils';
+
+// Decision Feedback Context Bridge (P0.6.5.5-R1)
+
+export { decisionFeedbackToContext } from '@/memory/decision-feedback-bridge';
+export type { DecisionFeedbackContextPayload } from '@/memory/decision-feedback-bridge';

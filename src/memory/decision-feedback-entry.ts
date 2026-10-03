@@ -7,11 +7,13 @@
  *
  *   buildDecisionFeedback()
  *       ↓
- *   retrieve Decision (DatabaseMemoryRetriever)
+ *   resolveDecisionFeedbackWindow()
  *       ↓
- *   retrieveDecisionOutcomes()
+ *   getDecisionById()  (reuses decision-memory-retrieval)
  *       ↓
- *   DecisionFeedbackService.buildFeedback()
+ *   retrieveDecisionOutcomes()  (with explicit window)
+ *       ↓
+ *   DecisionFeedbackService.buildFeedback(options)
  *       ↓
  *   DecisionFeedback
  *
@@ -20,16 +22,19 @@
  *   2. Owner isolation preserved throughout
  *   3. Decision must exist AND belong to the owner
  *   4. All Decision statuses allowed (proposed/active/superseded/reversed)
+ *   5. requestNow generated ONCE at entry, passed through entire pipeline
  */
 
 import type { MemoryRetriever } from './memory-retriever';
-import type { DecisionMemory } from './decision-memory';
 import { MemoryNotFoundError } from './persistence/memory-persistence-types';
 import type { DecisionFeedback } from './decision-feedback';
+import type { DecisionFeedbackBuildOptions } from './decision-feedback';
 import type { DecisionFeedbackParams } from './decision-feedback';
 import { retrieveDecisionOutcomes } from './decision-feedback';
+import { resolveDecisionFeedbackWindow } from './decision-feedback';
 import type { DecisionFeedbackService } from './decision-feedback-service';
 import { DecisionFeedbackServiceImpl } from './decision-feedback-service';
+import { getDecisionById } from './decision-memory-retrieval';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Entry Point
@@ -41,14 +46,17 @@ import { DecisionFeedbackServiceImpl } from './decision-feedback-service';
  * This is the recommended entry point for all Decision Feedback operations.
  *
  * Processing:
- * 1. Retrieve the Decision by ID (owner-scoped)
- * 2. If Decision not found → throws MemoryNotFoundError
- * 3. Retrieve Outcomes attributed to the Decision
- * 4. Build feedback via DecisionFeedbackService
+ * 1. Generate requestNow (single timestamp for the entire request lifecycle)
+ * 2. Resolve the time window from params + decision.createdAt + requestNow
+ * 3. Retrieve the Decision by ID (owner-scoped) — reuses getDecisionById()
+ * 4. If Decision not found → throws MemoryNotFoundError
+ * 5. Retrieve Outcomes attributed to the Decision (with time window filter)
+ * 6. Build feedback via DecisionFeedbackService
  *
  * Time Window:
  * - If params.windowStart/windowEnd provided: uses explicit window
- * - Otherwise: uses [decision.createdAt, now]
+ * - Otherwise: uses [decision.createdAt, requestNow]
+ * - Window validation: windowStart MUST be < windowEnd (throws on violation)
  *
  * Owner Isolation:
  * - Decision must belong to params.ownerId
@@ -57,16 +65,26 @@ import { DecisionFeedbackServiceImpl } from './decision-feedback-service';
  *
  * @param retriever - MemoryRetriever implementation
  * @param params - Feedback parameters
+ * @param service - Optional DecisionFeedbackService (for DI/testing)
  * @return The derived DecisionFeedback
  * @throws MemoryNotFoundError if Decision doesn't exist for the owner
+ * @throws Error if window validation fails (windowStart >= windowEnd)
  */
 export async function buildDecisionFeedback(
   retriever: MemoryRetriever,
   params: DecisionFeedbackParams,
   service: DecisionFeedbackService = new DecisionFeedbackServiceImpl(),
 ): Promise<DecisionFeedback> {
-  // Step 1: Retrieve the Decision by ID (owner-scoped)
-  const decision = await retrieveDecisionById(retriever, params.ownerId, params.decisionId);
+  // Step 1: Generate requestNow ONCE — used for windowEnd default and generatedAt
+  const requestNow = new Date().toISOString();
+
+  // Step 2: Retrieve the Decision by ID (owner-scoped, reuses existing retrieval)
+  // Do NOT pass projectId/topicId here — we want to find ANY decision matching
+  // the ID (regardless of scope), then use the decision's own scope.
+  const decision = await getDecisionById(retriever, {
+    ownerId: params.ownerId,
+    decisionId: params.decisionId,
+  });
 
   if (!decision) {
     throw new MemoryNotFoundError(
@@ -74,64 +92,41 @@ export async function buildDecisionFeedback(
     );
   }
 
-  // Step 2: Retrieve Outcomes attributed to the Decision
+  // Step 3: Resolve the time window using decision.createdAt + params + requestNow
+  // The decision's own projectId/topicId becomes authoritative scope
+  const { windowStart, windowEnd } = resolveDecisionFeedbackWindow(
+    decision.createdAt,
+    {
+      windowStart: params.windowStart,
+      windowEnd: params.windowEnd,
+      now: requestNow,
+    }
+  );
+
+  // Step 4: Retrieve Outcomes attributed to the Decision (with window filter)
   const outcomeResult = await retrieveDecisionOutcomes(retriever, {
     ownerId: params.ownerId,
     decisionId: params.decisionId,
     projectId: decision.projectId ?? undefined,
     topicId: decision.topicId ?? undefined,
     limit: params.retrievalLimit ?? 500,
+    windowStart,
+    windowEnd,
   });
 
-  // Step 3: Build feedback via service
+  // Step 5: Build feedback via service
+  const buildOptions: DecisionFeedbackBuildOptions = {
+    windowStart,
+    windowEnd,
+    requestNow,
+  };
+
   const feedback = service.buildFeedback(
     decision,
     outcomeResult.outcomes,
     outcomeResult.metadata,
+    buildOptions,
   );
 
   return feedback;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Internal: Decision Retrieval
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/**
- * Retrieve a Decision Memory by ID, scoped to owner.
- *
- * Uses existing DatabaseMemoryRetriever via MemoryRetriever interface.
- * Returns null if not found or doesn't belong to the owner.
- *
- * @param retriever - MemoryRetriever implementation
- * @param ownerId - Owner ID for isolation
- * @param decisionId - The Decision ID to retrieve
- * @return DecisionMemory or null
- */
-async function retrieveDecisionById(
-  retriever: MemoryRetriever,
-  ownerId: string,
-  decisionId: string,
-): Promise<DecisionMemory | null> {
-  // Use the retriever to get decisions for the owner, then find by ID
-  const request = {
-    ownerId,
-    policy: {
-      maxResults: 500,
-      includeSuperseded: true,
-      includeExpired: false,
-      includeArchived: true, // Include reversed decisions too
-    },
-  };
-
-  const records = await retriever.retrieve(request);
-
-  // Find the decision by ID with type guard
-  const decision = records.find((record): record is DecisionMemory => {
-    if (record.type !== 'decision') return false;
-    if (record.ownerId !== ownerId) return false;
-    return record.id === decisionId;
-  });
-
-  return decision ?? null;
 }

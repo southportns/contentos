@@ -145,11 +145,12 @@ export { DecisionTransitionError } from './decision-memory-service';
 
 // ─── Decision Memory Retrieval (P0.6.3.3) ───────────────────────────────────
 
-export type { DecisionRetrievalParams } from './decision-memory-retrieval';
+export type { DecisionRetrievalParams, GetDecisionByIdParams } from './decision-memory-retrieval';
 export {
   retrieveDecisionMemories,
   getActiveDecisions,
   getDecisionHistory,
+  getDecisionById,
 } from './decision-memory-retrieval';
 
 // ─── Decision Memory → Context Bridge (P0.6.3.3) ────────────────────────────
@@ -347,6 +348,7 @@ export type {
   DecisionFeedback,
   DecisionFeedbackStatus,
   DecisionFeedbackParams,
+  DecisionFeedbackBuildOptions,
   DecisionOutcomeRetrievalParams,
 } from './decision-feedback';
 
@@ -356,6 +358,7 @@ export {
   determineDecisionFeedbackCompleteness,
   determineDecisionFeedbackStatus,
   feedbackConfidence,
+  resolveDecisionFeedbackWindow,
 } from './decision-feedback';
 
 // ─── Decision Feedback Service (P0.6.5.5) ───────────────────────────────────
@@ -371,3 +374,13 @@ export {
 export {
   buildDecisionFeedback,
 } from './decision-feedback-entry';
+
+// ─── Decision Feedback → Context Bridge (P0.6.5.5-R1) ──────────────────────
+
+export {
+  decisionFeedbackToContext,
+} from './decision-feedback-bridge';
+
+export type {
+  DecisionFeedbackContextPayload,
+} from './decision-feedback-bridge';

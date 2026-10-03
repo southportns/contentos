@@ -3,20 +3,21 @@
  *
  * Unit tests for:
  *   - isOutcomeAttributedToDecision()
+ *   - resolveDecisionFeedbackWindow()
  *   - retrieveDecisionOutcomes()
  *   - determineDecisionFeedbackCompleteness()
  *   - determineDecisionFeedbackStatus()
  *   - feedbackConfidence()
  *
- * Test Categories (from spec):
+ * Test Categories:
  *   A. Attribution
  *   B. Feedback Status
  *   C. Owner / Scope
- *   D. Expected Outcome
- *   E. Metrics
- *   F. Trend
- *   G. Decision Status
- *   H. Integration
+ *   D. Completeness
+ *   E. Feedback Confidence
+ *   F. resolveDecisionFeedbackWindow (P0.6.5.5-R1)
+ *   G. Time Window Filtering (P0.6.5.5-R1)
+ *   H. retrieveDecisionOutcomes Integration
  */
 
 import { describe, it, expect } from 'vitest';
@@ -30,6 +31,7 @@ import {
   determineDecisionFeedbackCompleteness,
   determineDecisionFeedbackStatus,
   feedbackConfidence,
+  resolveDecisionFeedbackWindow,
 } from '../decision-feedback';
 import type { OutcomeRetrievalMetadata } from '../outcome-memory-retrieval';
 
@@ -84,7 +86,6 @@ describe('A. Attribution', () => {
       id: 'o2',
       ownerId: 'user-1',
       observedAt: '2026-10-01T00:00:00Z',
-      // No decisionId
     });
 
     expect(isOutcomeAttributedToDecision(outcome, 'dec-1')).toBe(false);
@@ -102,8 +103,6 @@ describe('A. Attribution', () => {
   });
 
   it('A4: should ONLY check attribution, not owner', () => {
-    // Outcome has decisionId match but different owner
-    // Attribution match is independent of owner (isolation is checked elsewhere)
     const outcome = createTestOutcome({
       id: 'o4',
       ownerId: 'other-user',
@@ -111,7 +110,6 @@ describe('A. Attribution', () => {
       decisionId: 'dec-1',
     });
 
-    // Attribution alone should match
     expect(isOutcomeAttributedToDecision(outcome, 'dec-1')).toBe(true);
   });
 
@@ -230,13 +228,9 @@ describe('C. Owner / Scope', () => {
   it('C5: combined isolation (owner + project + topic)', async () => {
     const retriever = new InMemoryRetriever();
     retriever.addRecords([
-      // Match: same owner, project, topic, and decisionId
       createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-10-01T00:00:00Z', decisionId: 'dec-1', projectId: 'proj-1', topicId: 'topic-1' }),
-      // Wrong owner
       createTestOutcome({ id: 'o2', ownerId: 'user-2', observedAt: '2026-10-02T00:00:00Z', decisionId: 'dec-1', projectId: 'proj-1', topicId: 'topic-1' }),
-      // Wrong project
       createTestOutcome({ id: 'o3', ownerId: 'user-1', observedAt: '2026-10-03T00:00:00Z', decisionId: 'dec-1', projectId: 'proj-2', topicId: 'topic-1' }),
-      // Wrong topic
       createTestOutcome({ id: 'o4', ownerId: 'user-1', observedAt: '2026-10-04T00:00:00Z', decisionId: 'dec-1', projectId: 'proj-1', topicId: 'topic-2' }),
     ]);
 
@@ -253,10 +247,10 @@ describe('C. Owner / Scope', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// D. Expected Outcome — preserved, not interpreted
+// D. Completeness
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('D. Expected Outcome (preserved not interpreted)', () => {
+describe('D. Completeness', () => {
   it('D1: completeness = bounded when metadata.truncated = true', () => {
     const metadata: OutcomeRetrievalMetadata = {
       scannedRecords: 500,
@@ -284,7 +278,6 @@ describe('D. Expected Outcome (preserved not interpreted)', () => {
       truncated: false,
       exhausted: false,
     };
-    // Safety fallback
     expect(determineDecisionFeedbackCompleteness(metadata)).toBe('bounded');
   });
 });
@@ -313,11 +306,230 @@ describe('E. Feedback Confidence', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// F. retrieveDecisionOutcomes Integration
+// F. resolveDecisionFeedbackWindow (P0.6.5.5-R1)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('F. retrieveDecisionOutcomes Integration', () => {
-  it('F1: CRITICAL — only attributed outcomes are counted', async () => {
+describe('F. resolveDecisionFeedbackWindow', () => {
+  const DECISION_CREATED_AT = '2026-09-01T00:00:00.000Z';
+  const NOW = '2026-10-03T12:00:00.000Z';
+
+  // W1: explicit windowStart only → [provided, now]
+  it('W1: windowStart only → [provided, now]', () => {
+    const ws = '2026-09-15T00:00:00.000Z';
+    const result = resolveDecisionFeedbackWindow(DECISION_CREATED_AT, {
+      windowStart: ws,
+      now: NOW,
+    });
+    expect(result.windowStart).toBe(ws);
+    expect(result.windowEnd).toBe(NOW);
+  });
+
+  // W2: explicit windowEnd only → [decisionCreatedAt, provided]
+  it('W2: windowEnd only → [decisionCreatedAt, provided]', () => {
+    const we = '2026-09-20T00:00:00.000Z';
+    const result = resolveDecisionFeedbackWindow(DECISION_CREATED_AT, {
+      windowEnd: we,
+      now: NOW,
+    });
+    expect(result.windowStart).toBe(DECISION_CREATED_AT);
+    expect(result.windowEnd).toBe(we);
+  });
+
+  // W3: both explicit → use both
+  it('W3: both explicit → [providedStart, providedEnd]', () => {
+    const ws = '2026-09-10T00:00:00.000Z';
+    const we = '2026-09-25T00:00:00.000Z';
+    const result = resolveDecisionFeedbackWindow(DECISION_CREATED_AT, {
+      windowStart: ws,
+      windowEnd: we,
+      now: NOW,
+    });
+    expect(result.windowStart).toBe(ws);
+    expect(result.windowEnd).toBe(we);
+  });
+
+  // W4: no explicit → [decisionCreatedAt, now]
+  it('W4: no explicit → [decisionCreatedAt, now]', () => {
+    const result = resolveDecisionFeedbackWindow(DECISION_CREATED_AT, {
+      now: NOW,
+    });
+    expect(result.windowStart).toBe(DECISION_CREATED_AT);
+    expect(result.windowEnd).toBe(NOW);
+  });
+
+  // W5: windowStart >= windowEnd → throws error
+  it('W5: windowStart >= windowEnd → throws', () => {
+    expect(() => {
+      resolveDecisionFeedbackWindow(DECISION_CREATED_AT, {
+        windowStart: '2026-10-01T00:00:00.000Z',
+        windowEnd: '2026-09-01T00:00:00.000Z',
+        now: NOW,
+      });
+    }).toThrow(/windowStart.*must be strictly less than.*windowEnd/);
+  });
+
+  // Invalid ISO date
+  it('F1: invalid windowStart throws', () => {
+    expect(() => {
+      resolveDecisionFeedbackWindow(DECISION_CREATED_AT, {
+        windowStart: 'not-a-date',
+        now: NOW,
+      });
+    }).toThrow(/Invalid windowStart/);
+  });
+
+  it('F2: invalid windowEnd throws', () => {
+    expect(() => {
+      resolveDecisionFeedbackWindow(DECISION_CREATED_AT, {
+        windowEnd: 'not-a-date',
+        now: NOW,
+      });
+    }).toThrow(/Invalid windowEnd/);
+  });
+
+  // Equal timestamps also throw
+  it('F3: windowStart === windowEnd throws', () => {
+    const ts = '2026-09-15T00:00:00.000Z';
+    expect(() => {
+      resolveDecisionFeedbackWindow(DECISION_CREATED_AT, {
+        windowStart: ts,
+        windowEnd: ts,
+        now: NOW,
+      });
+    }).toThrow(/windowStart.*must be strictly less than.*windowEnd/);
+  });
+
+  // Backwards compatibility: no options provided → uses default now
+  it('F4: no options provided → [decisionCreatedAt, current time]', () => {
+    const before = new Date().toISOString();
+    const result = resolveDecisionFeedbackWindow(DECISION_CREATED_AT);
+    const after = new Date().toISOString();
+    expect(result.windowStart).toBe(DECISION_CREATED_AT);
+    expect(result.windowEnd >= before).toBe(true);
+    expect(result.windowEnd <= after).toBe(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// G. Time Window Filtering (P0.6.5.5-R1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('G. Time Window Filtering on retrieveDecisionOutcomes', () => {
+  // W6: outcome before windowStart is excluded
+  it('W6: outcome before windowStart excluded', async () => {
+    const retriever = new InMemoryRetriever();
+    retriever.addRecords([
+      createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-09-14T23:59:59.999Z', decisionId: 'dec-1' }),
+      createTestOutcome({ id: 'o2', ownerId: 'user-1', observedAt: '2026-09-15T00:00:00.000Z', decisionId: 'dec-1' }),
+    ]);
+
+    const result = await retrieveDecisionOutcomes(retriever, {
+      ownerId: 'user-1',
+      decisionId: 'dec-1',
+      windowStart: '2026-09-15T00:00:00.000Z',
+      windowEnd: '2026-09-20T00:00:00.000Z',
+    });
+
+    expect(result.outcomes).toHaveLength(1);
+    expect(result.outcomes[0].id).toBe('o2');
+  });
+
+  // W7: outcome exactly at windowStart is included (>=)
+  it('W7: outcome exactly at windowStart included', async () => {
+    const retriever = new InMemoryRetriever();
+    retriever.addRecords([
+      createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-09-15T00:00:00.000Z', decisionId: 'dec-1' }),
+    ]);
+
+    const result = await retrieveDecisionOutcomes(retriever, {
+      ownerId: 'user-1',
+      decisionId: 'dec-1',
+      windowStart: '2026-09-15T00:00:00.000Z',
+      windowEnd: '2026-09-20T00:00:00.000Z',
+    });
+
+    expect(result.outcomes).toHaveLength(1);
+    expect(result.outcomes[0].id).toBe('o1');
+  });
+
+  // W8: outcome exactly at windowEnd is excluded (<)
+  it('W8: outcome exactly at windowEnd excluded', async () => {
+    const retriever = new InMemoryRetriever();
+    retriever.addRecords([
+      createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-09-19T23:59:59.999Z', decisionId: 'dec-1' }),
+      createTestOutcome({ id: 'o2', ownerId: 'user-1', observedAt: '2026-09-20T00:00:00.000Z', decisionId: 'dec-1' }),
+    ]);
+
+    const result = await retrieveDecisionOutcomes(retriever, {
+      ownerId: 'user-1',
+      decisionId: 'dec-1',
+      windowStart: '2026-09-15T00:00:00.000Z',
+      windowEnd: '2026-09-20T00:00:00.000Z',
+    });
+
+    expect(result.outcomes).toHaveLength(1);
+    expect(result.outcomes[0].id).toBe('o1');
+  });
+
+  // W9: only windowStart provided (no windowEnd) → no end filter
+  it('G1: only windowStart filters on start', async () => {
+    const retriever = new InMemoryRetriever();
+    retriever.addRecords([
+      createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-09-14T00:00:00Z', decisionId: 'dec-1' }),
+      createTestOutcome({ id: 'o2', ownerId: 'user-1', observedAt: '2026-09-16T00:00:00Z', decisionId: 'dec-1' }),
+    ]);
+
+    const result = await retrieveDecisionOutcomes(retriever, {
+      ownerId: 'user-1',
+      decisionId: 'dec-1',
+      windowStart: '2026-09-15T00:00:00Z',
+    });
+
+    expect(result.outcomes).toHaveLength(1);
+    expect(result.outcomes[0].id).toBe('o2');
+  });
+
+  // W10: only windowEnd provided (no windowStart) → no start filter
+  it('G2: only windowEnd filters on end', async () => {
+    const retriever = new InMemoryRetriever();
+    retriever.addRecords([
+      createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-09-14T00:00:00Z', decisionId: 'dec-1' }),
+      createTestOutcome({ id: 'o2', ownerId: 'user-1', observedAt: '2026-09-16T00:00:00Z', decisionId: 'dec-1' }),
+    ]);
+
+    const result = await retrieveDecisionOutcomes(retriever, {
+      ownerId: 'user-1',
+      decisionId: 'dec-1',
+      windowEnd: '2026-09-15T00:00:00Z',
+    });
+
+    expect(result.outcomes).toHaveLength(1);
+    expect(result.outcomes[0].id).toBe('o1');
+  });
+
+  // G3: no window → no time filtering
+  it('G3: no window params → all attributed outcomes returned', async () => {
+    const retriever = new InMemoryRetriever();
+    retriever.addRecords([
+      createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-09-14T00:00:00Z', decisionId: 'dec-1' }),
+      createTestOutcome({ id: 'o2', ownerId: 'user-1', observedAt: '2026-09-16T00:00:00Z', decisionId: 'dec-1' }),
+    ]);
+
+    const result = await retrieveDecisionOutcomes(retriever, {
+      ownerId: 'user-1',
+      decisionId: 'dec-1',
+    });
+
+    expect(result.outcomes).toHaveLength(2);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// H. retrieveDecisionOutcomes Integration
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('H. retrieveDecisionOutcomes Integration', () => {
+  it('H1: CRITICAL — only attributed outcomes are counted', async () => {
     const retriever = new InMemoryRetriever();
     retriever.addRecords([
       createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-10-01T00:00:00Z', decisionId: 'dec-1' }),
@@ -330,12 +542,11 @@ describe('F. retrieveDecisionOutcomes Integration', () => {
       decisionId: 'dec-1',
     });
 
-    // MUST be 2, not 3 (order depends on retriever sort — use arrayContaining)
     expect(result.outcomes).toHaveLength(2);
     expect(result.outcomes.map(o => o.id)).toEqual(expect.arrayContaining(['o1', 'o2']));
   });
 
-  it('F2: returns metadata from the retrieval pipeline', async () => {
+  it('H2: returns metadata from the retrieval pipeline', async () => {
     const retriever = new InMemoryRetriever();
     retriever.addRecords([
       createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-10-01T00:00:00Z', decisionId: 'dec-1' }),
@@ -350,7 +561,7 @@ describe('F. retrieveDecisionOutcomes Integration', () => {
     expect(result.metadata.scannedRecords).toBeGreaterThanOrEqual(1);
   });
 
-  it('F3: empty array when no outcomes match', async () => {
+  it('H3: empty array when no outcomes match', async () => {
     const retriever = new InMemoryRetriever();
     retriever.addRecords([
       createTestOutcome({ id: 'o1', ownerId: 'user-1', observedAt: '2026-10-01T00:00:00Z', decisionId: 'dec-2' }),
