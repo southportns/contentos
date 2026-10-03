@@ -469,17 +469,66 @@ export function makeLearningCandidateId(
 
 /**
  * Determine the overall completeness status from stage results.
+ *
+ * Graph is an OPTIONAL enrichment phase — NOT a hard prerequisite
+ * for Assembly or Learning. The pipeline continues regardless of
+ * whether graph traversal produced contexts.
+ *
+ * Stage dependency graph:
+ *
+ *   Decision (required)
+ *     ↓
+ *   Outcome (required)
+ *     ↓
+ *   Feedback (required)
+ *     ↓
+ *   Graph (optional enrichment)
+ *     ↓
+ *   Assembly
+ *     ↓
+ *   Learning
+ *
+ * Possible states:
+ *   no_decision        — decision not found
+ *   no_outcome         — decision exists, no outcomes attributed
+ *   outcome_available  — outcomes exist but feedback not built
+ *   feedback_available — feedback built, no graph OR no assembly
+ *   graph_available    — graph produced contexts but no assembly
+ *   assembled          — assembly done but no learning candidates
+ *   learned            — learning candidates generated
  */
 export function determineLoopCompleteness(
   stageStatus: ContextLoopStageStatus,
 ): ContextLoopCompleteness {
-  if (!stageStatus.decision) return 'no_decision';
-  if (!stageStatus.outcome) return 'no_outcome';
-  if (!stageStatus.feedback) return 'outcome_available';
-  if (!stageStatus.graph) return 'feedback_available';
-  if (!stageStatus.assembly) return 'graph_available';
-  if (!stageStatus.learning) return 'assembled';
-  return 'learned';
+  if (!stageStatus.decision) {
+    return 'no_decision';
+  }
+
+  if (!stageStatus.outcome) {
+    return 'no_outcome';
+  }
+
+  if (!stageStatus.feedback) {
+    return 'outcome_available';
+  }
+
+  // Learning is the furthest possible stage
+  if (stageStatus.learning) {
+    return 'learned';
+  }
+
+  // Assembly occurred (possibly without graph)
+  if (stageStatus.assembly) {
+    return 'assembled';
+  }
+
+  // Graph enrichment occurred but no assembly attempted yet
+  if (stageStatus.graph) {
+    return 'graph_available';
+  }
+
+  // Feedback built but no graph/assembly/learning
+  return 'feedback_available';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
