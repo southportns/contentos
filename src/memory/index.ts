@@ -328,3 +328,46 @@ export {
 export type {
   OutcomeAggregationContextMetadata,
 } from './outcome-aggregation-bridge';
+
+// ─── Decision Feedback Types (P0.6.5.5) ─────────────────────────────────────
+
+/**
+ * @defgroup decision_feedback P0.6.5.5 Decision Feedback Layer
+ * @brief On-demand Decision → Outcome evidence feedback
+ * @details Supports:
+ * - Decision → Outcome attribution via attribution.decisionId
+ * - Objective outcome count, metric aggregation, trend analysis
+ * - Honest completeness reporting (complete vs bounded)
+ * - Owner / Project / Topic isolation at every layer
+ * - On-demand feedback — derived, not persisted
+ * - NO causal inference, NO decision judgment
+ */
+
+export type {
+  DecisionFeedback,
+  DecisionFeedbackStatus,
+  DecisionFeedbackParams,
+  DecisionOutcomeRetrievalParams,
+} from './decision-feedback';
+
+export {
+  isOutcomeAttributedToDecision,
+  retrieveDecisionOutcomes,
+  determineDecisionFeedbackCompleteness,
+  determineDecisionFeedbackStatus,
+  feedbackConfidence,
+} from './decision-feedback';
+
+// ─── Decision Feedback Service (P0.6.5.5) ───────────────────────────────────
+
+export type { DecisionFeedbackService } from './decision-feedback-service';
+export {
+  DecisionFeedbackServiceImpl,
+  defaultDecisionFeedbackService,
+} from './decision-feedback-service';
+
+// ─── Decision Feedback Entry Point (P0.6.5.5) ───────────────────────────────
+
+export {
+  buildDecisionFeedback,
+} from './decision-feedback-entry';
