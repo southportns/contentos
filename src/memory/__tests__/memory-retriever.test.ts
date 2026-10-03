@@ -344,6 +344,113 @@ describe('InMemoryRetriever', () => {
     });
   });
 
+  // ─── Exact ID Lookup (P0.6.5.5-R2) ──────────────────────────────────────
+
+  describe('Exact ID lookup', () => {
+    it('R-ID-1: should return only the record matching the exact ID', async () => {
+      const retriever = new InMemoryRetriever([
+        makeRecord({ id: 'a', ownerId: 'user-1', scope: 'global' }),
+        makeRecord({ id: 'b', ownerId: 'user-1', scope: 'global' }),
+        makeRecord({ id: 'c', ownerId: 'user-1', scope: 'global' }),
+      ]);
+
+      const result = await retriever.retrieve({
+        ownerId: 'user-1',
+        id: 'b',
+      });
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('b');
+    });
+
+    it('R-ID-2: should return empty when ID does not exist', async () => {
+      const retriever = new InMemoryRetriever([
+        makeRecord({ id: 'a', scope: 'global' }),
+      ]);
+
+      const result = await retriever.retrieve({
+        ownerId: 'user-1',
+        id: 'nonexistent',
+      });
+      expect(result).toHaveLength(0);
+    });
+
+    it('R-ID-3: should respect owner isolation when ID belongs to other owner', async () => {
+      const retriever = new InMemoryRetriever([
+        makeRecord({ id: 'shared-id', ownerId: 'user-2', scope: 'global' }),
+      ]);
+
+      const result = await retriever.retrieve({
+        ownerId: 'user-1',
+        id: 'shared-id',
+      });
+      expect(result).toHaveLength(0);
+    });
+
+    it('R-ID-4: should filter by ID and project scope together', async () => {
+      const retriever = new InMemoryRetriever([
+        makeRecord({ id: 'dec-1', ownerId: 'user-1', scope: 'project', projectId: 'proj-A' }),
+        makeRecord({ id: 'dec-2', ownerId: 'user-1', scope: 'project', projectId: 'proj-B' }),
+      ]);
+
+      const result = await retriever.retrieve({
+        ownerId: 'user-1',
+        id: 'dec-1',
+        projectId: 'proj-A',
+      });
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('dec-1');
+    });
+
+    it('R-ID-5: should filter by ID and topic scope together', async () => {
+      const retriever = new InMemoryRetriever([
+        makeRecord({ id: 'dec-1', scope: 'topic', projectId: 'proj-A', topicId: 'topic-X' }),
+      ]);
+
+      const result = await retriever.retrieve({
+        ownerId: 'user-1',
+        id: 'dec-1',
+        projectId: 'proj-A',
+        topicId: 'topic-Y',
+      });
+      expect(result).toHaveLength(0);
+    });
+
+    it('R-ID-6: should filter by ID and type together', async () => {
+      const retriever = new InMemoryRetriever([
+        makeRecord({ id: 'rec-1', ownerId: 'user-1', type: 'decision', scope: 'global' }),
+      ]);
+
+      const result = await retriever.retrieve({
+        ownerId: 'user-1',
+        id: 'rec-1',
+        policy: { types: ['outcome'] },
+      });
+      expect(result).toHaveLength(0);
+    });
+
+    it('R-ID-7: should respect status filter with ID lookup (superseded)', async () => {
+      const retriever = new InMemoryRetriever([
+        makeRecord({ id: 'sup-1', ownerId: 'user-1', status: 'superseded', scope: 'global' }),
+      ]);
+
+      // Default excludes superseded
+      const resultDefault = await retriever.retrieve({
+        ownerId: 'user-1',
+        id: 'sup-1',
+      });
+      expect(resultDefault).toHaveLength(0);
+
+      // With includeSuperseded
+      const resultIncluded = await retriever.retrieve({
+        ownerId: 'user-1',
+        id: 'sup-1',
+        policy: { includeSuperseded: true },
+      });
+      expect(resultIncluded).toHaveLength(1);
+      expect(resultIncluded[0].id).toBe('sup-1');
+    });
+  });
+
   // ─── Age Filtering ─────────────────────────────────────────────────────────
 
   describe('Age filtering', () => {

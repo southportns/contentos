@@ -99,6 +99,17 @@ export interface MemoryRetrievalRequest {
   projectId?: string;
   /** Filter by topic ID */
   topicId?: string;
+  /**
+   * Exact memory record ID for point lookup.
+   *
+   * Semantics:
+   * - Always combined with ownerId (id-only queries are never permitted).
+   * - When present, the retriever returns at most the single matching record.
+   * - Combined with scope/status/type filters — all conditions must hold.
+   *
+   * This is a structural query criterion (like projectId/topicId), NOT a policy.
+   */
+  id?: string;
   /** Explicit scope override (takes precedence over inference) */
   scope?: MemoryScope;
   /** Future: query string for semantic search (P0.6.3.x) */
@@ -180,6 +191,14 @@ export class InMemoryRetriever implements MemoryRetriever {
     // 2. Owner filtering
     if (ownerId) {
       results = results.filter((record) => record.ownerId === ownerId);
+    }
+
+    // 2b. Exact ID filtering (point lookup)
+    // When request.id is present, narrow to exactly that record.
+    // Combined with owner isolation (id-only queries are rejected upstream
+    // by DatabaseMemoryRetriever, but InMemoryRetriever also guards here).
+    if (request.id) {
+      results = results.filter((record) => record.id === request.id);
     }
 
     // 3. Status filtering

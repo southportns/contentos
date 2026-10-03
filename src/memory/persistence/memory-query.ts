@@ -37,6 +37,17 @@ export interface MemoryQueryCriteria {
   ownerId: string;
 
   /**
+   * Exact memory record ID for point lookup.
+   *
+   * When present, the database query adds `id = criteria.id` to the WHERE
+   * clause, combined with ownerId for isolation. This enables O(1) exact
+   * lookups without scanning top-N records.
+   *
+   * Must always be used together with ownerId — never as a standalone filter.
+   */
+  id?: string;
+
+  /**
    * Allowed scopes for retrieval. Only persistent scopes are accepted;
    * 'session' must never appear here (session is ephemeral, excluded
    * from persistent retrieval).

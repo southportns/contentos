@@ -220,6 +220,13 @@ export class DatabaseMemoryRetriever implements MemoryRetriever {
       take: policy.maxResults ?? DEFAULT_MEMORY_POLICY.maxResults,
     };
 
+    // Exact ID lookup (P0.6.5.5-R2)
+    // Propagated from request.id — always combined with ownerId for isolation.
+    // This is a structural criterion, not part of policy.
+    if (request.id) {
+      criteria.id = request.id;
+    }
+
     // Optional filters
     if (projectId) {
       criteria.projectId = projectId;

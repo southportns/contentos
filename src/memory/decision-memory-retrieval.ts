@@ -175,7 +175,7 @@ export async function getDecisionHistory(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Get Decision By ID (P0.6.5.5-R1)
+// Get Decision By ID (P0.6.5.5-R2 — exact-id retrieval)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
@@ -199,25 +199,21 @@ export interface GetDecisionByIdParams {
 }
 
 /**
- * Retrieve a specific Decision Memory by ID.
+ * Retrieve a specific Decision Memory by ID using exact-id retrieval.
  *
- * This function provides ID-based lookup by using `getDecisionHistory()`
- * which includes ALL decision statuses (proposed/active/superseded/reversed).
- * The result is then filtered to find the exact decisionId.
+ * P0.6.5.5-R2: Upgraded from "history + find" anti-pattern to true
+ * ID-level lookup via MemoryRetriever.retrieve({ id, ownerId }).
  *
- * Design Decision:
- *   Adding `id` as a first-class query criteria in MemoryRetriever would
- *   require changes to the InMemoryRetriever, DatabaseMemoryRetriever,
- *   and all intermediate layers. Since Decision IDs are unique and this
- *   is a single-ID lookup, filtering the broader history result is the
- *   minimal-impact approach that still avoids the "top-N then find"
- *   anti-pattern (limit is bounded by history defaults).
+ * This produces an O(1) database query:
+ *   WHERE ownerId = ? AND id = ?
+ * with all historical statuses included (proposed/active/superseded/reversed).
  *
  * Behavior:
  * - Returns null if decision doesn't exist or belongs to another owner.
  * - Includes ALL decision statuses: proposed, active, superseded, reversed.
- * - Respects ownerId isolation.
+ * - Respects ownerId isolation at the database level.
  * - If projectId/topicId provided, narrows the scope.
+ * - Uses maxResults=1 — the database returns at most one record.
  *
  * @param retriever - MemoryRetriever implementation
  * @param params - Parameters including ownerId and decisionId
@@ -227,17 +223,31 @@ export async function getDecisionById(
   retriever: MemoryRetriever,
   params: GetDecisionByIdParams,
 ): Promise<DecisionMemory | null> {
-  const decisions = await getDecisionHistory(retriever, {
+  const request: MemoryRetrievalRequest = {
     ownerId: params.ownerId,
     projectId: params.projectId,
     topicId: params.topicId,
-    limit: 500,
-    includeSuperseded: true,
-    includeReversed: true,
-  });
+    id: params.decisionId,
+    policy: {
+      maxResults: 1,
+      types: [DECISION_MEMORY_TYPE],
+      includeSuperseded: true,
+      includeExpired: false,
+      includeArchived: true,
+    },
+  };
 
-  // After getting the history, filter by exact ID
-  return decisions.find((d) => d.id === params.decisionId) ?? null;
+  const records = await retriever.retrieve(request);
+
+  // Type-narrow: at most 1 record returned (maxResults: 1).
+  // The find() here is only for type narrowing, not for scanning top-N.
+  const decision = records.find(
+    (record): record is DecisionMemory =>
+      record.type === DECISION_MEMORY_TYPE &&
+      record.id === params.decisionId,
+  );
+
+  return decision ?? null;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
