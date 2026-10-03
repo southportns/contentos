@@ -163,6 +163,90 @@ describe('P0.6.7 — Context Loop Types', () => {
       };
       expect(determineLoopCompleteness(status)).toBe('learned');
     });
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P0.6.7-R1: Graph is NOT a hard prerequisite for Assembly/Learning
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    describe('P0.6.7-R1 — Graph optional enrichment', () => {
+      it('R1-T1: should return learned when graph=false but assembly=true and learning=true', () => {
+        // Graph missing — but pipeline continues to Assembly + Learning
+        const status: ContextLoopStageStatus = {
+          decision: true,
+          outcome: true,
+          feedback: true,
+          graph: false,   // NO graph
+          assembly: true,
+          learning: true,
+        };
+        expect(determineLoopCompleteness(status)).toBe('learned');
+      });
+
+      it('R1-T2: should return assembled when graph=false but assembly=true and learning=false', () => {
+        // Graph missing — Assembly done, no learning candidates
+        const status: ContextLoopStageStatus = {
+          decision: true,
+          outcome: true,
+          feedback: true,
+          graph: false,   // NO graph
+          assembly: true,
+          learning: false,
+        };
+        expect(determineLoopCompleteness(status)).toBe('assembled');
+      });
+
+      it('R1-T3: should return graph_available when graph=true but assembly=false', () => {
+        // Graph succeeded — but no Assembly yet
+        const status: ContextLoopStageStatus = {
+          decision: true,
+          outcome: true,
+          feedback: true,
+          graph: true,
+          assembly: false,
+          learning: false,
+        };
+        expect(determineLoopCompleteness(status)).toBe('graph_available');
+      });
+
+      it('R1-T4: should return feedback_available when graph=false and assembly=false', () => {
+        // Graph missing — feedback built but no assembly attempted
+        const status: ContextLoopStageStatus = {
+          decision: true,
+          outcome: true,
+          feedback: true,
+          graph: false,   // NO graph
+          assembly: false,
+          learning: false,
+        };
+        expect(determineLoopCompleteness(status)).toBe('feedback_available');
+      });
+
+      it('R1-T5: should return learned even when only graph is false among late stages', () => {
+        // All stages except graph — full pipeline completion
+        const status: ContextLoopStageStatus = {
+          decision: true,
+          outcome: true,
+          feedback: true,
+          graph: false,   // Only graph missing
+          assembly: true,
+          learning: true,
+        };
+        expect(determineLoopCompleteness(status)).toBe('learned');
+      });
+
+      it('R1-T6: graph=true but no assembly should NOT skip to graph_available', () => {
+        // Edge case: graph produced contexts but assembly failed
+        const status: ContextLoopStageStatus = {
+          decision: true,
+          outcome: true,
+          feedback: true,
+          graph: true,
+          assembly: false,
+          learning: false,
+        };
+        expect(determineLoopCompleteness(status)).toBe('graph_available');
+      });
+    });
   });
 
   // ─── createInitialStageStatus ──────────────────────────────────────────────
