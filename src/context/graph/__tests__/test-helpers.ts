@@ -23,8 +23,12 @@ export function createTestContext(options: {
   derivedFrom?: string[];
   usedBy?: string[];
   supersedes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }): ContextObject {
   const now = new Date().toISOString();
+  const createdAt = options.createdAt ?? now;
+  const updatedAt = options.updatedAt ?? createdAt;
   const provenance: ContextProvenance = {
     source: 'test:' + options.id,
     sourceType: 'test',
@@ -43,10 +47,10 @@ export function createTestContext(options: {
     type: options.type ?? options.kind ?? 'strategy',
     payload: { testId: options.id },
     provenance,
-    lifecycle: { stage: 'captured', updatedAt: now },
+    lifecycle: { stage: 'captured', updatedAt },
     confidence: null,
-    createdAt: now,
-    updatedAt: now,
+    createdAt,
+    updatedAt,
   };
 }
 

@@ -63,7 +63,6 @@ export function buildContextGraph(
 
   // Step 3: Read provenance and create edges
   const edgeMap = new Map<string, ContextGraphEdge>();
-  const now = new Date().toISOString();
 
   for (const [, node] of nodeMap) {
     const ctx = node.context;
@@ -83,7 +82,7 @@ export function buildContextGraph(
             toId: ctx.id,
             type: 'derived_from',
             source: 'provenance',
-            createdAt: now,
+            createdAt: ctx.updatedAt,
           };
           edgeMap.set(edge.id, edge);
         }
@@ -104,7 +103,7 @@ export function buildContextGraph(
             toId: targetId,
             type: 'used_by',
             source: 'provenance',
-            createdAt: now,
+            createdAt: ctx.updatedAt,
           };
           edgeMap.set(edge.id, edge);
         }
@@ -125,7 +124,7 @@ export function buildContextGraph(
           toId: ctx.id,
           type: 'supersedes',
           source: 'provenance',
-          createdAt: now,
+          createdAt: ctx.updatedAt,
         };
         edgeMap.set(edge.id, edge);
       }

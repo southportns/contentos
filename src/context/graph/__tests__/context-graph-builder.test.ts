@@ -135,7 +135,7 @@ describe('P0.6.6 - Context Graph Builder', () => {
   });
 
   describe('B9: Deterministic Output', () => {
-    it('should produce same graph regardless of input order', () => {
+    it('should produce identical graph regardless of input order (full equality)', () => {
       const a = createTestContext({ id: 'A' });
       const b = createTestContext({ id: 'B', derivedFrom: ['A'] });
       const c = createTestContext({ id: 'C', derivedFrom: ['B'] });
@@ -148,6 +148,62 @@ describe('P0.6.6 - Context Graph Builder', () => {
       expect(graph1.edgeCount).toBe(graph2.edgeCount);
       expect(graph1.nodes.map(n => n.id)).toEqual(graph2.nodes.map(n => n.id));
       expect(graph1.edges.map(e => e.id)).toEqual(graph2.edges.map(e => e.id));
+      // Full graph equality incl. createdAt
+      expect(graph1.edges).toEqual(graph2.edges);
+    });
+
+    // Test A: same input → same graph twice
+    it('Test A: same input produces identical graph on repeated build', () => {
+      const a = createTestContext({ id: 'X' });
+      const b = createTestContext({ id: 'Y', derivedFrom: ['X'] });
+      const c = createTestContext({ id: 'Z', usedBy: ['Y'] });
+
+      const graph1 = buildContextGraph([a, b, c]);
+      const graph2 = buildContextGraph([a, b, c]);
+
+      expect(graph1).toEqual(graph2);
+    });
+
+    // Test B: derived_from uses declaring context's updatedAt
+    it('Test B: derived_from edge createdAt === declaring context updatedAt', () => {
+      const t1 = '2026-01-01T00:00:00.000Z';
+      const t2 = '2026-06-15T12:30:00.000Z';
+      const a = createTestContext({ id: 'A', updatedAt: t1 });
+      const b = createTestContext({ id: 'B', updatedAt: t2, derivedFrom: ['A'] });
+
+      const graph = buildContextGraph([a, b]);
+
+      // derived_from: A → B, declaring context is B, createdAt = B.updatedAt
+      const edge = graph.edges[0];
+      expect(edge.createdAt).toBe(t2);
+    });
+
+    // Test C: used_by uses declaring context's updatedAt
+    it('Test C: used_by edge createdAt === declaring context updatedAt', () => {
+      const t1 = '2026-03-10T08:00:00.000Z';
+      const t2 = '2026-09-20T16:45:00.000Z';
+      const a = createTestContext({ id: 'P', updatedAt: t1, usedBy: ['Q'] });
+      const b = createTestContext({ id: 'Q', updatedAt: t2 });
+
+      const graph = buildContextGraph([a, b]);
+
+      // used_by: P → Q, declaring context is P, createdAt = P.updatedAt
+      const edge = graph.edges[0];
+      expect(edge.createdAt).toBe(t1);
+    });
+
+    // Test D: supersedes uses declaring context's updatedAt
+    it('Test D: supersedes edge createdAt === declaring context updatedAt', () => {
+      const t1 = '2026-02-28T00:00:00.000Z';
+      const t2 = '2026-12-25T00:00:00.000Z';
+      const a = createTestContext({ id: 'OLD', updatedAt: t1 });
+      const b = createTestContext({ id: 'NEW', updatedAt: t2, supersedes: 'OLD' });
+
+      const graph = buildContextGraph([a, b]);
+
+      // supersedes: OLD → NEW, declaring context is NEW, createdAt = NEW.updatedAt
+      const edge = graph.edges[0];
+      expect(edge.createdAt).toBe(t2);
     });
   });
 
