@@ -176,3 +176,31 @@ export { memoryRecordToContext } from '@/memory/memory-utils';
 
 export { decisionFeedbackToContext } from '@/memory/decision-feedback-bridge';
 export type { DecisionFeedbackContextPayload } from '@/memory/decision-feedback-bridge';
+
+// Context Graph (P0.6.6)
+
+export type {
+  ContextGraph,
+  ContextGraphNode,
+  ContextGraphEdge,
+  ContextGraphEdgeType,
+  ContextGraphValidationResult,
+  ContextGraphStats,
+} from './graph';
+
+export {
+  buildContextGraph,
+  validateContextGraph,
+  getNode,
+  getOutgoingEdges,
+  getIncomingEdges,
+  getNeighbors,
+  hasNode,
+  hasEdge,
+  getRelatedContexts,
+  traverseContextGraph,
+  findContextPaths,
+  getContextGraphStats,
+  getGraphContext,
+  contextGraphToContexts,
+} from './graph';
