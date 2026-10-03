@@ -45,8 +45,9 @@ import { buildDecisionFeedback } from '@/memory/decision-feedback-entry';
 import type { DecisionMemory } from '@/memory/decision-memory';
 import type { DecisionFeedback } from '@/memory/decision-feedback';
 import type { DecisionContext } from '../context-types';
-import { decisionMemoryToContext } from '@/memory/memory-utils';
+import { decisionMemoryToContext, outcomeMemoryToContext } from '@/memory/memory-utils';
 import { decisionFeedbackToContext } from '@/memory/decision-feedback-bridge';
+import { retrieveDecisionOutcomes } from '@/memory/decision-feedback';
 
 import type {
   ContextLoopRequest,
@@ -199,6 +200,36 @@ export async function runContextLoop(
       allContexts.push(feedbackCtx);
     } catch {
       warnings.push('Failed to convert DecisionFeedback to Context');
+    }
+  }
+
+  // Add Outcome context(s) — reuse existing retrieval to get OutcomeMemory[]
+  // then convert each to a ContextObject via outcomeMemoryToContext().
+  // This ensures Outcome evidence is visible in Assembly, not just inside Feedback.
+  if (feedback && feedback.outcomeCount > 0) {
+    try {
+      const outcomeResult = await retrieveDecisionOutcomes(
+        dependencies.memoryRetriever,
+        {
+          ownerId: request.ownerId,
+          decisionId: request.decisionId,
+          projectId: request.projectId,
+          topicId: request.topicId,
+          windowStart: request.windowStart,
+          windowEnd: request.windowEnd,
+        },
+      );
+
+      for (const outcomeMemory of outcomeResult.outcomes) {
+        try {
+          const outcomeCtx = outcomeMemoryToContext(outcomeMemory);
+          allContexts.push(outcomeCtx);
+        } catch {
+          warnings.push(`Failed to convert Outcome ${outcomeMemory.id} to Context`);
+        }
+      }
+    } catch {
+      warnings.push('Failed to retrieve Outcome contexts');
     }
   }
 
