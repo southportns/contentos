@@ -1,14 +1,15 @@
 /**
- * P0.7.0 — ContextOS Runtime
+ * P0.7.1 — ContextOS Runtime
  *
  * Architecture boundary: Runtime is the orchestration layer between
  * Agent execution and the P0.6 Context/Memory systems.
  *
- * Module Structure (P0.7.0 contract):
- *   runtime-types.ts    — Type contracts
+ * Module Structure:
+ *   runtime-types.ts         — Type contracts
+ *   runtime-core.ts          — Main orchestrator (runContextOS)
+ *   runtime-context.ts       — Context lifecycle (retrieval + assembly)
  *
- * Future modules (P0.7.1+):
- *   runtime-context.ts       — Runtime context lifecycle
+ * Future modules (P0.7.2+):
  *   runtime-retrieval.ts     — Unified retrieval entry point
  *   runtime-assembly.ts      — Assembly orchestration
  *   runtime-injection.ts     — Context package formation
@@ -16,13 +17,10 @@
  *   runtime-learning.ts      — Learning candidate generation
  *   runtime-policy.ts        — Memory policy evaluation
  *   runtime-errors.ts        — Error handling
- *
- * P0.7.0 delivers: Type contracts only.
- * No implementation code is created in P0.7.0.
  */
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Core Runtime Contracts
+// Core Runtime Contracts (Types)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export type {
@@ -36,10 +34,11 @@ export type {
   CreateRunResult,
   CompleteRunResult,
   CreateRunIdOptions,
+  RuntimeErrorCode,
 } from './runtime-types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Runtime Errors
+// Core Runtime Contracts (Values)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export {
@@ -49,4 +48,28 @@ export {
   RuntimeValidationError,
 } from './runtime-types';
 
-export type { RuntimeErrorCode } from './runtime-types';
+// ═══════════════════════════════════════════════════════════════════════════════
+// Runtime Core (Orchestrator)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export { runContextOS, createRuntimeRunId } from './runtime-core';
+export type { ContextOSRuntimeFullDependencies } from './runtime-core';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Runtime Context (Retrieval + Assembly)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export {
+  retrieveRuntimeContext,
+  assembleRuntimeContext,
+  resolveRuntimePolicy,
+  createContextUsage,
+  mapPurposeToAssembly,
+  createRuntimeRunner,
+} from './runtime-context';
+
+export type {
+  RuntimeRetrievalDependencies,
+} from './runtime-context';
+
+export { DEFAULT_RUNTIME_POLICY } from './runtime-context';
