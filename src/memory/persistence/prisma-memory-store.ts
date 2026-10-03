@@ -495,6 +495,13 @@ export class PrismaMemoryStore implements MemoryStore {
       ownerId: criteria.ownerId,
     };
 
+    // ─── Exact ID presence flag (used to skip NEVER_MATCH below) ──────────
+    // P0.6.5.5-R2: When criteria.id is set, this query is an exact-ID
+    // point lookup that does NOT depend on scope matching. We skip the
+    // NEVER_MATCH guard for exact-ID queries because the id itself is
+    // the primary key — ownerId + id is already sufficient isolation.
+    const isExactIdQuery = !!criteria.id;
+
     // ─── Scope/Project/Topic filtering (OR-based) ────────────────────────
     const scopeOrConditions: Prisma.MemoryRecordWhereInput[] = [];
 
@@ -538,10 +545,15 @@ export class PrismaMemoryStore implements MemoryStore {
 
     if (scopeOrConditions.length > 0) {
       conditions.OR = scopeOrConditions;
-    } else {
+    } else if (!isExactIdQuery) {
       // No scopes to match — force zero results by adding an always-false
       // condition on `id`. This prevents the query from degenerating to
       // just `WHERE ownerId = ?`, which would leak records across boundaries.
+      //
+      // IMPORTANT: This guard is SKIPPED when criteria.id is present.
+      // Exact-ID lookups use primary key WHERE (ownerId + id), which is
+      // already isolated. Applying NEVER_MATCH here would overwrite the
+      // criteria.id assignment below and return 0 records incorrectly.
       conditions.id = '__NEVER_MATCH__';
     }
 
@@ -583,6 +595,19 @@ export class PrismaMemoryStore implements MemoryStore {
       } else {
         conditions.type = { in: criteria.types };
       }
+    }
+
+    // ─── Exact ID lookup (P0.6.5.5-R2) — applied LAST ────────────────────
+    // When criteria.id is present, add exact ID match to WHERE clause.
+    // Combined with ownerId above, this produces:
+    //   WHERE ownerId = ? AND id = ?
+    // MemoryRecord.id is the primary key → O(1) database lookup.
+    //
+    // Applied LAST to ensure it is never overwritten by NEVER_MATCH
+    // (guard above skips NEVER_MATCH when criteria.id is present,
+    // but this final assignment provides defense-in-depth).
+    if (criteria.id) {
+      conditions.id = criteria.id;
     }
 
     // ─── Age filtering (based on updatedAt for consistency) ───────────────
