@@ -206,6 +206,24 @@ export async function runContextLoop(
   // Add Outcome context(s) — reuse existing retrieval to get OutcomeMemory[]
   // then convert each to a ContextObject via outcomeMemoryToContext().
   // This ensures Outcome evidence is visible in Assembly, not just inside Feedback.
+  //
+  // CRITICAL INVARIANT — Canonical Outcome Evidence:
+  //   Feedback window is canonical for Outcome Context retrieval.
+  //   This guarantees Feedback and Assembly consume the same Outcome evidence set.
+  //
+  //   Decision
+  //      ↓
+  //   Decision Feedback
+  //      ↓
+  //   Canonical Outcome Window
+  //      ├──────────────→ Outcome Contexts
+  //      │
+  //      └──────────────→ Aggregation / Trend
+  //
+  // We MUST use feedback.windowStart / feedback.windowEnd (resolved by
+  // resolveDecisionFeedbackWindow in the Feedback builder), NOT request.windowStart
+  // / request.windowEnd, because the feedback builder applies default resolution
+  // (decision.createdAt → now) that the raw request values do not carry.
   if (feedback && feedback.outcomeCount > 0) {
     try {
       const outcomeResult = await retrieveDecisionOutcomes(
@@ -215,8 +233,9 @@ export async function runContextLoop(
           decisionId: request.decisionId,
           projectId: request.projectId,
           topicId: request.topicId,
-          windowStart: request.windowStart,
-          windowEnd: request.windowEnd,
+          windowStart: feedback.windowStart,
+          windowEnd: feedback.windowEnd,
+          limit: request.retrievalLimit ?? 500,
         },
       );
 
