@@ -35,6 +35,7 @@ import type { ContextProvenance } from '@/context/context-provenance';
 import { assembleContexts, buildContextPackage, serializeContextPackage } from '@/context/assembly';
 import type { AssemblyPurpose } from '@/context/assembly';
 import type { MemoryRetriever } from '@/memory/memory-retriever';
+import type { MemoryRecord } from '@/memory/memory-record';
 import { memoryRecordsToContexts } from '@/memory/memory-utils';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -77,27 +78,45 @@ export async function retrieveRuntimeContext(
   const { ownerId, projectId, topicId } = request;
   const policy = resolveRuntimePolicy(request.contextPolicy);
 
-  // Retrieve MemoryRecords with owner isolation
-  const records = await deps.memoryRetriever.retrieve({
-    ownerId,
-    projectId,
-    topicId,
-    scope: policy.allowedScopes?.[0], // Primary scope filter
-  });
+  // Retrieve MemoryRecords with owner isolation and scope-aware semantics:
+  // - No allowedScopes: let MemoryRetriever do native scope resolution (no scope param)
+  // - Single allowedScope: pass it directly to MemoryRetriever
+  // - Multiple allowedScopes: retrieve per-scope, merge + deduplicate by id
+  const allowedScopes = policy.allowedScopes;
+  let records: MemoryRecord[];
 
-  // Filter by allowed scopes if specified
-  let filtered = records;
-  if (policy.allowedScopes && policy.allowedScopes.length > 0) {
-    filtered = records.filter((r) => {
-      if (r.scope === 'global') return true;
-      return policy.allowedScopes!.includes(r.scope);
+  if (!allowedScopes || allowedScopes.length === 0) {
+    // Case A: No scope restriction — MemoryRetriever resolves scope natively
+    records = await deps.memoryRetriever.retrieve({
+      ownerId,
+      projectId,
+      topicId,
     });
+  } else if (allowedScopes.length === 1) {
+    // Case B: Single scope — pass directly
+    records = await deps.memoryRetriever.retrieve({
+      ownerId,
+      projectId,
+      topicId,
+      scope: allowedScopes[0],
+    });
+  } else {
+    // Case C: Multiple scopes — retrieve per-scope, merge + deterministic dedup
+    const results = await Promise.all(
+      allowedScopes.map((scope) =>
+        deps.memoryRetriever.retrieve({
+          ownerId,
+          projectId,
+          topicId,
+          scope,
+        })
+      )
+    );
+    records = deduplicateMemoryRecords(results.flat());
   }
 
-  // Convert to ContextObjects
-  const contexts = memoryRecordsToContexts(filtered);
-
   // Apply kind filter if specified
+  const contexts = memoryRecordsToContexts(records);
   if (policy.allowedKinds && policy.allowedKinds.length > 0) {
     return contexts.filter((ctx) => policy.allowedKinds!.includes(ctx.kind));
   }
@@ -106,6 +125,25 @@ export async function retrieveRuntimeContext(
   }
 
   return contexts;
+}
+
+/**
+ * Deterministic deduplication of MemoryRecords by id.
+ * Keeps the first occurrence. Preserves order.
+ *
+ * @param records - Potentially duplicated memory records
+ * @returns Deduplicated records, first-occurrence-wins
+ */
+function deduplicateMemoryRecords<T>(records: MemoryRecord<T>[]): MemoryRecord<T>[] {
+  const seen = new Set<string>();
+  const result: MemoryRecord<T>[] = [];
+  for (const record of records) {
+    if (!seen.has(record.id)) {
+      seen.add(record.id);
+      result.push(record);
+    }
+  }
+  return result;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -134,9 +172,9 @@ export async function retrieveRuntimeContext(
 export async function assembleRuntimeContext(
   contexts: ContextObject[],
   policy: ContextOSContextPolicy | undefined,
-  purpose: string
+  purpose: string,
+  now: () => string = () => new Date().toISOString(),
 ): Promise<RuntimeContextPackage> {
-  const now = () => new Date().toISOString();
   const timestamp = now();
 
   // Map purpose string to AssemblyPurpose
@@ -286,12 +324,16 @@ export function mapPurposeToAssembly(purpose: string): AssemblyPurpose {
  * @param now - Optional clock function
  * @returns A runContextOS function with dependencies pre-wired
  */
-export function createRuntimeRunner(memoryRetriever: MemoryRetriever) {
+export function createRuntimeRunner(
+  memoryRetriever: MemoryRetriever,
+  now: () => string = () => new Date().toISOString(),
+) {
   return async (request: ContextOSRuntimeRequest) => {
     return runContextOS(request, {
       retrieveContext: (req) => retrieveRuntimeContext(req, { memoryRetriever }),
       assembleContext: (contexts, policy, purpose) =>
-        assembleRuntimeContext(contexts, policy, purpose),
+        assembleRuntimeContext(contexts, policy, purpose, now),
+      now,
     });
   };
 }
