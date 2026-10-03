@@ -195,6 +195,15 @@ describe('P0.6.7 — E2E Context Loop', () => {
 
       // Completeness should be 'learned'
       expect(result.completeness).toBe('learned');
+
+      // ── P0.6.7-R1: Outcome Context must enter Assembly ─────────────────
+      const assemblyContextIds = [
+        ...result.assembledContext!.selected.map((x) => x.context.id),
+        ...result.assembledContext!.excluded.map((x) => x.contextId),
+      ];
+
+      // Outcome Context ID is ctx_out_${outcome.id}
+      expect(assemblyContextIds).toContain(`ctx_out_${outcome.id}`);
     });
   });
 
@@ -610,6 +619,120 @@ describe('P0.6.7 — E2E Context Loop', () => {
       // No outcomes → no candidates (decision IS found, hence 'no_outcome')
       expect(result.learningCandidates).toHaveLength(0);
       expect(result.completeness).toBe('no_outcome');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // P0.6.7-R1: No Graph Scenario — Graph must NOT block Assembly/Learning
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('P0.6.7-R1 — No Graph E2E (Graph optional)', () => {
+    it('R1-E1: should complete full pipeline without graph (Decision + Outcome + Feedback → Assembly → Learning)', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_e2e_nograph_001',
+        decision: 'Use emotional hook',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        confidence: 0.9,
+      });
+
+      const outcome = createOutcomeMemoryFixture({
+        id: 'out_e2e_nograph_001',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        metrics: [
+          { key: 'views', value: 50000, unit: 'count', source: 'douyin' },
+          { key: 'engagement', value: 0.15, unit: 'ratio', source: 'douyin' },
+        ],
+      });
+
+      // NO graph — this is the critical test
+      const retriever = new InMemoryRetriever([decision, outcome]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        {
+          ownerId: TEST_OWNER_A,
+          decisionId: decision.id,
+          // No graph provided!
+        },
+        deps,
+      );
+
+      // Decision found
+      expect(result.decisionFound).toBe(true);
+
+      // Feedback built with outcomes
+      expect(result.feedback).not.toBeNull();
+      expect(result.feedback!.outcomeCount).toBe(1);
+
+      // Graph context empty (no graph provided)
+      expect(result.graphContext).toHaveLength(0);
+      expect(result.stageStatus.graph).toBe(false);
+
+      // Assembly still completed (Graph is optional!)
+      expect(result.assembledContext).toBeDefined();
+      expect(result.stageStatus.assembly).toBe(true);
+
+      // Learning candidates generated
+      expect(result.learningCandidates.length).toBeGreaterThan(0);
+      expect(result.stageStatus.learning).toBe(true);
+
+      // Completeness = learned (graph NOT required!)
+      expect(result.completeness).toBe('learned');
+    });
+
+    it('R1-E2: should include Outcome Context in Assembly even without graph', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_e2e_nograph_ctx',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+      });
+
+      const outcome = createOutcomeMemoryFixture({
+        id: 'out_e2e_nograph_ctx',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        metrics: [{ key: 'shares', value: 3000, unit: 'count' }],
+      });
+
+      const retriever = new InMemoryRetriever([decision, outcome]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        {
+          ownerId: TEST_OWNER_A,
+          decisionId: decision.id,
+          // No graph!
+        },
+        deps,
+      );
+
+      expect(result.assembledContext).toBeDefined();
+
+      // All context IDs in selected + excluded should include Outcome Context
+      const allAssemblyIds = [
+        ...result.assembledContext!.selected.map((x) => x.context.id),
+        ...result.assembledContext!.excluded.map((x) => x.contextId),
+      ];
+
+      // Outcome Context must be present in assembly pipeline
+      expect(allAssemblyIds).toContain(`ctx_out_${outcome.id}`);
+
+      // Completeness learned despite no graph
+      expect(result.completeness).toBe('learned');
     });
   });
 });
