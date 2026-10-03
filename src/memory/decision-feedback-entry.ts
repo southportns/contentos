@@ -76,14 +76,17 @@ export async function buildDecisionFeedback(
   service: DecisionFeedbackService = new DecisionFeedbackServiceImpl(),
 ): Promise<DecisionFeedback> {
   // Step 1: Generate requestNow ONCE — used for windowEnd default and generatedAt
-  const requestNow = new Date().toISOString();
+  // Use injected now provider if available (deterministic), otherwise wall clock.
+  const requestNow = params.now ? params.now() : new Date().toISOString();
 
   // Step 2: Retrieve the Decision by ID (owner-scoped, reuses existing retrieval)
-  // Do NOT pass projectId/topicId here — we want to find ANY decision matching
-  // the ID (regardless of scope), then use the decision's own scope.
+  // Pass projectId/topicId if available to enable scope-restricted lookup.
+  // Scope info comes from the caller (e.g., Context Loop request).
   const decision = await getDecisionById(retriever, {
     ownerId: params.ownerId,
     decisionId: params.decisionId,
+    projectId: params.projectId,
+    topicId: params.topicId,
   });
 
   if (!decision) {

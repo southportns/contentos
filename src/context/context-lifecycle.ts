@@ -56,10 +56,11 @@ export interface ContextLifecycleState {
 }
 
 export function createInitialLifecycleState(
-  stage: ContextLifecycleStage = 'captured'
+  stage: ContextLifecycleStage = 'captured',
+  updatedAt?: string
 ): ContextLifecycleState {
   return {
     stage,
-    updatedAt: new Date().toISOString(),
+    updatedAt: updatedAt ?? new Date().toISOString(),
   };
 }

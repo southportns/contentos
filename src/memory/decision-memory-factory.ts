@@ -95,6 +95,15 @@ export interface CreateDecisionMemoryOptions {
 
   /** ID of a decision this supersedes */
   supersedes?: string;
+
+  /** Creation timestamp (default: now) */
+  createdAt?: string;
+
+  /** Update timestamp (default: createdAt) */
+  updatedAt?: string;
+
+  /** Expiration timestamp */
+  expiresAt?: string | null;
 }
 
 /**
@@ -181,6 +190,9 @@ export function createDecisionMemory(
     importance: options.importance ?? 0.8,
     status: memoryStatus,
     version: 1,
+    createdAt: options.createdAt,
+    updatedAt: options.updatedAt,
+    expiresAt: options.expiresAt,
   });
 
   // Return as DecisionMemory (type alias — same object)

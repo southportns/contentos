@@ -70,7 +70,7 @@ export function createContextObject<TPayload>(
     type: options.type,
     payload: options.payload,
     provenance: options.provenance ?? {},
-    lifecycle: createInitialLifecycleState(options.lifecycleStage),
+    lifecycle: createInitialLifecycleState(options.lifecycleStage, updatedAt),
     confidence: options.confidence ?? null,
     createdAt,
     updatedAt,

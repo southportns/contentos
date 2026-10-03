@@ -204,3 +204,29 @@ export {
   getGraphContext,
   contextGraphToContexts,
 } from './graph';
+
+// Context Loop (P0.6.7)
+
+export type {
+  ContextLoopRequest,
+  ContextLoopResult,
+  ContextLoopDependencies,
+  ContextLoopCompleteness,
+  ContextLoopStageStatus,
+  ContextLoopMetrics,
+  LearningCandidate,
+  LearningCandidateType,
+  LearningCandidateEvidence,
+} from './loop/context-loop-index';
+
+export {
+  LEARNING_CANDIDATE_TYPES,
+  CONTEXT_LOOP_STAGES,
+  makeLoopId,
+  makeLearningCandidateId,
+  determineLoopCompleteness,
+  createInitialStageStatus,
+  createInitialMetrics,
+  runContextLoop,
+  buildLearningCandidates,
+} from './loop/context-loop-index';

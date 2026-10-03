@@ -182,6 +182,26 @@ export interface DecisionFeedbackParams {
    * Clamped to safety bound (500).
    */
   retrievalLimit?: number;
+
+  /**
+   * Project ID for scope-restricted Decision lookup.
+   * When provided, passed to getDecisionById for scope filtering.
+   * If omitted, only global-scope decisions can be found.
+   */
+  projectId?: string;
+
+  /**
+   * Topic ID for scope-restricted Decision lookup.
+   * When provided along with projectId, enables topic-scope decisions.
+   */
+  topicId?: string;
+
+  /**
+   * Optional "now" provider for deterministic timestamps.
+   * When provided, used for requestNow instead of new Date().toISOString().
+   * Enables deterministic replays in tests and orchestrated pipelines.
+   */
+  now?: () => string;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
