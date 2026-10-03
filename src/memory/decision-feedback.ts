@@ -42,7 +42,6 @@
  */
 
 import type { MemoryRetriever } from './memory-retriever';
-import type { DecisionMemory } from './decision-memory';
 import type { DecisionStatus } from './memory-types';
 import type { OutcomeMemory } from './outcome-memory';
 import type { OutcomeType } from './outcome-memory';

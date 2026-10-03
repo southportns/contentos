@@ -39,23 +39,16 @@
  */
 
 import type { DecisionMemory } from './decision-memory';
-import type { DecisionStatus } from './memory-types';
 import type { OutcomeMemory } from './outcome-memory';
 import type { OutcomeType } from './outcome-memory';
 import type {
   OutcomeMetricAggregation,
   OutcomeMetricTrend,
 } from './outcome-aggregation';
-import type {
-  OutcomeRetrievalMetadata,
-  OutcomeRetrievalResult,
-} from './outcome-memory-retrieval';
+import type { OutcomeRetrievalMetadata } from './outcome-memory-retrieval';
 import type { OutcomeAggregationService } from './outcome-aggregation-service';
 import { OutcomeAggregationServiceImpl } from './outcome-aggregation-service';
-import type {
-  DecisionFeedback,
-  DecisionFeedbackStatus,
-} from './decision-feedback';
+import type { DecisionFeedback } from './decision-feedback';
 import {
   determineDecisionFeedbackCompleteness,
   determineDecisionFeedbackStatus,
