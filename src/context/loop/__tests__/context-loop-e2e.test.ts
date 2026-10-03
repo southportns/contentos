@@ -48,13 +48,10 @@ const FIXED_NOW = '2026-10-03T12:00:00.000Z';
 
 function stripGeneratedAt(result: Record<string, unknown>) {
   const { generatedAt, metrics, ...rest } = result;
-  // Also strip assembledContext metadata.assembledAt (wall-clock timestamp)
   if (rest.assembledContext?.metadata) {
     const { assembledAt, ...metaRest } = rest.assembledContext.metadata;
     rest.assembledContext = { ...rest.assembledContext, metadata: metaRest };
   }
-  // Strip lifecycle.updatedAt from context objects inside assembledContext
-  // (these depend on the factory's internal timestamp)
   if (rest.assembledContext?.contexts) {
     rest.assembledContext.contexts = rest.assembledContext.contexts.map((ctx: Record<string, unknown>) => {
       if (ctx.lifecycle) {
@@ -71,16 +68,9 @@ beforeEach(() => {
   resetIdCounter();
 });
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// E2E Golden Scenario
-// ═══════════════════════════════════════════════════════════════════════════════
-
 describe('P0.6.7 — E2E Context Loop', () => {
-  // ─── Golden Scenario: Full Pipeline ────────────────────────────────────────
-
   describe('Golden Scenario', () => {
     it('should produce complete result with Decision + Outcome + Feedback + Graph + Assembly + Learning', async () => {
-      // Setup: Decision D1 + Outcome O1 (attributed to D1) + Graph (S1 → D1 → C1)
       const decision = createDecisionMemoryFixture({
         id: 'dec_e2e_golden_001',
         decision: 'Use storytelling hook for opening',
@@ -103,7 +93,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
         ],
       });
 
-      // Build graph: Strategy S1 → Decision D1 → Content C1
       const strategyCtx: ContextObject = {
         id: 'ctx_str_e2e_golden',
         kind: 'decision',
@@ -172,8 +161,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
         deps,
       );
 
-      // ── Assertions from spec section 44 ──
-
       expect(result.decisionFound).toBe(true);
       expect(result.feedback).not.toBeNull();
       expect(result.feedback!.decisionId).toBe(decision.id);
@@ -182,10 +169,8 @@ describe('P0.6.7 — E2E Context Loop', () => {
       expect(result.assembledContext).toBeDefined();
       expect(result.learningCandidates.length).toBeGreaterThanOrEqual(1);
 
-      // Loop ID is deterministic
       expect(result.loopId).toBe(`loop_${decision.id}`);
 
-      // Stage status: all should be true for golden scenario
       expect(result.stageStatus.decision).toBe(true);
       expect(result.stageStatus.outcome).toBe(true);
       expect(result.stageStatus.feedback).toBe(true);
@@ -193,21 +178,16 @@ describe('P0.6.7 — E2E Context Loop', () => {
       expect(result.stageStatus.assembly).toBe(true);
       expect(result.stageStatus.learning).toBe(true);
 
-      // Completeness should be 'learned'
       expect(result.completeness).toBe('learned');
 
-      // ── P0.6.7-R1: Outcome Context must enter Assembly ─────────────────
       const assemblyContextIds = [
         ...result.assembledContext!.selected.map((x) => x.context.id),
         ...result.assembledContext!.excluded.map((x) => x.contextId),
       ];
 
-      // Outcome Context ID is ctx_out_${outcome.id}
       expect(assemblyContextIds).toContain(`ctx_out_${outcome.id}`);
     });
   });
-
-  // ─── Cross-Project Isolation ──────────────────────────────────────────────
 
   describe('Cross-Project Isolation', () => {
     it('should not leak Project A outcomes into Project B loop', async () => {
@@ -238,7 +218,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
         now: () => FIXED_NOW,
       };
 
-      // Use Project B scope to find decisionB (NOT runE2E which forces Project A)
       const resultB = await runContextLoop(
         {
           ownerId: TEST_OWNER_A,
@@ -249,13 +228,10 @@ describe('P0.6.7 — E2E Context Loop', () => {
         deps,
       );
 
-      // decisionB has no outcomes, so learning should be empty
       expect(resultB.decisionFound).toBe(true);
       expect(resultB.learningCandidates).toHaveLength(0);
     });
   });
-
-  // ─── Cross-Owner Isolation ────────────────────────────────────────────────
 
   describe('Cross-Owner Isolation', () => {
     it('should not leak Owner A data when running loop for Owner B', async () => {
@@ -275,7 +251,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
         now: () => FIXED_NOW,
       };
 
-      // Owner B tries to access Owner A's decision
       await expect(
         runE2E(
           { ownerId: TEST_OWNER_B, decisionId: decisionA.id },
@@ -284,8 +259,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
       ).rejects.toThrow();
     });
   });
-
-  // ─── No Outcomes: Minimal Loop ────────────────────────────────────────────
 
   describe('No Outcomes Minimal Loop', () => {
     it('should return valid result with no learning candidates', async () => {
@@ -307,8 +280,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
       expect(result.learningCandidates).toHaveLength(0);
     });
   });
-
-  // ─── Multiple Outcomes ─────────────────────────────────────────────────────
 
   describe('Multiple Outcomes', () => {
     it('should aggregate multiple attributed outcomes', async () => {
@@ -351,8 +322,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
     });
   });
 
-  // ─── Replay Determinism ──────────────────────────────────────────────────
-
   describe('Replay Determinism', () => {
     it('should produce identical results for same input across runs', async () => {
       const decision = createDecisionMemoryFixture({ id: 'dec_replay_001' });
@@ -383,8 +352,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
     });
   });
 
-  // ─── Context Assembly Budget ──────────────────────────────────────────────
-
   describe('Context Assembly Budget', () => {
     it('should respect maxContexts limit', async () => {
       const decision = createDecisionMemoryFixture({ id: 'dec_budget_001' });
@@ -407,8 +374,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
       expect(result.assembledContext!.selected.length).toBeLessThanOrEqual(5);
     });
   });
-
-  // ─── Learning Candidate Memory Persistence ────────────────────────────────
 
   describe('Memory Persistence', () => {
     it('should persist candidates when persist function provided', async () => {
@@ -462,15 +427,12 @@ describe('P0.6.7 — E2E Context Loop', () => {
     });
   });
 
-  // ─── Cross-Topic Isolation ────────────────────────────────────────────────
-
   describe('Cross-Topic Isolation', () => {
     it('should not leak outcomes from different topic', async () => {
       const decision = createDecisionMemoryFixture({
         id: 'dec_topic_iso_001',
         topicId: TEST_TOPIC_A,
       });
-      // Outcome from different topic, attributed to same decision
       const outcomeOtherTopic = createOutcomeMemoryFixture({
         id: 'out_topic_iso_001',
         decisionId: decision.id,
@@ -488,19 +450,14 @@ describe('P0.6.7 — E2E Context Loop', () => {
         deps,
       );
 
-      // The outcome may still be attributed (attribution.decisionId match)
-      // but loop should still complete successfully
       expect(result.decisionFound).toBe(true);
     });
   });
-
-  // ─── Context Pollution Prevention ─────────────────────────────────────────
 
   describe('Context Pollution Prevention', () => {
     it('should enforce budget even with many graph contexts', async () => {
       const decision = createDecisionMemoryFixture({ id: 'dec_pollution_001' });
 
-      // Create graph with many nodes
       const nodes: ContextGraph['nodes'] = [{ id: decision.id, context: {
         id: decision.id, kind: 'decision', type: 'decision',
         payload: {}, provenance: {}, lifecycle: { stage: 'captured', capturedAt: FIXED_NOW },
@@ -552,13 +509,10 @@ describe('P0.6.7 — E2E Context Loop', () => {
         deps,
       );
 
-      // Budget must be respected
       expect(result.assembledContext).toBeDefined();
       expect(result.assembledContext!.selected.length).toBeLessThanOrEqual(20);
     });
   });
-
-  // ─── Learning Candidate Determinism ───────────────────────────────────────
 
   describe('Learning Candidate Determinism', () => {
     it('should produce identical candidate IDs across runs', async () => {
@@ -596,8 +550,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
     });
   });
 
-  // ─── No Cross-Owner Learning Contamination ───────────────────────────────
-
   describe('No Cross-Owner Learning', () => {
     it('should not generate candidates when no outcomes exist', async () => {
       const decision = createDecisionMemoryFixture({
@@ -616,18 +568,17 @@ describe('P0.6.7 — E2E Context Loop', () => {
         deps,
       );
 
-      // No outcomes → no candidates (decision IS found, hence 'no_outcome')
       expect(result.learningCandidates).toHaveLength(0);
       expect(result.completeness).toBe('no_outcome');
     });
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // P0.6.7-R1: No Graph Scenario — Graph must NOT block Assembly/Learning
+  // P0.6.7-R1: No Graph Scenario
   // ═══════════════════════════════════════════════════════════════════════════
 
   describe('P0.6.7-R1 — No Graph E2E (Graph optional)', () => {
-    it('R1-E1: should complete full pipeline without graph (Decision + Outcome + Feedback → Assembly → Learning)', async () => {
+    it('R1-E1: should complete full pipeline without graph', async () => {
       const decision = createDecisionMemoryFixture({
         id: 'dec_e2e_nograph_001',
         decision: 'Use emotional hook',
@@ -649,7 +600,6 @@ describe('P0.6.7 — E2E Context Loop', () => {
         ],
       });
 
-      // NO graph — this is the critical test
       const retriever = new InMemoryRetriever([decision, outcome]);
       const deps: ContextLoopDependencies = {
         memoryRetriever: retriever,
@@ -660,31 +610,19 @@ describe('P0.6.7 — E2E Context Loop', () => {
         {
           ownerId: TEST_OWNER_A,
           decisionId: decision.id,
-          // No graph provided!
         },
         deps,
       );
 
-      // Decision found
       expect(result.decisionFound).toBe(true);
-
-      // Feedback built with outcomes
       expect(result.feedback).not.toBeNull();
       expect(result.feedback!.outcomeCount).toBe(1);
-
-      // Graph context empty (no graph provided)
       expect(result.graphContext).toHaveLength(0);
       expect(result.stageStatus.graph).toBe(false);
-
-      // Assembly still completed (Graph is optional!)
       expect(result.assembledContext).toBeDefined();
       expect(result.stageStatus.assembly).toBe(true);
-
-      // Learning candidates generated
       expect(result.learningCandidates.length).toBeGreaterThan(0);
       expect(result.stageStatus.learning).toBe(true);
-
-      // Completeness = learned (graph NOT required!)
       expect(result.completeness).toBe('learned');
     });
 
@@ -715,24 +653,642 @@ describe('P0.6.7 — E2E Context Loop', () => {
         {
           ownerId: TEST_OWNER_A,
           decisionId: decision.id,
-          // No graph!
         },
         deps,
       );
 
       expect(result.assembledContext).toBeDefined();
 
-      // All context IDs in selected + excluded should include Outcome Context
       const allAssemblyIds = [
         ...result.assembledContext!.selected.map((x) => x.context.id),
         ...result.assembledContext!.excluded.map((x) => x.contextId),
       ];
 
-      // Outcome Context must be present in assembly pipeline
       expect(allAssemblyIds).toContain(`ctx_out_${outcome.id}`);
-
-      // Completeness learned despite no graph
       expect(result.completeness).toBe('learned');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // P0.6.7-R2: Canonical Outcome Evidence
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  describe('P0.6.7-R2 — Canonical Outcome Evidence (Default Window)', () => {
+    it('R2-D1: Outcome Context must use same default window as Feedback', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_default_win',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        createdAt: '2026-10-01T08:00:00.000Z',
+      });
+
+      const outcomeA = createOutcomeMemoryFixture({
+        id: 'out_r2_before_decision',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        observedAt: '2026-09-30T10:00:00.000Z',
+      });
+
+      const outcomeB = createOutcomeMemoryFixture({
+        id: 'out_r2_after_decision',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        observedAt: '2026-10-02T10:00:00.000Z',
+      });
+
+      const retriever = new InMemoryRetriever([decision, outcomeA, outcomeB]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        { ownerId: TEST_OWNER_A, decisionId: decision.id },
+        deps,
+      );
+
+      expect(result.feedback).not.toBeNull();
+      expect(result.feedback!.outcomeCount).toBe(1);
+      expect(result.feedback!.outcomeIds).toContain(outcomeB.id);
+      expect(result.feedback!.outcomeIds).not.toContain(outcomeA.id);
+
+      expect(result.feedback!.windowStart).toBe('2026-10-01T08:00:00.000Z');
+      expect(result.feedback!.windowEnd).toBe('2026-10-03T12:00:00.000Z');
+
+      const allAssemblyIds = [
+        ...result.assembledContext!.selected.map((x) => x.context.id),
+        ...result.assembledContext!.excluded.map((x) => x.contextId),
+      ];
+
+      expect(allAssemblyIds).toContain(`ctx_out_${outcomeB.id}`);
+      expect(allAssemblyIds).not.toContain(`ctx_out_${outcomeA.id}`);
+      expect(result.completeness).toBe('learned');
+    });
+  });
+
+  describe('P0.6.7-R2 — Canonical Outcome Evidence (Explicit Window)', () => {
+    it('R2-X1: Outcome Context must use same explicit window as Feedback', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_explicit_win',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        createdAt: '2026-10-01T00:00:00.000Z',
+      });
+
+      const outcomeA = createOutcomeMemoryFixture({
+        id: 'out_r2_explicit_a',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        observedAt: '2026-10-01T10:00:00.000Z',
+      });
+
+      const outcomeB = createOutcomeMemoryFixture({
+        id: 'out_r2_explicit_b',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        observedAt: '2026-10-02T10:00:00.000Z',
+      });
+
+      const outcomeC = createOutcomeMemoryFixture({
+        id: 'out_r2_explicit_c',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        observedAt: '2026-10-03T10:00:00.000Z',
+      });
+
+      const retriever = new InMemoryRetriever([decision, outcomeA, outcomeB, outcomeC]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runContextLoop(
+        {
+          ownerId: TEST_OWNER_A,
+          decisionId: decision.id,
+          projectId: TEST_PROJECT_A,
+          topicId: TEST_TOPIC_A,
+          windowStart: '2026-10-01T00:00:00.000Z',
+          windowEnd: '2026-10-03T00:00:00.000Z',
+        },
+        deps,
+      );
+
+      expect(result.feedback).not.toBeNull();
+      expect(result.feedback!.outcomeCount).toBe(2);
+      expect(result.feedback!.outcomeIds).toContain(outcomeA.id);
+      expect(result.feedback!.outcomeIds).toContain(outcomeB.id);
+      expect(result.feedback!.outcomeIds).not.toContain(outcomeC.id);
+
+      expect(result.feedback!.windowStart).toBe('2026-10-01T00:00:00.000Z');
+      expect(result.feedback!.windowEnd).toBe('2026-10-03T00:00:00.000Z');
+
+      const allAssemblyIds = [
+        ...result.assembledContext!.selected.map((x) => x.context.id),
+        ...result.assembledContext!.excluded.map((x) => x.contextId),
+      ];
+
+      expect(allAssemblyIds).toContain(`ctx_out_${outcomeA.id}`);
+      expect(allAssemblyIds).toContain(`ctx_out_${outcomeB.id}`);
+      expect(allAssemblyIds).not.toContain(`ctx_out_${outcomeC.id}`);
+
+      const feedbackOutcomeContextIds = new Set(
+        result.feedback!.outcomeIds.map((id) => `ctx_out_${id}`),
+      );
+      const assemblyOutcomeContextIds = new Set(
+        allAssemblyIds.filter((id) => id.startsWith('ctx_out_')),
+      );
+      expect(feedbackOutcomeContextIds).toEqual(assemblyOutcomeContextIds);
+    });
+  });
+
+  describe('P0.6.7-R2 — Retrieval Limit Consistency', () => {
+    it('R2-L1: Feedback and Outcome Context must use the same retrieval limit', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_limit',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+      });
+
+      const outcomes: OutcomeMemory[] = [];
+      for (let i = 0; i < 5; i++) {
+        outcomes.push(
+          createOutcomeMemoryFixture({
+            id: `out_r2_limit_${i}`,
+            decisionId: decision.id,
+            ownerId: TEST_OWNER_A,
+            projectId: TEST_PROJECT_A,
+            topicId: TEST_TOPIC_A,
+            observedAt: `2026-10-02T${String(10 + i).padStart(2, '0')}:00:00.000Z`,
+            metrics: [{ key: 'views', value: 1000 + i * 100, unit: 'count' }],
+          }),
+        );
+      }
+
+      const retriever = new InMemoryRetriever([decision, ...outcomes]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        {
+          ownerId: TEST_OWNER_A,
+          decisionId: decision.id,
+          retrievalLimit: 2,
+        },
+        deps,
+      );
+
+      expect(result.feedback).not.toBeNull();
+      expect(result.feedback!.outcomeCount).toBe(2);
+      expect(result.feedback!.completeness).toBe('bounded');
+
+      const allAssemblyIds = [
+        ...result.assembledContext!.selected.map((x) => x.context.id),
+        ...result.assembledContext!.excluded.map((x) => x.contextId),
+      ];
+
+      const assemblyOutcomeIds = allAssemblyIds.filter((id) => id.startsWith('ctx_out_'));
+      expect(assemblyOutcomeIds.length).toBe(2);
+
+      const feedbackContextIds = result.feedback!.outcomeIds.map((id) => `ctx_out_${id}`);
+      expect(new Set(assemblyOutcomeIds)).toEqual(new Set(feedbackContextIds));
+    });
+  });
+
+  describe('P0.6.7-R2 — Equality Invariant', () => {
+    it('R2-E1: Assembly Outcome Context IDs must exactly equal Feedback Outcome IDs mapped via ctx_out_', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_equality',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+      });
+
+      const outcomes = [
+        createOutcomeMemoryFixture({
+          id: 'out_r2_eq_1',
+          decisionId: decision.id,
+          observedAt: '2026-10-01T12:00:00.000Z',
+          metrics: [{ key: 'views', value: 5000, unit: 'count' }],
+        }),
+        createOutcomeMemoryFixture({
+          id: 'out_r2_eq_2',
+          decisionId: decision.id,
+          observedAt: '2026-10-02T08:00:00.000Z',
+          metrics: [{ key: 'likes', value: 800, unit: 'count' }],
+        }),
+        createOutcomeMemoryFixture({
+          id: 'out_r2_eq_3',
+          decisionId: decision.id,
+          observedAt: '2026-10-02T16:00:00.000Z',
+          metrics: [{ key: 'shares', value: 300, unit: 'count' }],
+        }),
+      ];
+
+      const retriever = new InMemoryRetriever([decision, ...outcomes]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        { ownerId: TEST_OWNER_A, decisionId: decision.id },
+        deps,
+      );
+
+      expect(result.feedback!.outcomeCount).toBe(3);
+
+      const allAssemblyIds = [
+        ...result.assembledContext!.selected.map((x) => x.context.id),
+        ...result.assembledContext!.excluded.map((x) => x.contextId),
+      ];
+
+      const assemblyOutcomeContextIds = new Set(
+        allAssemblyIds.filter((id) => id.startsWith('ctx_out_')),
+      );
+
+      const feedbackOutcomeContextIds = new Set(
+        result.feedback!.outcomeIds.map((id) => `ctx_out_${id}`),
+      );
+
+      expect(assemblyOutcomeContextIds).toEqual(feedbackOutcomeContextIds);
+
+      for (const outcomeId of result.feedback!.outcomeIds) {
+        expect(assemblyOutcomeContextIds.has(`ctx_out_${outcomeId}`)).toBe(true);
+      }
+    });
+  });
+
+  describe('P0.6.7-R2 — No Outcome Case', () => {
+    it('R2-N1: No outcomes → no Outcome Context and no learning candidates', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_no_outcome',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+      });
+
+      const retriever = new InMemoryRetriever([decision]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        { ownerId: TEST_OWNER_A, decisionId: decision.id },
+        deps,
+      );
+
+      expect(result.learningCandidates).toHaveLength(0);
+      expect(result.feedback!.outcomeCount).toBe(0);
+
+      if (result.assembledContext) {
+        const allAssemblyIds = [
+          ...result.assembledContext.selected.map((x) => x.context.id),
+          ...result.assembledContext.excluded.map((x) => x.contextId),
+        ];
+        const outcomeContextIds = allAssemblyIds.filter((id) => id.startsWith('ctx_out_'));
+        expect(outcomeContextIds).toHaveLength(0);
+      }
+
+      expect(result.completeness).toBe('no_outcome');
+    });
+  });
+
+  describe('P0.6.7-R2 — No Graph Case', () => {
+    it('R2-G0: Graph=undefined → Decision + Outcome Context + Feedback Context → Assembly → Learning', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_no_graph',
+        decision: 'Use data-driven opening',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        confidence: 0.88,
+      });
+
+      const outcome = createOutcomeMemoryFixture({
+        id: 'out_r2_no_graph',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        metrics: [
+          { key: 'views', value: 25000, unit: 'count' },
+          { key: 'ctr', value: 0.12, unit: 'ratio' },
+        ],
+      });
+
+      const retriever = new InMemoryRetriever([decision, outcome]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        {
+          ownerId: TEST_OWNER_A,
+          decisionId: decision.id,
+        },
+        deps,
+      );
+
+      expect(result.decisionFound).toBe(true);
+      expect(result.feedback).not.toBeNull();
+      expect(result.feedback!.outcomeCount).toBe(1);
+      expect(result.graphContext).toHaveLength(0);
+      expect(result.stageStatus.graph).toBe(false);
+      expect(result.assembledContext).toBeDefined();
+      expect(result.stageStatus.assembly).toBe(true);
+
+      const allAssemblyIds = [
+        ...result.assembledContext!.selected.map((x) => x.context.id),
+        ...result.assembledContext!.excluded.map((x) => x.contextId),
+      ];
+
+      expect(allAssemblyIds).toContain(`ctx_out_${outcome.id}`);
+      expect(result.learningCandidates.length).toBeGreaterThan(0);
+      expect(result.stageStatus.learning).toBe(true);
+      expect(result.completeness).toBe('learned');
+
+      const assemblyOutcomeContextIds = new Set(
+        allAssemblyIds.filter((id) => id.startsWith('ctx_out_')),
+      );
+      const feedbackOutcomeContextIds = new Set(
+        result.feedback!.outcomeIds.map((id) => `ctx_out_${id}`),
+      );
+      expect(assemblyOutcomeContextIds).toEqual(feedbackOutcomeContextIds);
+    });
+  });
+
+  describe('P0.6.7-R2 — Graph Case', () => {
+    it('R2-G1: Graph present → Decision + Outcome Context + Feedback Context + Graph → Assembly → Learning', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_with_graph',
+        decision: 'Use curiosity gap',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        confidence: 0.82,
+      });
+
+      const outcome = createOutcomeMemoryFixture({
+        id: 'out_r2_with_graph',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        metrics: [
+          { key: 'views', value: 18000, unit: 'count' },
+          { key: 'engagement', value: 0.10, unit: 'ratio' },
+        ],
+      });
+
+      const strategyCtx: ContextObject = {
+        id: 'ctx_str_r2_graph',
+        kind: 'decision',
+        type: 'strategy',
+        payload: { strategyType: 'curiosity_gap' },
+        provenance: { source: 'test', sourceType: 'strategy' },
+        lifecycle: { stage: 'retrieved', capturedAt: '2026-10-01T00:00:00.000Z' },
+        confidence: 0.85,
+        createdAt: '2026-10-01T07:00:00.000Z',
+        updatedAt: '2026-10-01T07:00:00.000Z',
+      };
+
+      const contentCtx: ContextObject = {
+        id: 'ctx_con_r2_graph',
+        kind: 'content',
+        type: 'content',
+        payload: { title: 'Test Content' },
+        provenance: { source: 'test', sourceType: 'content' },
+        lifecycle: { stage: 'retrieved', capturedAt: '2026-10-01T00:00:00.000Z' },
+        confidence: 0.75,
+        createdAt: '2026-10-01T09:00:00.000Z',
+        updatedAt: '2026-10-01T09:00:00.000Z',
+      };
+
+      const graph: ContextGraph = {
+        nodes: [
+          { id: strategyCtx.id, context: strategyCtx },
+          { id: decision.id, context: strategyCtx },
+          { id: contentCtx.id, context: contentCtx },
+        ],
+        edges: [
+          {
+            id: `edge_derived_from_${strategyCtx.id}_${decision.id}`,
+            fromId: strategyCtx.id,
+            toId: decision.id,
+            type: 'derived_from',
+            source: 'provenance',
+            createdAt: '2026-10-01T08:00:00.000Z',
+          },
+          {
+            id: `edge_used_by_${decision.id}_${contentCtx.id}`,
+            fromId: decision.id,
+            toId: contentCtx.id,
+            type: 'used_by',
+            source: 'provenance',
+            createdAt: '2026-10-01T08:00:00.000Z',
+          },
+        ],
+        nodeCount: 3,
+        edgeCount: 2,
+      };
+
+      const retriever = new InMemoryRetriever([decision, outcome]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        {
+          ownerId: TEST_OWNER_A,
+          decisionId: decision.id,
+          graph,
+          graphDepth: 2,
+        },
+        deps,
+      );
+
+      expect(result.stageStatus.decision).toBe(true);
+      expect(result.stageStatus.outcome).toBe(true);
+      expect(result.stageStatus.feedback).toBe(true);
+      expect(result.stageStatus.graph).toBe(true);
+      expect(result.stageStatus.assembly).toBe(true);
+      expect(result.stageStatus.learning).toBe(true);
+      expect(result.completeness).toBe('learned');
+
+      expect(result.graphContext.length).toBeGreaterThan(0);
+
+      const allAssemblyIds = [
+        ...result.assembledContext!.selected.map((x) => x.context.id),
+        ...result.assembledContext!.excluded.map((x) => x.contextId),
+      ];
+
+      expect(allAssemblyIds).toContain(`ctx_out_${outcome.id}`);
+      expect(allAssemblyIds).toContain(strategyCtx.id);
+      expect(allAssemblyIds).toContain(contentCtx.id);
+
+      const assemblyOutcomeContextIds = new Set(
+        allAssemblyIds.filter((id) => id.startsWith('ctx_out_')),
+      );
+      const feedbackOutcomeContextIds = new Set(
+        result.feedback!.outcomeIds.map((id) => `ctx_out_${id}`),
+      );
+      expect(assemblyOutcomeContextIds).toEqual(feedbackOutcomeContextIds);
+    });
+  });
+
+  describe('P0.6.7-R2 — Determinism', () => {
+    it('R2-DE1: Same Decision + Outcomes + now → same Feedback + Outcome Contexts + Learning', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_determinism',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+      });
+
+      const outcome = createOutcomeMemoryFixture({
+        id: 'out_r2_determinism',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+        metrics: [{ key: 'views', value: 9500, unit: 'count' }],
+      });
+
+      const runLoop = async () => {
+        const retriever = new InMemoryRetriever([decision, outcome]);
+        const deps: ContextLoopDependencies = {
+          memoryRetriever: retriever,
+          now: () => FIXED_NOW,
+        };
+        return runE2E(
+          { ownerId: TEST_OWNER_A, decisionId: decision.id },
+          deps,
+        );
+      };
+
+      const result1 = await runLoop();
+      const result2 = await runLoop();
+
+      expect(result1.feedback!.outcomeIds).toEqual(result2.feedback!.outcomeIds);
+      expect(result1.feedback!.windowStart).toBe(result2.feedback!.windowStart);
+      expect(result1.feedback!.windowEnd).toBe(result2.feedback!.windowEnd);
+
+      expect(result1.learningCandidates.map((c) => c.id)).toEqual(
+        result2.learningCandidates.map((c) => c.id),
+      );
+
+      const getOutcomeCtxIds = (result: typeof result1) => {
+        if (!result.assembledContext) return [];
+        return [
+          ...result.assembledContext.selected.map((x) => x.context.id),
+          ...result.assembledContext.excluded.map((x) => x.contextId),
+        ].filter((id) => id.startsWith('ctx_out_')).sort();
+      };
+
+      expect(getOutcomeCtxIds(result1)).toEqual(getOutcomeCtxIds(result2));
+    });
+  });
+
+  describe('P0.6.7-R2 — Metrics', () => {
+    it('R2-M1: metrics.outcomeCount must reflect feedback.outcomeCount, not a second retrieval', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_metrics',
+        ownerId: TEST_OWNER_A,
+        projectId: TEST_PROJECT_A,
+        topicId: TEST_TOPIC_A,
+      });
+
+      const outcomes = [
+        createOutcomeMemoryFixture({
+          id: 'out_r2_metrics_1',
+          decisionId: decision.id,
+          observedAt: '2026-10-01T10:00:00.000Z',
+        }),
+        createOutcomeMemoryFixture({
+          id: 'out_r2_metrics_2',
+          decisionId: decision.id,
+          observedAt: '2026-10-02T14:00:00.000Z',
+        }),
+      ];
+
+      const retriever = new InMemoryRetriever([decision, ...outcomes]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        { ownerId: TEST_OWNER_A, decisionId: decision.id },
+        deps,
+      );
+
+      expect(result.metrics.outcomeCount).toBe(result.feedback!.outcomeCount);
+      expect(result.metrics.outcomeCount).toBe(2);
+      expect(result.metrics.contextCount).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  describe('P0.6.7-R2 — Owner Isolation', () => {
+    it('R2-O1: Outcomes from different owner excluded from both Feedback and Outcome Context', async () => {
+      const decision = createDecisionMemoryFixture({
+        id: 'dec_r2_owner_iso',
+        ownerId: TEST_OWNER_A,
+      });
+
+      const outcomeA = createOutcomeMemoryFixture({
+        id: 'out_r2_owner_a',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_A,
+      });
+
+      const outcomeB = createOutcomeMemoryFixture({
+        id: 'out_r2_owner_b',
+        decisionId: decision.id,
+        ownerId: TEST_OWNER_B,
+      });
+
+      const retriever = new InMemoryRetriever([decision, outcomeA, outcomeB]);
+      const deps: ContextLoopDependencies = {
+        memoryRetriever: retriever,
+        now: () => FIXED_NOW,
+      };
+
+      const result = await runE2E(
+        { ownerId: TEST_OWNER_A, decisionId: decision.id },
+        deps,
+      );
+
+      expect(result.feedback!.outcomeCount).toBe(1);
+      expect(result.feedback!.outcomeIds).toContain(outcomeA.id);
+      expect(result.feedback!.outcomeIds).not.toContain(outcomeB.id);
+
+      if (result.assembledContext) {
+        const allAssemblyIds = [
+          ...result.assembledContext.selected.map((x) => x.context.id),
+          ...result.assembledContext.excluded.map((x) => x.contextId),
+        ];
+        expect(allAssemblyIds).toContain(`ctx_out_${outcomeA.id}`);
+        expect(allAssemblyIds).not.toContain(`ctx_out_${outcomeB.id}`);
+      }
     });
   });
 });
