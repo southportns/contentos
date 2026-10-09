@@ -75,6 +75,20 @@ export interface ContextOSRuntimeRequest {
    */
   input: unknown;
 
+  /**
+   * P0.7.2 — Optional query text for knowledge/context retrieval.
+   *
+   * Purpose: provides a clear, business-agnostic retrieval hint for
+   * knowledge or semantic retrieval systems.
+   *
+   * Semantics:
+   * - contextQuery is EXPLICITLY for retrieval — NOT derived from input.
+   * - input remains the Agent's business input; contextQuery is the
+   *   contextual retrieval query.
+   * - When not provided, knowledge retrievers may use their own fallback.
+   */
+  contextQuery?: string;
+
   /** Context policy controlling retrieval and assembly */
   contextPolicy?: ContextOSContextPolicy;
 }
@@ -131,6 +145,12 @@ export interface ContextOSContextPolicy {
 
   /** Whether to include feedback contexts */
   includeFeedback?: boolean;
+
+  /**
+   * P0.7.2 — Whether to include knowledge contexts from knowledge retrievers.
+   * Default: true (request retrieval; does not guarantee a provider exists).
+   */
+  includeKnowledge?: boolean;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -379,4 +399,64 @@ export interface CreateRunIdOptions {
   ownerId: string;
   purpose: string;
   timestamp: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.2 — Retrieval Diagnostics Contracts
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Name of a context source in the Runtime Retrieval pipeline.
+ */
+export type RuntimeContextSourceName =
+  | 'memory'
+  | 'decision'
+  | 'outcome'
+  | 'feedback'
+  | 'knowledge'
+  | 'graph';
+
+/**
+ * Status of a context source in the Runtime Retrieval pipeline.
+ *
+ * - included:    Source returned valid contexts that passed validation.
+ * - disabled:    Policy explicitly disabled this source.
+ * - unavailable: Required optional provider not configured.
+ * - failed:      Source execution failed, or all results rejected by security.
+ */
+export type RuntimeContextSourceStatus =
+  | 'included'
+  | 'disabled'
+  | 'unavailable'
+  | 'failed';
+
+/**
+ * Report for a single context source in the Runtime Retrieval pipeline.
+ */
+export interface RuntimeContextSourceReport {
+  /** Which source this report describes */
+  source: RuntimeContextSourceName;
+
+  /** Status of this source */
+  status: RuntimeContextSourceStatus;
+
+  /** Number of contexts contributed by this source (after validation) */
+  contextCount: number;
+
+  /** Optional warning message */
+  warning?: string;
+}
+
+/**
+ * Complete result of the Runtime Retrieval pipeline, including diagnostics.
+ */
+export interface RuntimeContextRetrievalResult {
+  /** All validated context objects (deduplicated, merged) */
+  contexts: import('@/context/context-object').ContextObject[];
+
+  /** Per-source reports */
+  sources: RuntimeContextSourceReport[];
+
+  /** Aggregate warnings from any source */
+  warnings: string[];
 }

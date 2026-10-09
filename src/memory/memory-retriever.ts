@@ -183,10 +183,23 @@ export class InMemoryRetriever implements MemoryRetriever {
 
     let results = this._records;
 
-    // 1. Scope filtering (cross-project / cross-topic isolation)
-    results = results.filter((record) => {
-      return this.isScopeMatch(record, projectId, topicId);
-    });
+    // 1. Explicit scope filtering (P0.7.2 — Runtime scope policy)
+    // When request.scope is provided, it takes precedence over inference.
+    // Rules:
+    //   global  → only records with scope='global'
+    //   project → only records with scope='project' AND matching projectId
+    //   topic   → only records with scope='topic' AND matching projectId+topicId
+    //   session → persistent memory retrieval returns empty
+    if (request.scope) {
+      results = results.filter((record) => {
+        return this.matchesExplicitScope(record, request.scope!, projectId, topicId);
+      });
+    } else {
+      // 1b. Native scope resolution (no explicit scope)
+      results = results.filter((record) => {
+        return this.isScopeMatch(record, projectId, topicId);
+      });
+    }
 
     // 2. Owner filtering
     if (ownerId) {
@@ -345,6 +358,60 @@ export class InMemoryRetriever implements MemoryRetriever {
 
       case 'session':
         // Session memories are ephemeral — not retrievable cross-session
+        return false;
+
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * P0.7.2 — Explicit scope matching for Runtime scope policy.
+   *
+   * When request.scope is provided, this enforces strict scope filtering
+   * consistent with DatabaseMemoryRetriever:
+   *
+   * - 'global'  → only records with scope='global' (no project/topic records)
+   * - 'project' → only records with scope='project' AND matching projectId
+   * - 'topic'   → only records with scope='topic' AND matching projectId+topicId
+   * - 'session' → persistent memory retrieval returns empty (no records match)
+   *
+   * Critical: explicit scope NEVER falls back to broader scope.
+   * If scope='global' is specified, project/topic records are excluded.
+   *
+   * @param record - The memory record to check
+   * @param explicitScope - The explicitly requested scope
+   * @param requestProjectId - The request's projectId (for project/topic scope)
+   * @param requestTopicId - The request's topicId (for topic scope)
+   * @returns True if the record matches the explicit scope
+   */
+  private matchesExplicitScope(
+    record: MemoryRecord,
+    explicitScope: MemoryScope,
+    requestProjectId?: string,
+    requestTopicId?: string
+  ): boolean {
+    switch (explicitScope) {
+      case 'global':
+        // Only global-scoped records
+        return record.scope === 'global';
+
+      case 'project':
+        // Only project-scoped records matching the projectId
+        return record.scope === 'project' &&
+          requestProjectId != null &&
+          record.projectId === requestProjectId;
+
+      case 'topic':
+        // Only topic-scoped records matching both projectId and topicId
+        return record.scope === 'topic' &&
+          requestProjectId != null &&
+          requestTopicId != null &&
+          record.projectId === requestProjectId &&
+          record.topicId === requestTopicId;
+
+      case 'session':
+        // Persistent memory retrieval returns empty for session scope
         return false;
 
       default:

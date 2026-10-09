@@ -35,6 +35,11 @@ export type {
   CompleteRunResult,
   CreateRunIdOptions,
   RuntimeErrorCode,
+  // P0.7.2 — Retrieval diagnostics
+  RuntimeContextSourceName,
+  RuntimeContextSourceStatus,
+  RuntimeContextSourceReport,
+  RuntimeContextRetrievalResult,
 } from './runtime-types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -61,6 +66,7 @@ export type { ContextOSRuntimeFullDependencies } from './runtime-core';
 
 export {
   retrieveRuntimeContext,
+  retrieveRuntimeContextWithMetadata,
   assembleRuntimeContext,
   resolveRuntimePolicy,
   createContextUsage,
