@@ -84,6 +84,9 @@ export async function retrieveDecisionMemories(
 
   const statuses = buildStatusFilter(params);
 
+  // P0.7.2-R2: Push type='decision' filter into MemoryRetriever via policy.types,
+  // so that the type filtering happens BEFORE maxResults limiting.  This prevents
+  // general memory records from crowding out decision records within the limit.
   const request: MemoryRetrievalRequest = {
     ownerId: params.ownerId,
     projectId: params.projectId,
@@ -91,6 +94,7 @@ export async function retrieveDecisionMemories(
     scope: params.scope,
     policy: {
       maxResults: limit,
+      types: [DECISION_MEMORY_TYPE],
       includeSuperseded: params.includeSuperseded,
       includeExpired: false,
       includeArchived: params.includeReversed ?? false,
@@ -99,7 +103,9 @@ export async function retrieveDecisionMemories(
 
   const records = await retriever.retrieve(request);
 
-  // Post-filter: only type='decision' AND payload.decisionStatus matches
+  // Post-filter: only records whose payload.decisionStatus matches.
+  // Type narrowing: policy.types already guarantees type='decision', but we keep
+  // this guard for defense-in-depth against retrievers that ignore policy.types.
   return records.filter((record): record is DecisionMemory => {
     if (record.type !== DECISION_MEMORY_TYPE) return false;
 
@@ -131,6 +137,7 @@ export async function getActiveDecisions(
     scope: params.scope,
     policy: {
       maxResults: limit,
+      types: [DECISION_MEMORY_TYPE],
       includeSuperseded: false,
       includeExpired: false,
       includeArchived: false,
@@ -167,6 +174,7 @@ export async function getDecisionHistory(
     scope: params.scope,
     policy: {
       maxResults: limit,
+      types: [DECISION_MEMORY_TYPE],
       includeSuperseded: true,
       includeExpired: true,
       includeArchived: true,

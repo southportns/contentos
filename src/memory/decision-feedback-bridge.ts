@@ -21,6 +21,8 @@
  */
 
 import type { ContextObject } from '@/context/context-object';
+import type { ContextProvenance } from '@/context/context-provenance';
+import type { ContextScope } from '@/context/context-provenance';
 import type { DecisionFeedback } from './decision-feedback';
 import { feedbackConfidence } from './decision-feedback';
 import { createDecisionContext } from '@/context/context-factory';
@@ -115,6 +117,22 @@ export interface DecisionFeedbackContextPayload {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * Provenance override for decisionFeedbackToContext.
+ *
+ * P0.7.2-R2: Feedback contexts must preserve the corresponding Decision's
+ * real ownership and scope metadata.  This interface provides explicit
+ * parameters so the bridge never needs to "guess" scope from context ID.
+ */
+export interface DecisionFeedbackProvenanceOverride {
+  /** The Decision's projectId (null if unscoped) */
+  projectId?: string | null;
+  /** The Decision's topicId (null if unscoped) */
+  topicId?: string | null;
+  /** The Decision's explicit scope (global/project/topic) */
+  scope?: ContextScope;
+}
+
+/**
  * Convert a DecisionFeedback to a ContextObject for context assembly.
  *
  * The resulting ContextObject has:
@@ -132,20 +150,20 @@ export interface DecisionFeedbackContextPayload {
  *   bounded                        → 0.6
  *   no_evidence + bounded          → 0.4
  *
+ * P0.7.2-R2: Added optional `provenanceOverride` parameter to preserve
+ * the Decision's real project/topic/scope in the resulting context's
+ * provenance. When provided, projectId/topicId/scope are taken from the
+ * override rather than being silently dropped.
+ *
  * @param feedback - The DecisionFeedback to convert
+ * @param provenanceOverride - Optional provenance metadata from the source Decision
  * @return A ContextObject wrapping the feedback
  */
 export function decisionFeedbackToContext(
   feedback: DecisionFeedback,
+  provenanceOverride?: DecisionFeedbackProvenanceOverride,
 ): ContextObject<DecisionFeedbackContextPayload> {
   const confidence = feedbackConfidence(feedback.status, feedback.completeness);
-
-  // Build provenance — spreading projectId/topicId safely from attribution
-  const provenance: Record<string, string | undefined | null> = {
-    source: `decision_feedback:${feedback.decisionId}`,
-    sourceType: 'decision_feedback',
-    ownerId: feedback.ownerId,
-  };
 
   const payload: DecisionFeedbackContextPayload = {
     decisionId: feedback.decisionId,
@@ -186,6 +204,18 @@ export function decisionFeedbackToContext(
     generatedAt: feedback.generatedAt,
   };
 
+  // Build provenance — P0.7.2-R2: preserve Decision's real scope metadata
+  // from the explicit provenanceOverride, not by guessing from ID.
+  const contextProvenance: ContextProvenance = {
+    source: `decision_feedback:${feedback.decisionId}`,
+    sourceType: 'decision_feedback',
+    ownerId: feedback.ownerId,
+    scope: provenanceOverride?.scope,
+    projectId: provenanceOverride?.projectId ?? undefined,
+    topicId: provenanceOverride?.topicId ?? undefined,
+    confidence,
+  };
+
   // Use createDecisionContext from context-factory — it produces kind='decision'
   // The type on the returned context is 'decision' by default but we override
   // it by constructing a custom ContextObject.
@@ -202,12 +232,7 @@ export function decisionFeedbackToContext(
     },
     {
       id: `ctx_dfb_${feedback.decisionId}`,
-      provenance: {
-        source: provenance.source!,
-        sourceType: provenance.sourceType!,
-        ownerId: provenance.ownerId!,
-        confidence,
-      },
+      provenance: contextProvenance,
       lifecycleStage: 'retrieved',
       confidence,
       createdAt: feedback.generatedAt,

@@ -154,8 +154,18 @@ export async function retrieveRuntimeContextWithMetadata(
   const sourceLimit = clampSourceLimit(deps.sourceLimit);
   const feedbackDecisionLimit = clampFeedbackLimit(deps.feedbackDecisionLimit);
 
-  const sources: RuntimeContextSourceReport[] = [];
-  const allContexts: ContextObject[] = [];
+  // P0.7.2-R2: Track contexts with source labels so we can compute
+  // contextCount AFTER validation/filter/dedup (not from raw provider output).
+  const labeledContexts: Array<{ ctx: ContextObject; source: RuntimeContextSourceName }> = [];
+
+  // Use a builder pattern to collect source statuses/metadata first,
+  // then compute contextCount from the final surviving contexts.
+  const sourceBuilders: Array<{
+    source: RuntimeContextSourceName;
+    status: RuntimeContextSourceStatus;
+    warning?: string;
+    metadata?: RuntimeContextSourceMetadata;
+  }> = [];
 
   // Allowed scopes derived from policy (single scope extracted for direct use)
   const allowedScopes = policy.allowedScopes;
@@ -169,12 +179,10 @@ export async function retrieveRuntimeContextWithMetadata(
       const memoryContexts = await retrieveMemoryContexts(
         request, deps, policy, sourceLimit
       );
-      sources.push({
-        source: 'memory',
-        status: 'included',
-        contextCount: memoryContexts.length,
-      });
-      allContexts.push(...memoryContexts);
+      for (const ctx of memoryContexts) {
+        labeledContexts.push({ ctx, source: 'memory' });
+      }
+      sourceBuilders.push({ source: 'memory', status: 'included' });
     } catch (err) {
       // Primary source failure: propagate error upward
       throw new ContextOSRuntimeError(
@@ -184,7 +192,7 @@ export async function retrieveRuntimeContextWithMetadata(
       );
     }
   } else {
-    sources.push({ source: 'memory', status: 'disabled', contextCount: 0 });
+    sourceBuilders.push({ source: 'memory', status: 'disabled' });
   }
 
   // ─── Source: Decision ──────────────────────────────────────────────────────
@@ -194,22 +202,19 @@ export async function retrieveRuntimeContextWithMetadata(
       const decisionContexts = await retrieveDecisionContexts(
         deps, ownerId, projectId, topicId, sourceLimit, allowedScopes, singleScope
       );
-      sources.push({
-        source: 'decision',
-        status: 'included',
-        contextCount: decisionContexts.length,
-      });
-      allContexts.push(...decisionContexts);
+      for (const ctx of decisionContexts) {
+        labeledContexts.push({ ctx, source: 'decision' });
+      }
+      sourceBuilders.push({ source: 'decision', status: 'included' });
     } catch (err) {
-      sources.push({
+      sourceBuilders.push({
         source: 'decision',
         status: 'failed',
-        contextCount: 0,
         warning: err instanceof Error ? err.message : String(err),
       });
     }
   } else {
-    sources.push({ source: 'decision', status: 'disabled', contextCount: 0 });
+    sourceBuilders.push({ source: 'decision', status: 'disabled' });
   }
 
   // ─── Source: Outcome ───────────────────────────────────────────────────────
@@ -219,10 +224,12 @@ export async function retrieveRuntimeContextWithMetadata(
       const { contexts: outcomeContexts, metadata: outcomeMetadata } = await retrieveOutcomeContexts(
         deps, ownerId, projectId, topicId, sourceLimit, allowedScopes, singleScope
       );
-      sources.push({
+      for (const ctx of outcomeContexts) {
+        labeledContexts.push({ ctx, source: 'outcome' });
+      }
+      sourceBuilders.push({
         source: 'outcome',
         status: 'included',
-        contextCount: outcomeContexts.length,
         metadata: {
           scannedRecords: outcomeMetadata.scannedRecords,
           batchesFetched: outcomeMetadata.batchesFetched,
@@ -230,17 +237,15 @@ export async function retrieveRuntimeContextWithMetadata(
           exhausted: outcomeMetadata.exhausted,
         },
       });
-      allContexts.push(...outcomeContexts);
     } catch (err) {
-      sources.push({
+      sourceBuilders.push({
         source: 'outcome',
         status: 'failed',
-        contextCount: 0,
         warning: err instanceof Error ? err.message : String(err),
       });
     }
   } else {
-    sources.push({ source: 'outcome', status: 'disabled', contextCount: 0 });
+    sourceBuilders.push({ source: 'outcome', status: 'disabled' });
   }
 
   // ─── Source: Feedback ──────────────────────────────────────────────────────
@@ -250,22 +255,19 @@ export async function retrieveRuntimeContextWithMetadata(
         deps, ownerId, projectId, topicId, now, feedbackDecisionLimit,
         allowedScopes, singleScope
       );
-      sources.push({
-        source: 'feedback',
-        status: 'included',
-        contextCount: feedbackContexts.length,
-      });
-      allContexts.push(...feedbackContexts);
+      for (const ctx of feedbackContexts) {
+        labeledContexts.push({ ctx, source: 'feedback' });
+      }
+      sourceBuilders.push({ source: 'feedback', status: 'included' });
     } catch (err) {
-      sources.push({
+      sourceBuilders.push({
         source: 'feedback',
         status: 'failed',
-        contextCount: 0,
         warning: err instanceof Error ? err.message : String(err),
       });
     }
   } else {
-    sources.push({ source: 'feedback', status: 'disabled', contextCount: 0 });
+    sourceBuilders.push({ source: 'feedback', status: 'disabled' });
   }
 
   // ─── Source: Knowledge ─────────────────────────────────────────────────────
@@ -275,39 +277,47 @@ export async function retrieveRuntimeContextWithMetadata(
         const knowledgeContexts = await retrieveKnowledgeContexts(
           deps, request, contextQuery, sourceLimit
         );
-        sources.push({
-          source: 'knowledge',
-          status: 'included',
-          contextCount: knowledgeContexts.length,
-        });
-        allContexts.push(...knowledgeContexts);
+        for (const ctx of knowledgeContexts) {
+          labeledContexts.push({ ctx, source: 'knowledge' });
+        }
+        sourceBuilders.push({ source: 'knowledge', status: 'included' });
       } catch (err) {
-        sources.push({
+        sourceBuilders.push({
           source: 'knowledge',
           status: 'failed',
-          contextCount: 0,
           warning: err instanceof Error ? err.message : String(err),
         });
       }
     } else {
-      sources.push({ source: 'knowledge', status: 'unavailable', contextCount: 0 });
+      sourceBuilders.push({ source: 'knowledge', status: 'unavailable' });
     }
   } else {
-    sources.push({ source: 'knowledge', status: 'disabled', contextCount: 0 });
+    sourceBuilders.push({ source: 'knowledge', status: 'disabled' });
   }
 
   // ─── Post-processing BEFORE Graph Provider ────────────────────────────────
   // Validate and filter contexts BEFORE feeding them to the Graph Provider.
   // This prevents out-of-bound or cross-owner contexts from reaching graph enrichment.
-  const validatedContexts = allContexts.filter((ctx) =>
+  const validatedLabeled = labeledContexts.filter(({ ctx }) =>
     validateContextScope(ctx, ownerId, projectId, topicId, allowedScopes)
   );
 
   // Apply kind filters
-  const filteredContexts = applyKindFilters(validatedContexts, policy);
+  const filteredLabeled = validatedLabeled.filter(({ ctx }) =>
+    applyKindFilters([ctx], policy).length > 0
+  );
 
-  // Deterministic dedup by context.id
-  const dedupedContexts = deduplicateContexts(filteredContexts);
+  // Deterministic dedup by context.id (keep first occurrence)
+  const seenIds = new Set<string>();
+  const dedupedLabeled: typeof filteredLabeled = [];
+  for (const item of filteredLabeled) {
+    if (!seenIds.has(item.ctx.id)) {
+      seenIds.add(item.ctx.id);
+      dedupedLabeled.push(item);
+    }
+  }
+
+  const dedupedContexts = dedupedLabeled.map(({ ctx }) => ctx);
 
   // ─── Source: Graph ─────────────────────────────────────────────────────────
   // Graph receives only validated, filtered, deduplicated contexts as seeds.
@@ -321,34 +331,56 @@ export async function retrieveRuntimeContextWithMetadata(
         const validatedGraphContexts = graphContexts.filter((ctx) =>
           validateContextScope(ctx, ownerId, projectId, topicId, allowedScopes)
         );
-        sources.push({
-          source: 'graph',
-          status: 'included',
-          contextCount: validatedGraphContexts.length,
-        });
-        allContexts.push(...validatedGraphContexts);
+        for (const ctx of validatedGraphContexts) {
+          labeledContexts.push({ ctx, source: 'graph' });
+        }
+        sourceBuilders.push({ source: 'graph', status: 'included' });
       } catch (err) {
-        sources.push({
+        sourceBuilders.push({
           source: 'graph',
           status: 'failed',
-          contextCount: 0,
           warning: err instanceof Error ? err.message : String(err),
         });
       }
     } else {
-      sources.push({ source: 'graph', status: 'unavailable', contextCount: 0 });
+      sourceBuilders.push({ source: 'graph', status: 'unavailable' });
     }
   } else {
-    sources.push({ source: 'graph', status: 'disabled', contextCount: 0 });
+    sourceBuilders.push({ source: 'graph', status: 'disabled' });
   }
 
-  // ─── Final dedup (in case graph contexts were added to allContexts) ─────────
-  // Re-validate and deduplicate the complete context set
-  const finalContexts = allContexts.filter((ctx) =>
+  // ─── Final pass: re-validate ALL labeled contexts and deduplicate ──────────
+  // P0.7.2-R2: contextCount must reflect contexts that survived ALL checks.
+  const finalLabeled = labeledContexts.filter(({ ctx }) =>
     validateContextScope(ctx, ownerId, projectId, topicId, allowedScopes)
   );
-  const finalFiltered = applyKindFilters(finalContexts, policy);
-  const finalDeduped = deduplicateContexts(finalFiltered);
+  const finalFiltered = finalLabeled.filter(({ ctx }) =>
+    applyKindFilters([ctx], policy).length > 0
+  );
+  const finalSeenIds = new Set<string>();
+  const finalDedupedLabeled: typeof finalFiltered = [];
+  for (const item of finalFiltered) {
+    if (!finalSeenIds.has(item.ctx.id)) {
+      finalSeenIds.add(item.ctx.id);
+      finalDedupedLabeled.push(item);
+    }
+  }
+
+  // ─── Build source reports with accurate contextCount ──────────────────────
+  // P0.7.2-R2: Count per source from the FINAL surviving contexts.
+  // This ensures contextCount never includes rejected/out-of-bound data.
+  const sourceContextCounts = new Map<RuntimeContextSourceName, number>();
+  for (const item of finalDedupedLabeled) {
+    sourceContextCounts.set(item.source, (sourceContextCounts.get(item.source) ?? 0) + 1);
+  }
+
+  const sources: RuntimeContextSourceReport[] = sourceBuilders.map((builder) => ({
+    source: builder.source,
+    status: builder.status,
+    contextCount: sourceContextCounts.get(builder.source) ?? 0,
+    warning: builder.warning,
+    metadata: builder.metadata,
+  }));
 
   const warnings: string[] = [];
   for (const s of sources) {
@@ -358,7 +390,7 @@ export async function retrieveRuntimeContextWithMetadata(
   }
 
   return {
-    contexts: finalDeduped,
+    contexts: finalDedupedLabeled.map(({ ctx }) => ctx),
     sources,
     warnings,
   };
@@ -575,8 +607,15 @@ async function retrieveOutcomeContexts(
  * Retrieve feedback contexts.
  * Generates Decision Feedback for each retrieved Decision.
  *
- * Scope safety: uses the same MemoryRetriever adapter to ensure
- * buildDecisionFeedback inherits Runtime scope policy.
+ * P0.7.2-R2 Scope safety:
+ *   - Decision retrieval enforces Runtime scope boundaries (same as other sources).
+ *   - For each decision, the feedback build uses the decision's OWN scope
+ *     (not the runtime singleScope), ensuring outcome retrieval stays within
+ *     the allowed boundary.  In multi-scope mode, each decision carries its
+ *     concrete scope from its source record; that scope is guaranteed to be
+ *     within allowedScopes because the decision was retrieved via allowedScopes.
+ *   - Provenance (projectId/topicId/scope) from the decision is explicitly
+ *     threaded into the feedback context so it passes validateContextScope.
  */
 async function retrieveFeedbackContexts(
   deps: RuntimeRetrievalDependencies,
@@ -617,21 +656,34 @@ async function retrieveFeedbackContexts(
 
   for (const decision of decisions) {
     try {
-      // Build feedback using the same MemoryRetriever (scope-safe)
+      // P0.7.2-R2: Use the decision's OWN scope for nested outcome retrieval.
+      // In single-scope mode, decision.scope === singleScope.
+      // In multi-scope mode, decision.scope is the concrete scope this
+      // decision was found in (guaranteed ∈ allowedScopes).
+      // This prevents outcome retrieval from expanding beyond allowed boundaries.
+      const decisionScope = decision.scope ?? undefined;
+
       const feedbackParams: DecisionFeedbackParams = {
         ownerId,
         decisionId: decision.id,
         projectId,
         topicId,
         now,
-        scope: singleScope,
+        scope: decisionScope,
       };
 
       const feedback = await buildDecisionFeedback(
         deps.memoryRetriever,
         feedbackParams
       );
-      contexts.push(decisionFeedbackToContext(feedback));
+
+      // P0.7.2-R2: Thread the decision's real provenance into the feedback
+      // context so it survives validateContextScope with full boundary info.
+      contexts.push(decisionFeedbackToContext(feedback, {
+        projectId: decision.projectId,
+        topicId: decision.topicId,
+        scope: decisionScope as import('@/context/context-provenance').ContextScope,
+      }));
     } catch {
       // Feedback generation failure: skip, don't fabricate
     }
@@ -721,43 +773,75 @@ function validateContextScope(
   const scope = prov.scope;
 
   // ─── 1. Owner isolation ──────────────────────────────────────────────────
-  // If context has an ownerId, it must match exactly
+  // If context has an ownerId, it must match exactly.
+  // Mismatch → immediate reject. Match → continue to further checks
+  // (NEVER short-circuit return true just because owner matches).
   if (prov.ownerId != null && prov.ownerId !== '') {
-    return prov.ownerId === requestOwnerId;
+    if (prov.ownerId !== requestOwnerId) {
+      return false;
+    }
+    // Owner matches — fall through to project/topic/scope validation below.
+  } else {
+    // ─── 2. No ownerId — check if this is legitimate shared knowledge ──────
+    // Only allow unowned data when ALL of these conditions hold:
+    //   - sourceType is 'knowledge' (explicit knowledge classification)
+    //   - scope is 'global' (explicit global classification)
+    //   - no projectId or topicId restrictions (unrestricted sharing)
+    const isSharedKnowledge =
+      prov.sourceType === 'knowledge' &&
+      scope === 'global' &&
+      !prov.projectId &&
+      !prov.topicId;
+
+    if (!isSharedKnowledge) {
+      // No owner and not legitimate shared knowledge → reject
+      // This prevents Graph data, memory data, etc. from leaking without owner
+      return false;
+    }
+    // Shared global knowledge falls through to scope validation below.
   }
 
-  // ─── 2. No ownerId — check if this is legitimate shared knowledge ────────
-  // Only allow unowned data when ALL of these conditions hold:
-  //   - sourceType is 'knowledge' (explicit knowledge classification)
-  //   - scope is 'global' (explicit global classification)
-  //   - no projectId or topicId restrictions (unrestricted sharing)
-  const isSharedKnowledge =
-    prov.sourceType === 'knowledge' &&
-    scope === 'global' &&
-    !prov.projectId &&
-    !prov.topicId;
-
-  if (!isSharedKnowledge) {
-    // No owner and not legitimate shared knowledge → reject
-    // This prevents Graph data, memory data, etc. from leaking without owner
-    return false;
+  // ─── 3. Project isolation ──────────────────────────────────────────────
+  // If context carries projectId, request must have matching projectId.
+  // If request has no projectId, project-scoped context is REJECTED.
+  if (prov.projectId != null && prov.projectId !== '') {
+    if (!requestProjectId || requestProjectId !== prov.projectId) {
+      return false;
+    }
   }
 
-  // ─── 3. Scope validation for shared knowledge ────────────────────────────
+  // ─── 4. Topic isolation ─────────────────────────────────────────────────
+  // If context carries topicId, request must have matching topicId AND projectId.
+  if (prov.topicId != null && prov.topicId !== '') {
+    if (!requestTopicId || requestTopicId !== prov.topicId) {
+      return false;
+    }
+    // projectId must also match (topic is always sub-scope of project)
+    if (!requestProjectId || requestProjectId !== prov.projectId) {
+      return false;
+    }
+  }
+
+  // ─── 5. Scope validation ────────────────────────────────────────────────
   // unknown scope is not allowed (even if sourceType is knowledge)
-  if (scope === 'unknown' || (scope !== 'global' && scope !== 'project' && scope !== 'topic' && scope !== undefined && scope !== null)) {
+  if (scope === 'unknown') {
+    return false;
+  }
+  // Reject unrecognized scope values (only global/project/topic are valid)
+  if (scope !== undefined && scope !== null && scope !== 'global' && scope !== 'project' && scope !== 'topic') {
     return false;
   }
 
-  // If allowedScopes is provided, shared knowledge scope must be in the allowed list
+  // ─── 6. allowedScopes enforcement ──────────────────────────────────────
+  // If allowedScopes is non-empty and context has a recognized scope,
+  // the context scope must be in the allowed list.
   if (allowedScopes && allowedScopes.length > 0) {
-    // Shared global knowledge is allowed only if 'global' is in allowedScopes
     if (scope && !allowedScopes.includes(scope)) {
       return false;
     }
   }
 
-  // Shared global knowledge with no project/topic restrictions passes
+  // All checks passed
   return true;
 }
 
@@ -800,7 +884,11 @@ function applyKindFilters(
 /**
  * Deterministic deduplication of ContextObjects by id.
  * Keeps the first occurrence. Preserves order.
+ *
+ * Kept for backward-compatible external use even though the unified
+ * pipeline now performs dedup inline with source tracking.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function deduplicateContexts(contexts: ContextObject[]): ContextObject[] {
   const seen = new Set<string>();
   const result: ContextObject[] = [];
