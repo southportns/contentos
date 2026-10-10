@@ -138,41 +138,94 @@ function encodeCursor(createdAt: Date, id: string): string {
 }
 
 /**
+ * Canonical ISO 8601 timestamp format produced by encodeCursor().
+ * Matches Date.toISOString(): YYYY-MM-DDTHH:mm:ss.sssZ
+ */
+const ISO_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/**
+ * Standard Base64 alphabet (with padding). Used to reject non-canonical
+ * encodings before decoding, since Node Buffer.from(value, 'base64') silently
+ * ignores invalid characters.
+ */
+const BASE64_REGEX = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/**
+ * Validate that a string is canonical Base64 (no invalid characters,
+ * correct padding) and that decoding then re-encoding produces the same
+ * string. This guards against permissive decoding of malformed cursors.
+ */
+function validateCanonicalBase64(value: string): void {
+  // Must be non-empty
+  if (value.length === 0) {
+    throw new RunValidationError('Cursor must be a non-empty string');
+  }
+
+  // Must only contain standard Base64 characters
+  if (!BASE64_REGEX.test(value)) {
+    throw new RunValidationError('Cursor contains invalid Base64 characters');
+  }
+
+  // Padding rules: length must be a multiple of 4
+  if (value.length % 4 !== 0) {
+    throw new RunValidationError('Cursor has invalid Base64 padding');
+  }
+
+  // Canonical check: decode → re-encode must match original
+  const decoded = Buffer.from(value, 'base64');
+  const reEncoded = decoded.toString('base64');
+  if (reEncoded !== value) {
+    throw new RunValidationError('Cursor is not canonical Base64');
+  }
+}
+
+/**
  * Strict cursor validation.
  *
  * A valid cursor MUST:
- *   - be non-empty string
- *   - decode from base64 to valid JSON
- *   - contain a valid ISO date string in createdAt
- *   - contain a non-empty string in id
+ *   - be a non-empty, non-whitespace string
+ *   - be canonical Base64 (valid alphabet, correct padding, no silent truncation)
+ *   - decode to a valid JSON object (not array, not primitive, not null)
+ *   - contain a valid ISO 8601 timestamp in createdAt (matching Date.toISOString() format)
+ *   - contain a non-empty, non-whitespace string in id
  *
  * @throws RunValidationError for any malformed cursor
  */
 function parseCursor(cursor: string): { createdAt: Date; id: string } {
-  if (!cursor || typeof cursor !== 'string' || cursor.trim() === '') {
+  if (typeof cursor !== 'string' || cursor.trim() === '') {
     throw new RunValidationError('Cursor must be a non-empty string');
   }
 
+  // Validate Base64 canonically BEFORE attempting decode
+  validateCanonicalBase64(cursor);
+
+  // Now decode — at this point we know the Base64 is well-formed
+  const jsonStr = Buffer.from(cursor, 'base64').toString('utf-8');
+
   let decoded: unknown;
   try {
-    const jsonStr = Buffer.from(cursor, 'base64').toString('utf-8');
     decoded = JSON.parse(jsonStr);
   } catch {
-    throw new RunValidationError('Cursor is malformed: invalid base64 or JSON');
+    throw new RunValidationError('Cursor is malformed: invalid JSON');
   }
 
-  if (typeof decoded !== 'object' || decoded === null) {
+  if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
     throw new RunValidationError('Cursor is malformed: expected an object');
   }
 
   const obj = decoded as Record<string, unknown>;
 
-  if (typeof obj.createdAt !== 'string' || obj.createdAt === '') {
+  if (typeof obj.createdAt !== 'string' || obj.createdAt.trim() === '') {
     throw new RunValidationError('Cursor is malformed: createdAt must be a non-empty string');
   }
 
-  if (typeof obj.id !== 'string' || obj.id === '') {
+  if (typeof obj.id !== 'string' || obj.id.trim() === '') {
     throw new RunValidationError('Cursor is malformed: id must be a non-empty string');
+  }
+
+  // Validate strict ISO 8601 format (must match Date.toISOString() output)
+  if (!ISO_TIMESTAMP_REGEX.test(obj.createdAt)) {
+    throw new RunValidationError('Cursor is malformed: createdAt must be a valid ISO 8601 timestamp');
   }
 
   const date = new Date(obj.createdAt);
@@ -251,6 +304,9 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
    * Create a new Run. Rejects duplicate IDs.
    */
   async create(run: ContextOSRun): Promise<ContextOSRun> {
+    // Validate ownerId BEFORE acquiring Prisma client — fail fast, no DB write
+    validateOwnerId(run.ownerId);
+
     const prisma = await getPrisma();
 
     try {
@@ -411,8 +467,10 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
     if (query.topicId !== undefined) baseAnd.push({ topicId: query.topicId });
     if (query.status !== undefined) baseAnd.push({ status: query.status });
 
-    // Cursor: strict validation (throws on malformed cursors)
-    const cursorData = query.cursor ? parseCursor(query.cursor) : null;
+    // Cursor: explicit presence check — only undefined means "first page".
+    // Any supplied cursor (including empty/whitespace strings) is validated
+    // and will throw RunValidationError if malformed. Never silently restarts.
+    const cursorData = query.cursor !== undefined ? parseCursor(query.cursor) : null;
 
     // WHERE = base filters AND (createdAt > cursor OR (createdAt == cursor AND id > cursor))
     const where: Prisma.AgentRunWhereInput = cursorData

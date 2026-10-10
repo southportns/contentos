@@ -669,3 +669,302 @@ describe('PrismaContextOSRunStore — Pagination Integrity (R1)', () => {
     expect(allIds).toEqual(sortedIds);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1.1: Empty & Explicit Cursor Validation
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Empty Cursor Rejection (R1.1)', () => {
+  it('should succeed when cursor is omitted (undefined)', async () => {
+    await store.create(createRun({ id: 'run_no_cursor', ownerId: 'cursor_user' }));
+
+    const result = await store.list({ ownerId: 'cursor_user' });
+    expect(result.runs).toHaveLength(1);
+    expect(result.runs[0].id).toBe('run_no_cursor');
+  });
+
+  it('should throw RunValidationError when cursor is an empty string', async () => {
+    await store.create(createRun({ id: 'run_empty_cursor', ownerId: 'cursor_user' }));
+
+    await expect(
+      store.list({ ownerId: 'cursor_user', cursor: '' })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should throw RunValidationError when cursor is whitespace-only', async () => {
+    await store.create(createRun({ id: 'run_ws_cursor', ownerId: 'cursor_user' }));
+
+    await expect(
+      store.list({ ownerId: 'cursor_user', cursor: '   ' })
+    ).rejects.toThrow(RunValidationError);
+
+    await expect(
+      store.list({ ownerId: 'cursor_user', cursor: '\t\n' })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should throw RunValidationError when cursor is empty string after trim', async () => {
+    await expect(
+      store.list({ ownerId: 'cursor_user', cursor: '  \r\n  ' })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should succeed with a valid cursor from previous page', async () => {
+    for (let i = 0; i < 5; i++) {
+      await store.create(createRun({ id: `run_valid_c_${i}`, ownerId: 'cursor_user' }));
+    }
+
+    const page1 = await store.list({ ownerId: 'cursor_user', limit: 2 });
+    expect(page1.nextCursor).not.toBeNull();
+
+    const page2 = await store.list({ ownerId: 'cursor_user', limit: 2, cursor: page1.nextCursor! });
+    expect(page2.runs.length).toBeGreaterThan(0);
+    // No overlap with page1
+    const page1Ids = page1.runs.map(r => r.id);
+    const page2Ids = page2.runs.map(r => r.id);
+    expect(page1Ids.filter(id => page2Ids.includes(id))).toHaveLength(0);
+  });
+
+  it('should never return first-page results on cursor parse failure', async () => {
+    // Create data that would appear on first page
+    for (let i = 0; i < 3; i++) {
+      await store.create(createRun({ id: `run_fallback_${i}`, ownerId: 'cursor_user' }));
+    }
+
+    // Attempt with invalid cursor — must throw, NOT silently return first page
+    let capturedError: unknown = null;
+    let capturedResult: unknown = null;
+    try {
+      capturedResult = await store.list({ ownerId: 'cursor_user', cursor: '' });
+    } catch (e) {
+      capturedError = e;
+    }
+
+    // Must have thrown — result must NOT have been assigned
+    expect(capturedError).toBeInstanceOf(RunValidationError);
+    expect(capturedResult).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1.1: Strict Base64 & ISO Timestamp Validation
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Strict Cursor Decoding (R1.1)', () => {
+  it('should reject cursor with invalid Base64 characters', async () => {
+    // '!' is NOT a valid Base64 character
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: 'abc!def' })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with invalid Base64 padding (length not multiple of 4)', async () => {
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: 'abc' })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject non-canonical Base64 (truncation ambiguity)', async () => {
+    // This is valid base64 alphabet but may not be canonical
+    // Manually construct a cursor-like string that is valid base64
+    // but whose decode→reencode doesn't match
+    // 'AAA' is not valid base64 (length not multiple of 4)
+    // Let's use a known non-canonical case: extra padding
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: '====' })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject valid Base64 containing malformed JSON', async () => {
+    // base64 encode "not json at all"
+    const badJson = Buffer.from('not json at all').toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: badJson })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject valid Base64 containing JSON array instead of object', async () => {
+    const arrJson = Buffer.from(JSON.stringify([{ createdAt: 'x', id: 'y' }])).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: arrJson })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject valid Base64 containing JSON primitive', async () => {
+    const primJson = Buffer.from(JSON.stringify('just a string')).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: primJson })
+    ).rejects.toThrow(RunValidationError);
+
+    const numJson = Buffer.from(JSON.stringify(42)).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: numJson })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject valid Base64 containing null JSON', async () => {
+    const nullJson = Buffer.from(JSON.stringify(null)).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: nullJson })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with missing createdAt field', async () => {
+    const missing = Buffer.from(JSON.stringify({ id: 'some_id' })).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: missing })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with missing id field', async () => {
+    const missing = Buffer.from(JSON.stringify({ createdAt: '2026-10-10T00:00:00.000Z' })).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: missing })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with empty id', async () => {
+    const emptyId = Buffer.from(JSON.stringify({ createdAt: '2026-10-10T00:00:00.000Z', id: '' })).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: emptyId })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with whitespace-only id', async () => {
+    const wsId = Buffer.from(JSON.stringify({ createdAt: '2026-10-10T00:00:00.000Z', id: '   ' })).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: wsId })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with empty createdAt', async () => {
+    const emptyTs = Buffer.from(JSON.stringify({ createdAt: '', id: 'run_x' })).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: emptyTs })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with invalid date in createdAt', async () => {
+    const badDate = Buffer.from(JSON.stringify({ createdAt: 'not-a-date', id: 'run_x' })).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: badDate })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with non-ISO date format (valid JS Date but wrong format)', async () => {
+    // "Oct 10, 2026" is parseable in JS but not ISO 8601 format
+    const nonIsoDate = Buffer.from(JSON.stringify({ createdAt: 'Oct 10, 2026', id: 'run_x' })).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: nonIsoDate })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with date missing milliseconds', async () => {
+    // Missing .000 — valid Date but not canonical ISO format
+    const noMillis = Buffer.from(JSON.stringify({ createdAt: '2026-10-10T00:00:00Z', id: 'run_x' })).toString('base64');
+    await expect(
+      store.list({ ownerId: 'strict_user', cursor: noMillis })
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should accept valid canonical cursor generated by encodeCursor', async () => {
+    for (let i = 0; i < 5; i++) {
+      await store.create(createRun({ id: `run_canon_${i}`, ownerId: 'strict_user' }));
+    }
+
+    const page1 = await store.list({ ownerId: 'strict_user', limit: 2 });
+    expect(page1.nextCursor).not.toBeNull();
+
+    // Use the generated cursor — must succeed
+    const page2 = await store.list({ ownerId: 'strict_user', limit: 2, cursor: page1.nextCursor! });
+    expect(page2.runs.length).toBeGreaterThan(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1.1: Owner ID Validation on Create
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Owner ID Validation on Create (R1.1)', () => {
+  it('should reject create with empty ownerId', async () => {
+    await expect(
+      store.create(createRun({ id: 'run_empty_owner', ownerId: '' }))
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject create with whitespace-only ownerId', async () => {
+    await expect(
+      store.create(createRun({ id: 'run_ws_owner', ownerId: '   ' }))
+    ).rejects.toThrow(RunValidationError);
+
+    await expect(
+      store.create(createRun({ id: 'run_tab_owner', ownerId: '\t\n' }))
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should NOT persist any row when ownerId is invalid', async () => {
+    try {
+      await store.create(createRun({ id: 'run_should_not_exist', ownerId: '' }));
+    } catch {
+      // expected
+    }
+
+    // Verify no row was persisted
+    const { prisma } = await import('@/lib/prisma');
+    const count = await prisma.agentRun.count({ where: { id: 'run_should_not_exist' } });
+    expect(count).toBe(0);
+  });
+
+  it('should throw RunValidationError, not RunPersistenceError', async () => {
+    try {
+      await store.create(createRun({ id: 'run_validation_err', ownerId: '' }));
+      fail('Expected error to be thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(RunValidationError);
+      expect(e).toBeInstanceOf(Error); // RunValidationError extends ContextOSRuntimeError extends Error
+      const err = e as RunValidationError;
+      expect(err.code).toBe('RUNTIME_VALIDATION');
+    }
+  });
+
+  it('should preserve existing RunConflictError for duplicate IDs', async () => {
+    await store.create(createRun({ id: 'run_dup_check', ownerId: 'valid_owner' }));
+
+    // Same ID, valid owner — should get RunConflictError
+    await expect(
+      store.create(createRun({ id: 'run_dup_check', ownerId: 'valid_owner' }))
+    ).rejects.toThrow(RunConflictError);
+  });
+
+  it('should validate ownerId BEFORE Prisma client acquisition (fail fast)', async () => {
+    // This test verifies that validation happens before any DB interaction
+    // If it didn't, we might get a RunPersistenceError instead
+    const before = Date.now();
+    try {
+      await store.create(createRun({ id: 'run_timing_test', ownerId: '' }));
+    } catch (e) {
+      const elapsed = Date.now() - before;
+      // Validation should be near-instant (no network roundtrip)
+      expect(e).toBeInstanceOf(RunValidationError);
+      // Even on slow CI, validation under 1s means no DB was hit
+      expect(elapsed).toBeLessThan(1000);
+    }
+  });
+
+  it('should reject create with empty ownerId even when other fields are valid', async () => {
+    const fullRun = createRun({
+      id: 'run_full_valid',
+      ownerId: '',
+      projectId: 'proj_1',
+      topicId: 'topic_1',
+      purpose: 'test',
+      input: { query: 'valid' },
+      contextIds: ['ctx_1'],
+      decisionIds: ['dec_1'],
+      outcomeIds: ['out_1'],
+      output: { result: 'valid' },
+      status: 'completed',
+      startedAt: '2026-10-10T00:00:00.000Z',
+      completedAt: '2026-10-10T00:01:00.000Z',
+    });
+
+    await expect(store.create(fullRun)).rejects.toThrow(RunValidationError);
+  });
+});
