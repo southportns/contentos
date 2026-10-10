@@ -76,6 +76,28 @@ export {
 
 export type {
   RuntimeRetrievalDependencies,
+  RuntimeRunnerDependencies,
 } from './runtime-context';
 
 export { DEFAULT_RUNTIME_POLICY } from './runtime-context';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4 — Run Store (Persistence Abstraction)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export type {
+  ContextOSRunStore,
+  ContextOSRunQuery,
+  ContextOSRunListResult,
+} from './run-store';
+
+export {
+  RunConflictError,
+  RunNotFoundError,
+  RunPersistenceError,
+  DEFAULT_RUN_LIMIT,
+  MAX_RUN_LIMIT,
+} from './run-store';
+
+export { createPrismaRunStore } from './prisma-run-store';
+export type { PrismaContextOSRunStore } from './prisma-run-store';

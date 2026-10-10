@@ -1103,22 +1103,65 @@ export function mapPurposeToAssembly(purpose: string): AssemblyPurpose {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * Dependencies for createRuntimeRunner (P0.7.4 Extended).
+ *
+ * Allows callers to optionally inject a Run Store for persistence.
+ * When runStore is not provided, the runner operates in memory-only mode
+ * (backward-compatible with P0.7.1 — P0.7.3).
+ */
+export interface RuntimeRunnerDependencies {
+  memoryRetriever: MemoryRetriever;
+  now?: () => string;
+  /**
+   * P0.7.4 — Optional Run Store.
+   * When provided, every call persists the Run lifecycle.
+   * When NOT provided, Runs stay in memory only.
+   */
+  runStore?: import('./run-store').ContextOSRunStore;
+}
+
+/**
  * Create a pre-configured runContextOS function with dependencies wired.
  *
- * @param memoryRetriever - MemoryRetriever instance
- * @param now - Optional clock function
+ * P0.7.4 Extended: accepts RuntimeRunnerDependencies object.
+ *
+ * @param deps - Runner dependencies (memoryRetriever, now?, runStore?)
  * @returns A runContextOS function with dependencies pre-wired
+ *
+ * Backward compatibility:
+ *   - createRuntimeRunner(retriever)          → in-memory only
+ *   - createRuntimeRunner(retriever, clock)   → in-memory only (deprecated)
+ *   - createRuntimeRunner({ memoryRetriever, now, runStore }) → persistent
  */
 export function createRuntimeRunner(
-  memoryRetriever: MemoryRetriever,
-  now: () => string = () => new Date().toISOString(),
+  memoryRetrieverOrDeps: MemoryRetriever | RuntimeRunnerDependencies,
+  nowOrUndefined?: () => string,
 ) {
+  // Support legacy 2-arg call: createRuntimeRunner(retriever, now?)
+  let memoryRetriever: MemoryRetriever;
+  let now: () => string;
+  let runStore: import('./run-store').ContextOSRunStore | undefined;
+
+  if (nowOrUndefined !== undefined || !('memoryRetriever' in (memoryRetrieverOrDeps as object))) {
+    // Legacy positional call: (retriever, now?)
+    memoryRetriever = memoryRetrieverOrDeps as MemoryRetriever;
+    now = nowOrUndefined ?? (() => new Date().toISOString());
+    runStore = undefined;
+  } else {
+    // New object call: ({ memoryRetriever, now?, runStore? })
+    const deps = memoryRetrieverOrDeps as RuntimeRunnerDependencies;
+    memoryRetriever = deps.memoryRetriever;
+    now = deps.now ?? (() => new Date().toISOString());
+    runStore = deps.runStore;
+  }
+
   return async (request: ContextOSRuntimeRequest) => {
     return runContextOS(request, {
       retrieveContext: (req) => retrieveRuntimeContext(req, { memoryRetriever, now }),
       assembleContext: (contexts, policy, purpose) =>
         assembleRuntimeContext(contexts, policy, purpose, now),
       now,
+      runStore,
     });
   };
 }

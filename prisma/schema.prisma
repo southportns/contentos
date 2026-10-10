@@ -466,8 +466,20 @@ model AgentRun {
   completedAt DateTime?
   createdAt   DateTime @default(now())
 
+  // ─── P0.7.4 — ContextOS Run Persistence (compatible extension) ───
+  ownerId     String?
+  projectId   String?
+  purpose     String?
+  contextIds  Json?    // string[] — IDs of contexts used
+  decisionIds Json?    // string[] — IDs of decisions made
+  outcomeIds  Json?    // string[] — IDs of outcomes observed
+
   @@index([topicId])
   @@index([skillId])
+  @@index([ownerId])
+  @@index([ownerId, status])
+  @@index([ownerId, projectId])
+  @@index([ownerId, topicId])
 }
 
 // ─── Skills Registry ───────────────────────────────────
