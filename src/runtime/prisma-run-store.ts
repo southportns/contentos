@@ -26,6 +26,13 @@
  *
  * Fields NOT persisted (Agent-system-only, out of scope for P0.7.4):
  *   skillId, model, tokens, latency, error
+ *
+ * Validation Policy (P0.7.4-R1):
+ *   - limit: values > MAX_RUN_LIMIT clamp to MAX_RUN_LIMIT; 0, negative, NaN,
+ *     Infinity, and non-integer fractions throw RunValidationError.
+ *   - cursor: malformed base64, malformed JSON, invalid timestamps, missing
+ *     fields, or wrong shape throw RunValidationError.
+ *   - ownerId: empty/blank string throws RunValidationError before DB access.
  */
 
 import { Prisma } from '@/generated/prisma';
@@ -37,6 +44,7 @@ import {
   RunConflictError,
   RunNotFoundError,
   RunPersistenceError,
+  RunValidationError,
   DEFAULT_RUN_LIMIT,
   MAX_RUN_LIMIT,
 } from './run-store';
@@ -130,17 +138,99 @@ function encodeCursor(createdAt: Date, id: string): string {
 }
 
 /**
- * Decode a cursor string. Returns null for invalid input.
+ * Strict cursor validation.
+ *
+ * A valid cursor MUST:
+ *   - be non-empty string
+ *   - decode from base64 to valid JSON
+ *   - contain a valid ISO date string in createdAt
+ *   - contain a non-empty string in id
+ *
+ * @throws RunValidationError for any malformed cursor
  */
-function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
+function parseCursor(cursor: string): { createdAt: Date; id: string } {
+  if (!cursor || typeof cursor !== 'string' || cursor.trim() === '') {
+    throw new RunValidationError('Cursor must be a non-empty string');
+  }
+
+  let decoded: unknown;
   try {
-    const decoded = JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
-    if (typeof decoded.createdAt === 'string' && typeof decoded.id === 'string') {
-      return { createdAt: new Date(decoded.createdAt), id: decoded.id };
-    }
-    return null;
+    const jsonStr = Buffer.from(cursor, 'base64').toString('utf-8');
+    decoded = JSON.parse(jsonStr);
   } catch {
-    return null;
+    throw new RunValidationError('Cursor is malformed: invalid base64 or JSON');
+  }
+
+  if (typeof decoded !== 'object' || decoded === null) {
+    throw new RunValidationError('Cursor is malformed: expected an object');
+  }
+
+  const obj = decoded as Record<string, unknown>;
+
+  if (typeof obj.createdAt !== 'string' || obj.createdAt === '') {
+    throw new RunValidationError('Cursor is malformed: createdAt must be a non-empty string');
+  }
+
+  if (typeof obj.id !== 'string' || obj.id === '') {
+    throw new RunValidationError('Cursor is malformed: id must be a non-empty string');
+  }
+
+  const date = new Date(obj.createdAt);
+  if (isNaN(date.getTime())) {
+    throw new RunValidationError('Cursor is malformed: createdAt is not a valid date');
+  }
+
+  return { createdAt: date, id: obj.id };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Input Validation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Validate and normalize the limit parameter.
+ *
+ * Policy:
+ *   - Missing/undefined → DEFAULT_RUN_LIMIT
+ *   - Values > MAX_RUN_LIMIT → clamped to MAX_RUN_LIMIT
+ *   - 0, negative, NaN, Infinity, non-integer, non-finite → RunValidationError
+ */
+function validateLimit(limit: unknown): number {
+  if (limit === undefined || limit === null) {
+    return DEFAULT_RUN_LIMIT;
+  }
+
+  if (typeof limit !== 'number') {
+    throw new RunValidationError(`Limit must be a number, received ${typeof limit}`);
+  }
+
+  if (!Number.isFinite(limit)) {
+    throw new RunValidationError('Limit must be a finite number');
+  }
+
+  if (!Number.isInteger(limit)) {
+    throw new RunValidationError('Limit must be an integer');
+  }
+
+  if (limit <= 0) {
+    throw new RunValidationError('Limit must be a positive integer');
+  }
+
+  if (limit > MAX_RUN_LIMIT) {
+    return MAX_RUN_LIMIT;
+  }
+
+  return limit;
+}
+
+/**
+ * Validate ownerId before any database access.
+ *
+ * @throws RunValidationError for empty/blank ownerId
+ */
+function validateOwnerId(ownerId: string): void {
+  if (!ownerId || typeof ownerId !== 'string' || ownerId.trim() === '') {
+    throw new RunValidationError('ownerId is required and must be a non-empty string');
   }
 }
 
@@ -152,6 +242,9 @@ function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
  * Prisma-backed implementation of ContextOSRunStore.
  *
  * Wraps the AgentRun model. Enforces owner isolation on every operation.
+ *
+ * Owner isolation is enforced at the database query level (atomic) rather than
+ * in application code, preventing TOCTOU race conditions.
  */
 export class PrismaContextOSRunStore implements ContextOSRunStore {
   /**
@@ -181,26 +274,25 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
   }
 
   /**
-   * Update an existing Run. Verifies ownerId matches.
+   * Update an existing Run. Atomically scoped to ownerId + id.
+   *
+   * Uses updateMany with a compound WHERE (id + ownerId) to ensure
+   * the update only affects a Run owned by the caller. Then reads
+   * back the persisted result with a scoped query.
    */
   async update(run: ContextOSRun): Promise<ContextOSRun> {
     const prisma = await getPrisma();
 
+    // Validate inputs before hitting the database
+    validateOwnerId(run.ownerId);
+
     try {
-      // First verify ownership — prevents silent cross-owner updates
-      const existing = await prisma.agentRun.findUnique({
-        where: { id: run.id },
-      });
-
-      if (!existing || existing.ownerId !== run.ownerId) {
-        throw new RunNotFoundError(
-          `Run "${run.id}" not found for owner "${run.ownerId}"`,
-          run.id,
-        );
-      }
-
-      const row = await prisma.agentRun.update({
-        where: { id: run.id },
+      // Atomic owner-scoped update: WHERE id = run.id AND ownerId = run.ownerId
+      const result = await prisma.agentRun.updateMany({
+        where: {
+          id: run.id,
+          ownerId: run.ownerId,
+        },
         data: {
           status: run.status,
           completedAt: run.completedAt ? new Date(run.completedAt) : null,
@@ -217,10 +309,37 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
         },
       });
 
-      return fromPrisma(row);
+      // If no row matched both id and ownerId, the run doesn't exist
+      // (or belongs to a different owner — same error either way)
+      if (result.count === 0) {
+        throw new RunNotFoundError(
+          `Run "${run.id}" not found for owner "${run.ownerId}"`,
+          run.id,
+        );
+      }
+
+      // Read back the persisted result (scoped to owner)
+      const persisted = await prisma.agentRun.findFirst({
+        where: {
+          id: run.id,
+          ownerId: run.ownerId,
+        },
+      });
+
+      // Should not happen: row existed for update but vanished on read.
+      // Treat as a persistence error rather than silent null.
+      if (!persisted) {
+        throw new RunPersistenceError(
+          `Run "${run.id}" was updated but could not be read back`,
+          run.id,
+        );
+      }
+
+      return fromPrisma(persisted);
     } catch (error) {
-      // Re-throw our own errors
+      // Re-throw our own errors (validation/not-found are already specific)
       if (error instanceof RunNotFoundError) throw error;
+      if (error instanceof RunValidationError) throw error;
 
       throw new RunPersistenceError(
         `Failed to update run: ${error instanceof Error ? error.message : String(error)}`,
@@ -232,17 +351,26 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
 
   /**
    * Get a single Run by ownerId + runId.
-   * Returns null if not found or not owned by the caller.
+   *
+   * Uses findFirst with compound WHERE (id + ownerId) for atomic
+   * owner-scoped lookup. Returns null if not found or not owned
+   * by the caller — same response either way.
    */
   async getById(ownerId: string, runId: string): Promise<ContextOSRun | null> {
     const prisma = await getPrisma();
 
+    // Validate ownerId before hitting the database
+    validateOwnerId(ownerId);
+
     try {
-      const row = await prisma.agentRun.findUnique({
-        where: { id: runId },
+      const row = await prisma.agentRun.findFirst({
+        where: {
+          id: runId,
+          ownerId,
+        },
       });
 
-      if (!row || row.ownerId !== ownerId) {
+      if (!row) {
         return null;
       }
 
@@ -262,10 +390,18 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
    * Deterministic ordering: createdAt ASC, id ASC (tie-breaker).
    * When ownerId is null (legacy records), those are NOT included in any
    * owner-scoped query — we explicitly filter ownerId = query.ownerId.
+   *
+   * Validation:
+   *   - ownerId: must be non-empty (throws RunValidationError)
+   *   - limit: clamped to MAX_RUN_LIMIT if > max; throws for 0/negative/NaN/fractions
+   *   - cursor: strict validation, throws on malformed input
    */
   async list(query: ContextOSRunQuery): Promise<ContextOSRunListResult> {
     const prisma = await getPrisma();
-    const limit = Math.min(query.limit ?? DEFAULT_RUN_LIMIT, MAX_RUN_LIMIT);
+
+    // Validate before any database access
+    validateOwnerId(query.ownerId);
+    const limit = validateLimit(query.limit);
 
     // Build base WHERE: owner isolation + optional filters
     const baseAnd: Prisma.AgentRunWhereInput[] = [
@@ -275,8 +411,8 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
     if (query.topicId !== undefined) baseAnd.push({ topicId: query.topicId });
     if (query.status !== undefined) baseAnd.push({ status: query.status });
 
-    // Cursor: encode last-seen (createdAt, id) for composite-key pagination
-    const cursorData = query.cursor ? decodeCursor(query.cursor) : null;
+    // Cursor: strict validation (throws on malformed cursors)
+    const cursorData = query.cursor ? parseCursor(query.cursor) : null;
 
     // WHERE = base filters AND (createdAt > cursor OR (createdAt == cursor AND id > cursor))
     const where: Prisma.AgentRunWhereInput = cursorData
@@ -323,6 +459,10 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
         totalCount: -1, // omitted for performance; computing exact count requires separate query
       };
     } catch (error) {
+      // Re-throw validation errors as-is (already thrown before DB access,
+      // but guard in case Prisma wraps them)
+      if (error instanceof RunValidationError) throw error;
+
       throw new RunPersistenceError(
         `Failed to list runs: ${error instanceof Error ? error.message : String(error)}`,
         undefined,

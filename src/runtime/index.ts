@@ -95,6 +95,7 @@ export {
   RunConflictError,
   RunNotFoundError,
   RunPersistenceError,
+  RunValidationError,
   DEFAULT_RUN_LIMIT,
   MAX_RUN_LIMIT,
 } from './run-store';

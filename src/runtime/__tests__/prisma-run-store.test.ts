@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
 import type { ContextOSRun, ContextOSRunStatus } from '../runtime-types';
 import { PrismaContextOSRunStore } from '../prisma-run-store';
-import { RunConflictError, RunNotFoundError } from '../run-store';
+import { RunConflictError, RunNotFoundError, RunValidationError, MAX_RUN_LIMIT } from '../run-store';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Setup: Isolated Test DB
@@ -246,11 +246,22 @@ describe('PrismaContextOSRunStore — Pagination', () => {
     expect(result.nextCursor).toBeNull();
   });
 
-  it('should provide deterministic ordering', async () => {
+  it('should provide deterministic ordering by (createdAt, id)', async () => {
+    // The documented pagination order is (createdAt ASC, id ASC).
+    // Since ContextOSRun does not expose the Prisma-internal createdAt,
+    // we verify consistency: store results must match raw Prisma ordering.
+    const { prisma } = await import('@/lib/prisma');
+    const rawRows = await prisma.agentRun.findMany({
+      where: { ownerId: 'page_user' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+    const expectedOrder = rawRows.map((r) => r.id);
+
     const result = await store.list({ ownerId: 'page_user', limit: 100 });
-    for (let i = 1; i < result.runs.length; i++) {
-      expect(result.runs[i].startedAt >= result.runs[i - 1].startedAt).toBe(true);
-    }
+    const actualOrder = result.runs.map((r) => r.id);
+
+    expect(actualOrder).toEqual(expectedOrder);
   });
 });
 
@@ -322,5 +333,339 @@ describe('PrismaContextOSRunStore — DateTime Round-trip', () => {
 
     expect(retrieved!.startedAt).toBe('2026-10-10T12:30:45.123Z');
     expect(retrieved!.completedAt).toBe('2026-10-10T12:31:00.456Z');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1: Limit Validation
+// ═══════════════════════════════════════════════════════════════════════════════
+// Helper: read raw AgentRun rows ordered by (createdAt, id) for direct DB assertions.
+async function fetchRawOrdered(ownerId: string) {
+  const { prisma } = await import('@/lib/prisma');
+  return prisma.agentRun.findMany({
+    where: { ownerId },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+}
+
+describe('PrismaContextOSRunStore — Limit Validation (R1)', () => {
+  it('should reject limit of 0', async () => {
+    await expect(store.list({ ownerId: 'user_1', limit: 0 })).rejects.toThrow(RunValidationError);
+    await expect(store.list({ ownerId: 'user_1', limit: 0 })).rejects.toThrow(/positive integer/);
+  });
+
+  it('should reject negative limit', async () => {
+    await expect(store.list({ ownerId: 'user_1', limit: -1 })).rejects.toThrow(RunValidationError);
+    await expect(store.list({ ownerId: 'user_1', limit: -100 })).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject fractional limit', async () => {
+    await expect(store.list({ ownerId: 'user_1', limit: 1.5 })).rejects.toThrow(RunValidationError);
+    await expect(store.list({ ownerId: 'user_1', limit: 3.7 })).rejects.toThrow(/integer/);
+  });
+
+  it('should reject NaN limit', async () => {
+    await expect(store.list({ ownerId: 'user_1', limit: NaN })).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject Infinity limit', async () => {
+    await expect(store.list({ ownerId: 'user_1', limit: Infinity })).rejects.toThrow(RunValidationError);
+    await expect(store.list({ ownerId: 'user_1', limit: -Infinity })).rejects.toThrow(RunValidationError);
+  });
+
+  it('should clamp limit above MAX_RUN_LIMIT to MAX_RUN_LIMIT', async () => {
+    // Create enough data
+    for (let i = 0; i < 5; i++) {
+      await store.create(createRun({ id: `run_clamp_${i}`, ownerId: 'clamp_user' }));
+    }
+
+    const result = await store.list({ ownerId: 'clamp_user', limit: MAX_RUN_LIMIT + 50 });
+    expect(result.runs.length).toBeLessThanOrEqual(MAX_RUN_LIMIT);
+    // With only 5 records, we should get all 5 (since 5 < MAX_RUN_LIMIT)
+    expect(result.runs).toHaveLength(5);
+  });
+
+  it('should use DEFAULT_RUN_LIMIT when limit is omitted', async () => {
+    const result = await store.list({ ownerId: 'user_1' });
+    // No data, but no error — demonstrates default applied
+    expect(result.runs).toHaveLength(0);
+  });
+
+  it('should accept valid positive integer limits', async () => {
+    for (let i = 0; i < 5; i++) {
+      await store.create(createRun({ id: `run_valid_${i}`, ownerId: 'valid_user' }));
+    }
+
+    const result = await store.list({ ownerId: 'valid_user', limit: 3 });
+    expect(result.runs).toHaveLength(3);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1: Owner ID Validation
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Owner ID Validation (R1)', () => {
+  it('should reject blank ownerId (empty string)', async () => {
+    await expect(store.list({ ownerId: '' })).rejects.toThrow(RunValidationError);
+    await expect(store.list({ ownerId: '' })).rejects.toThrow(/ownerId/);
+  });
+
+  it('should reject whitespace-only ownerId', async () => {
+    await expect(store.list({ ownerId: '   ' })).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject blank ownerId in getById', async () => {
+    await expect(store.getById('', 'run_1')).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject blank ownerId in update', async () => {
+    await expect(store.update(createRun({ id: 'run_1', ownerId: '' }))).rejects.toThrow(RunValidationError);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1: Cursor Validation
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Cursor Validation (R1)', () => {
+  it('should reject malformed base64 cursor', async () => {
+    await expect(
+      store.list({ ownerId: 'user_1', cursor: '!!!invalid-base64!!!' }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with malformed JSON inside base64', async () => {
+    const badJson = Buffer.from('not json at all').toString('base64');
+    await expect(
+      store.list({ ownerId: 'user_1', cursor: badJson }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with invalid date in createdAt', async () => {
+    const badDateCursor = Buffer.from(
+      JSON.stringify({ createdAt: 'not-a-date', id: 'run_1' }),
+    ).toString('base64');
+
+    await expect(
+      store.list({ ownerId: 'user_1', cursor: badDateCursor }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with missing id field', async () => {
+    const missingIdCursor = Buffer.from(
+      JSON.stringify({ createdAt: '2026-10-10T00:00:00.000Z' }),
+    ).toString('base64');
+
+    await expect(
+      store.list({ ownerId: 'user_1', cursor: missingIdCursor }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with missing createdAt field', async () => {
+    const missingDateCursor = Buffer.from(
+      JSON.stringify({ id: 'run_1' }),
+    ).toString('base64');
+
+    await expect(
+      store.list({ ownerId: 'user_1', cursor: missingDateCursor }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with empty id', async () => {
+    const emptyIdCursor = Buffer.from(
+      JSON.stringify({ createdAt: '2026-10-10T00:00:00.000Z', id: '' }),
+    ).toString('base64');
+
+    await expect(
+      store.list({ ownerId: 'user_1', cursor: emptyIdCursor }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with wrong shape (array instead of object)', async () => {
+    const arrayCursor = Buffer.from(JSON.stringify([{ createdAt: 'x', id: 'y' }])).toString('base64');
+
+    await expect(
+      store.list({ ownerId: 'user_1', cursor: arrayCursor }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should accept a valid cursor from previous page', async () => {
+    // Create test data
+    for (let i = 0; i < 5; i++) {
+      await store.create(createRun({ id: `run_valid_c_${i}`, ownerId: 'valid_cursor_user' }));
+    }
+
+    // Get first page
+    const page1 = await store.list({ ownerId: 'valid_cursor_user', limit: 2 });
+    expect(page1.nextCursor).not.toBeNull();
+
+    // Use cursor to get next page
+    const page2 = await store.list({
+      ownerId: 'valid_cursor_user',
+      limit: 2,
+      cursor: page1.nextCursor!,
+    });
+
+    expect(page2.runs.length).toBeGreaterThan(0);
+    // No overlap between pages
+    const page1Ids = page1.runs.map((r) => r.id);
+    const page2Ids = page2.runs.map((r) => r.id);
+    expect(page1Ids.filter((id) => page2Ids.includes(id))).toHaveLength(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1: Atomic Owner Isolation
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Atomic Owner Isolation (R1)', () => {
+  it('getById: should return null for unknown run (atomic scoped query)', async () => {
+    const result = await store.getById('owner_A', 'nonexistent_run');
+    expect(result).toBeNull();
+  });
+
+  it('getById: should return null for different owner (atomic scoped query)', async () => {
+    await store.create(createRun({ id: 'run_atomic_1', ownerId: 'owner_A' }));
+
+    const result = await store.getById('owner_B', 'run_atomic_1');
+    expect(result).toBeNull();
+  });
+
+  it('getById: should return run only for matching owner', async () => {
+    await store.create(createRun({ id: 'run_atomic_2', ownerId: 'owner_A' }));
+
+    const result = await store.getById('owner_A', 'run_atomic_2');
+    expect(result).not.toBeNull();
+    expect(result!.id).toBe('run_atomic_2');
+  });
+
+  it('update: should not update run owned by different user', async () => {
+    await store.create(createRun({ id: 'run_atomic_upd', ownerId: 'owner_A', purpose: 'original' }));
+
+    // Attempt update as owner_B
+    await expect(
+      store.update(createRun({ id: 'run_atomic_upd', ownerId: 'owner_B', purpose: 'hijacked' })),
+    ).rejects.toThrow(RunNotFoundError);
+
+    // Verify owner_A's data is untouched
+    const retrieved = await store.getById('owner_A', 'run_atomic_upd');
+    expect(retrieved!.purpose).toBe('original');
+  });
+
+  it('update: should throw RunNotFoundError for non-existent run', async () => {
+    await expect(
+      store.update(createRun({ id: 'run_never_existed', ownerId: 'owner_A' })),
+    ).rejects.toThrow(RunNotFoundError);
+  });
+
+  it('update: should succeed for legit owner', async () => {
+    await store.create(createRun({ id: 'run_legit_upd', ownerId: 'owner_A', status: 'started' }));
+
+    const updated = await store.update(
+      createRun({ id: 'run_legit_upd', ownerId: 'owner_A', status: 'completed' }),
+    );
+    expect(updated.status).toBe('completed');
+
+    // Verify via getById
+    const retrieved = await store.getById('owner_A', 'run_legit_upd');
+    expect(retrieved!.status).toBe('completed');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1: Pagination Integrity
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Pagination Integrity (R1)', () => {
+  it('should order by (createdAt, id) deterministically', async () => {
+    // Create runs — all will have same createdAt-second (SQLite timestamp precision)
+    for (let i = 0; i < 10; i++) {
+      await store.create(createRun({ id: `run_order_${i}`, ownerId: 'order_user' }));
+    }
+
+    const raw = await fetchRawOrdered('order_user');
+    expect(raw.length).toBe(10);
+
+    // Verify: when createdAt is same, should order by id ASC
+    for (let i = 1; i < raw.length; i++) {
+      const prev = raw[i - 1];
+      const curr = raw[i];
+      if (prev.createdAt.getTime() === curr.createdAt.getTime()) {
+        expect(curr.id > prev.id).toBe(true);
+      } else {
+        expect(curr.createdAt.getTime() > prev.createdAt.getTime()).toBe(true);
+      }
+    }
+  });
+
+  it('should produce no duplicate or missing rows across all pages', async () => {
+    const totalRuns = 25;
+    for (let i = 0; i < totalRuns; i++) {
+      await store.create(createRun({ id: `run_full_${i}`, ownerId: 'full_user' }));
+    }
+
+    const allIds: string[] = [];
+    let cursor: string | null = null;
+    let pageCount = 0;
+
+    do {
+      const result = await store.list({ ownerId: 'full_user', limit: 7, cursor: cursor ?? undefined });
+      allIds.push(...result.runs.map((r) => r.id));
+      cursor = result.nextCursor;
+      pageCount++;
+    } while (cursor && pageCount < 20);
+
+    // No duplicates
+    expect(new Set(allIds).size).toBe(allIds.length);
+    // All rows present
+    expect(allIds.length).toBe(totalRuns);
+  });
+
+  it('should not allow cursor to retrieve another owners data', async () => {
+    await store.create(createRun({ id: 'run_ownerA_1', ownerId: 'iso_A' }));
+    await store.create(createRun({ id: 'run_ownerA_2', ownerId: 'iso_A' }));
+    await store.create(createRun({ id: 'run_ownerB_1', ownerId: 'iso_B' }));
+
+    // Get cursor from owner_A's data
+    const ownerAResult = await store.list({ ownerId: 'iso_A', limit: 1 });
+    expect(ownerAResult.nextCursor).not.toBeNull();
+
+    // Try to use owner_A's cursor to retrieve owner_B's data
+    const exploitAttempt = await store.list({
+      ownerId: 'iso_B',
+      cursor: ownerAResult.nextCursor!,
+    });
+
+    // Should NOT return owner_A's runs — the cursor encodes createdAt/id,
+    // but owner filter is always applied so only iso_B's runs appear
+    const exploitIds = exploitAttempt.runs.map((r) => r.id);
+    expect(exploitIds.filter((id) => id.startsWith('run_ownerA'))).toHaveLength(0);
+
+    // Verify cursor's effect: it should only filter by createdAt > cursor OR (same createdAt AND id > cursor)
+    // Since owner_B's runs have later createdAt (created after), they should still appear if they pass the cursor filter
+    // OR they might not appear if cursor is beyond them. Either way, no owner_A data leaks.
+  });
+
+  it('should maintain stable ordering with same createdAt', async () => {
+    // Create runs rapidly so they share the same millisecond-second in SQLite
+    for (let i = 0; i < 5; i++) {
+      await store.create(createRun({ id: `run_same_ts_${i}`, ownerId: 'same_ts_user' }));
+    }
+
+    // Paginate through with limit=2
+    const allIds: string[] = [];
+    let cursor: string | null = null;
+
+    for (let page = 0; page < 5; page++) {
+      const result = await store.list({ ownerId: 'same_ts_user', limit: 2, cursor: cursor ?? undefined });
+      allIds.push(...result.runs.map((r) => r.id));
+      cursor = result.nextCursor;
+      if (!cursor) break;
+    }
+
+    // All 5 should be present, no duplicates, in id order (tie-breaker)
+    expect(allIds).toHaveLength(5);
+    expect(new Set(allIds).size).toBe(5);
+
+    // When createdAt is identical, id ASC is the tie-breaker
+    const sortedIds = [...allIds].sort();
+    expect(allIds).toEqual(sortedIds);
   });
 });

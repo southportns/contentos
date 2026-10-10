@@ -61,6 +61,18 @@ export class RunPersistenceError extends ContextOSRuntimeError {
   }
 }
 
+/**
+ * Thrown when a Run Store query contains invalid parameters.
+ * Distinguishes client input errors from database failures so callers
+ * can differentiate a bad request from an infrastructure outage.
+ */
+export class RunValidationError extends ContextOSRuntimeError {
+  constructor(message: string, requestId?: string) {
+    super('RUNTIME_VALIDATION', message, requestId);
+    this.name = 'RunValidationError';
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Query & Pagination Types
 // ═════════════════════════════════════════════════════════════════════════════==
