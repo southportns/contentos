@@ -734,26 +734,36 @@ async function retrieveGraphContexts(
 /**
  * Validate a context against the runtime request's owner/project/topic boundaries.
  *
- * P0.7.2-R1 — Strengthened rules based on ContextProvenance scope semantics:
+ * P0.7.2-R3 — Strict scope completeness & provenance integrity:
  *
  * 1. Owner isolation:
  *    - If context has ownerId and it does not match request owner → REJECT.
  *    - Memory, Decision, Outcome, Feedback are user-owned data → must have correct owner.
  *    - No-owner non-public data → REJECT (cannot be treated as shared just because owner missing).
  *
- * 2. Project / Topic isolation:
+ * 2. Shared knowledge exception (strict):
+ *    - Only unowned (no ownerId), sourceType === 'knowledge', scope === 'global',
+ *      and no project/topic restrictions → ALLOW.
+ *    - Regular graph/memory data without owner → REJECT.
+ *
+ * 3. Scope completeness (P0.7.2-R3):
+ *    - When allowedScopes is non-empty, provenance.scope MUST exist, be a valid scope,
+ *      AND belong to the allowed list. Missing scope → REJECT.
+ *    - provenance.scope === 'unknown' or unrecognized → REJECT.
+ *
+ * 4. Scope-specific provenance integrity (P0.7.2-R3):
+ *    - scope === 'global': must NOT carry projectId or topicId (contradicts global boundary).
+ *    - scope === 'project': must have valid projectId, must NOT carry topicId.
+ *    - scope === 'topic': must have both valid projectId AND topicId.
+ *
+ * 5. Project / Topic isolation:
  *    - If context has projectId → request must have matching projectId. If request has no
  *      projectId → project-scoped context is REJECTED.
  *    - If context has topicId → request must have matching topicId AND projectId must also match.
  *
- * 3. Scope-based validation:
- *    - provenance.scope === 'unknown' or unrecognized → REJECT (not default-allowed).
- *    - If allowedScopes is non-empty AND context has scope → context scope must be in allowed list.
- *
- * 4. Shared knowledge exception (strict):
- *    - Only unowned (no ownerId), sourceType === 'knowledge', scope === 'global',
- *      and no project/topic restrictions → ALLOW.
- *    - Regular graph/memory data without owner → REJECT.
+ * 6. Contradiction guard (P0.7.2-R3):
+ *    - Even when allowedScopes is empty, scope/project/topic contradictions are rejected:
+ *      e.g., scope='global' but projectId present → REJECT.
  *
  * @param context - ContextObject to validate
  * @param requestOwnerId - The runtime request's owner ID
@@ -801,7 +811,59 @@ function validateContextScope(
     // Shared global knowledge falls through to scope validation below.
   }
 
-  // ─── 3. Project isolation ──────────────────────────────────────────────
+  // ─── 3. Scope validation ────────────────────────────────────────────────
+  // unknown scope is not allowed (even if sourceType is knowledge)
+  if (scope === 'unknown') {
+    return false;
+  }
+  // Reject unrecognized scope values (only global/project/topic are valid ContextScope).
+  // Note: MemoryScope includes 'session' but ContextScope does not — session is rejected here.
+  if (scope !== undefined && scope !== null && scope !== 'global' && scope !== 'project' && scope !== 'topic') {
+    return false;
+  }
+
+  // ─── 4. allowedScopes enforcement (STRICT — P0.7.2-R3) ──────────────────
+  // When allowedScopes is non-empty, scope MUST exist AND be in the allowed list.
+  // Missing scope when allowedScopes is set → REJECT.
+  if (allowedScopes && allowedScopes.length > 0) {
+    if (!scope || !allowedScopes.includes(scope)) {
+      return false;
+    }
+  }
+
+  // ─── 5. Scope-specific provenance integrity (P0.7.2-R3) ─────────────────
+  // These checks fire regardless of allowedScopes — they catch contradictions
+  // in the context's own metadata.
+  //
+  // scope='global': must NOT carry projectId or topicId (contradicts global boundary).
+  // scope='project': must have valid projectId AND must NOT carry topicId.
+  // scope='topic': must have both valid projectId AND topicId.
+  if (scope === 'global') {
+    if (prov.projectId != null && prov.projectId !== '') {
+      return false; // global scope contradicts project restriction
+    }
+    if (prov.topicId != null && prov.topicId !== '') {
+      return false; // global scope contradicts topic restriction
+    }
+  } else if (scope === 'project') {
+    if (!prov.projectId || prov.projectId === '') {
+      return false; // project scope requires valid projectId
+    }
+    if (prov.topicId != null && prov.topicId !== '') {
+      return false; // project scope must not carry topicId
+    }
+  } else if (scope === 'topic') {
+    if (!prov.projectId || prov.projectId === '') {
+      return false; // topic scope requires valid projectId
+    }
+    if (!prov.topicId || prov.topicId === '') {
+      return false; // topic scope requires valid topicId
+    }
+  }
+  // Note: scope === undefined (and not caught by allowedScopes above) falls through.
+  // This preserves native scope inference semantics when allowedScopes is empty.
+
+  // ─── 6. Project isolation ──────────────────────────────────────────────
   // If context carries projectId, request must have matching projectId.
   // If request has no projectId, project-scoped context is REJECTED.
   if (prov.projectId != null && prov.projectId !== '') {
@@ -810,7 +872,7 @@ function validateContextScope(
     }
   }
 
-  // ─── 4. Topic isolation ─────────────────────────────────────────────────
+  // ─── 7. Topic isolation ─────────────────────────────────────────────────
   // If context carries topicId, request must have matching topicId AND projectId.
   if (prov.topicId != null && prov.topicId !== '') {
     if (!requestTopicId || requestTopicId !== prov.topicId) {
@@ -818,25 +880,6 @@ function validateContextScope(
     }
     // projectId must also match (topic is always sub-scope of project)
     if (!requestProjectId || requestProjectId !== prov.projectId) {
-      return false;
-    }
-  }
-
-  // ─── 5. Scope validation ────────────────────────────────────────────────
-  // unknown scope is not allowed (even if sourceType is knowledge)
-  if (scope === 'unknown') {
-    return false;
-  }
-  // Reject unrecognized scope values (only global/project/topic are valid)
-  if (scope !== undefined && scope !== null && scope !== 'global' && scope !== 'project' && scope !== 'topic') {
-    return false;
-  }
-
-  // ─── 6. allowedScopes enforcement ──────────────────────────────────────
-  // If allowedScopes is non-empty and context has a recognized scope,
-  // the context scope must be in the allowed list.
-  if (allowedScopes && allowedScopes.length > 0) {
-    if (scope && !allowedScopes.includes(scope)) {
       return false;
     }
   }

@@ -1,5 +1,5 @@
 /**
- * P0.7.2-R1 — Unified Context Retrieval Tests
+ * P0.7.2-R3 — Unified Context Retrieval Tests
  *
  * Comprehensive test suite for the unified multi-source context retrieval
  * with hardened scope enforcement, provenance validation, and error
@@ -19,6 +19,7 @@
  *   K. Error Propagation
  *   L. Outcome Metadata Preservation
  *   M. Scope Enforcement (allowedScopes)
+ *   N. Provider Boundary (P0.7.2-R3 scope completeness)
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -1523,5 +1524,545 @@ describe('M. Scope Enforcement', () => {
     const memoryCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_mem_'));
     // All records returned when no scope restriction
     expect(memoryCtxs.length).toBe(2);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Group N: Provider Boundary (P0.7.2-R3 scope completeness)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// These tests verify that validateContextScope() strictly enforces:
+//   - Scope presence when allowedScopes is set (missing → REJECT)
+//   - Scope-specific provenance integrity (global/project/topic)
+//   - Provider-agnostic boundary (Knowledge, Graph, Memory all follow same rules)
+
+describe('N. Provider Boundary (P0.7.2-R3)', () => {
+
+  // ─── N1: Scope missing + allowedScopes=['global'] → REJECT ───────────────
+  it('N1: context missing scope should be rejected when allowedScopes=["global"]', async () => {
+    const ctxMissingScope: ContextObject = createTestContextObject({
+      id: 'ctx_n1_no_scope',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        // scope is intentionally MISSING
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([ctxMissingScope]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['global'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // Missing scope with allowedScopes set → REJECTED
+    expect(result.contexts.filter((c) => c.id === 'ctx_n1_no_scope')).toHaveLength(0);
+  });
+
+  // ─── N2: Scope missing + allowedScopes=['project'] → REJECT ──────────────
+  it('N2: context missing scope should be rejected when allowedScopes=["project"]', async () => {
+    const ctxMissingScope: ContextObject = createTestContextObject({
+      id: 'ctx_n2_no_scope',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        // scope is intentionally MISSING
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([ctxMissingScope]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['project'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // Missing scope with allowedScopes set → REJECTED
+    expect(result.contexts.filter((c) => c.id === 'ctx_n2_no_scope')).toHaveLength(0);
+  });
+
+  // ─── N3: Scope missing + allowedScopes=['topic'] → REJECT ────────────────
+  it('N3: context missing scope should be rejected when allowedScopes=["topic"]', async () => {
+    const ctxMissingScope: ContextObject = createTestContextObject({
+      id: 'ctx_n3_no_scope',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        // scope is intentionally MISSING
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([ctxMissingScope]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      topicId: 'topic_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['topic'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // Missing scope with allowedScopes set → REJECTED
+    expect(result.contexts.filter((c) => c.id === 'ctx_n3_no_scope')).toHaveLength(0);
+  });
+
+  // ─── N4: Knowledge provider returns out-of-scope context → REJECT ────────
+  it('N4: knowledge context outside allowedScopes should be rejected', async () => {
+    const projectKnowledge: ContextObject = createTestContextObject({
+      id: 'ctx_n4_project_knowledge',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        scope: 'project',
+        projectId: 'proj_1',
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([projectKnowledge]);
+    const retriever = new InMemoryRetriever([]);
+
+    // Request allows only global, but knowledge is project-scoped
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['global'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // Project-scoped knowledge cannot pass when only global is allowed
+    expect(result.contexts.filter((c) => c.id === 'ctx_n4_project_knowledge')).toHaveLength(0);
+  });
+
+  // ─── N5: Graph provider returns out-of-scope context → REJECT ────────────
+  it('N5: graph context outside allowedScopes should be rejected', async () => {
+    const topicGraph: ContextObject = createTestContextObject({
+      id: 'ctx_n5_topic_graph',
+      kind: 'memory',
+      provenance: {
+        source: 'graph-provider',
+        sourceType: 'graph',
+        ownerId: 'user_1',
+        scope: 'topic',
+        projectId: 'proj_1',
+        topicId: 'topic_1',
+      },
+    });
+    const graphProvider = createMockGraphProvider([topicGraph]);
+    const retriever = new InMemoryRetriever([]);
+
+    // Request allows only project, but graph context is topic-scoped
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      topicId: 'topic_1',
+      contextPolicy: {
+        includeGraph: true,
+        includeMemory: false,
+        allowedScopes: ['project'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      graphContextProvider: graphProvider,
+      now: NOW_FN,
+    });
+
+    // Topic-scoped graph cannot pass when only project is allowed
+    expect(result.contexts.filter((c) => c.id === 'ctx_n5_topic_graph')).toHaveLength(0);
+  });
+
+  // ─── N6: scope='project' but missing projectId → REJECT ──────────────────
+  it('N6: scope=project without projectId should be rejected', async () => {
+    const badProjectCtx: ContextObject = createTestContextObject({
+      id: 'ctx_n6_no_projectId',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        scope: 'project',
+        // projectId is intentionally MISSING
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([badProjectCtx]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['project'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // scope='project' without projectId → REJECTED
+    expect(result.contexts.filter((c) => c.id === 'ctx_n6_no_projectId')).toHaveLength(0);
+  });
+
+  // ─── N7: scope='topic' but missing topicId or projectId → REJECT ────────
+  it('N7: scope=topic without topicId should be rejected', async () => {
+    const badTopicCtx: ContextObject = createTestContextObject({
+      id: 'ctx_n7_no_topicId',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        scope: 'topic',
+        projectId: 'proj_1',
+        // topicId is intentionally MISSING
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([badTopicCtx]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      topicId: 'topic_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['topic'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // scope='topic' without topicId → REJECTED
+    expect(result.contexts.filter((c) => c.id === 'ctx_n7_no_topicId')).toHaveLength(0);
+  });
+
+  // ─── N8: scope='global' but carrying contradictory projectId/topicId ─────
+  it('N8: scope=global with contradictory projectId should be rejected', async () => {
+    const contradictoryGlobal: ContextObject = createTestContextObject({
+      id: 'ctx_n8_global_with_project',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        scope: 'global',
+        projectId: 'proj_1', // contradicts global scope
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([contradictoryGlobal]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['global'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // scope='global' with projectId → REJECTED (contradiction)
+    expect(result.contexts.filter((c) => c.id === 'ctx_n8_global_with_project')).toHaveLength(0);
+  });
+
+  // ─── N9: scope='global' but carrying contradictory topicId → REJECT ──────
+  it('N9: scope=global with contradictory topicId should be rejected', async () => {
+    const contradictoryGlobal: ContextObject = createTestContextObject({
+      id: 'ctx_n9_global_with_topic',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        scope: 'global',
+        topicId: 'topic_1', // contradicts global scope
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([contradictoryGlobal]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['global'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // scope='global' with topicId → REJECTED (contradiction)
+    expect(result.contexts.filter((c) => c.id === 'ctx_n9_global_with_topic')).toHaveLength(0);
+  });
+
+  // ─── N10: All fields valid (scope, owner, project, topic) → ALLOW ───────
+  it('N10: context with valid scope/owner/project/topic should be allowed', async () => {
+    const validTopicCtx: ContextObject = createTestContextObject({
+      id: 'ctx_n10_valid_topic',
+      kind: 'memory',
+      provenance: {
+        source: 'memory-store',
+        sourceType: 'memory',
+        ownerId: 'user_1',
+        scope: 'topic',
+        projectId: 'proj_1',
+        topicId: 'topic_1',
+      },
+    });
+    const graphProvider = createMockGraphProvider([validTopicCtx]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      topicId: 'topic_1',
+      contextPolicy: {
+        includeGraph: true,
+        includeMemory: false,
+        allowedScopes: ['topic'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      graphContextProvider: graphProvider,
+      now: NOW_FN,
+    });
+
+    // Valid topic context should pass through
+    expect(result.contexts.filter((c) => c.id === 'ctx_n10_valid_topic').length).toBe(1);
+  });
+
+  // ─── N11: Unowned shared knowledge (global) still works when allowed ─────
+  it('N11: unowned global knowledge should be allowed when global is in allowedScopes', async () => {
+    const sharedKnowledge: ContextObject = createTestContextObject({
+      id: 'ctx_n11_shared_global',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        scope: 'global',
+        // no ownerId — shared knowledge
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([sharedKnowledge]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['global'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // Unowned shared global knowledge should pass when global is allowed
+    expect(result.contexts.filter((c) => c.id === 'ctx_n11_shared_global').length).toBe(1);
+  });
+
+  // ─── N12: Unowned shared knowledge rejected when global NOT in allowedScopes
+  it('N12: unowned global knowledge should be rejected when allowedScopes=["project"]', async () => {
+    const sharedKnowledge: ContextObject = createTestContextObject({
+      id: 'ctx_n12_shared_global',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        scope: 'global',
+        // no ownerId — shared knowledge
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([sharedKnowledge]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['project'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // Global knowledge should be rejected when only project is allowed
+    expect(result.contexts.filter((c) => c.id === 'ctx_n12_shared_global')).toHaveLength(0);
+  });
+
+  // ─── N13: scope='project' with topicId → REJECT (contradiction) ──────────
+  it('N13: scope=project with topicId should be rejected', async () => {
+    const projectWithTopic: ContextObject = createTestContextObject({
+      id: 'ctx_n13_project_with_topic',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        scope: 'project',
+        projectId: 'proj_1',
+        topicId: 'topic_1', // contradicts project scope
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([projectWithTopic]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['project'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // scope='project' with topicId → REJECTED (project scope must not carry topicId)
+    expect(result.contexts.filter((c) => c.id === 'ctx_n13_project_with_topic')).toHaveLength(0);
+  });
+
+  // ─── N14: scope='topic' without projectId → REJECT ──────────────────────
+  it('N14: scope=topic without projectId should be rejected', async () => {
+    const topicNoProject: ContextObject = createTestContextObject({
+      id: 'ctx_n14_topic_no_project',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        ownerId: 'user_1',
+        scope: 'topic',
+        topicId: 'topic_1',
+        // projectId is MISSING — topic always sub-scope of project
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([topicNoProject]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      projectId: 'proj_1',
+      topicId: 'topic_1',
+      contextPolicy: {
+        includeKnowledge: true,
+        includeMemory: false,
+        allowedScopes: ['topic'],
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // scope='topic' without projectId → REJECTED
+    expect(result.contexts.filter((c) => c.id === 'ctx_n14_topic_no_project')).toHaveLength(0);
+  });
+
+  // ─── N15: no allowedScopes + missing scope → ALLOW (native inference) ────
+  it('N15: context without scope allowed when allowedScopes is empty (native inference)', async () => {
+    const ctxNoScope: ContextObject = createTestContextObject({
+      id: 'ctx_n15_no_scope_allowed',
+      kind: 'memory',
+      provenance: {
+        source: 'memory-store',
+        sourceType: 'memory',
+        ownerId: 'user_1',
+        // scope MISSING
+        // no allowedScopes → native inference still works
+      },
+    });
+    const graphProvider = createMockGraphProvider([ctxNoScope]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      contextPolicy: {
+        includeGraph: true,
+        includeMemory: false,
+        // No allowedScopes → native scope inference
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      graphContextProvider: graphProvider,
+      now: NOW_FN,
+    });
+
+    // Without allowedScopes, missing scope is OK (native inference)
+    expect(result.contexts.filter((c) => c.id === 'ctx_n15_no_scope_allowed').length).toBe(1);
   });
 });
