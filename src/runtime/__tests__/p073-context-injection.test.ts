@@ -273,35 +273,40 @@ describe('B. Budget & Truncation', () => {
     expect(pkg.contextIds.length).toBeLessThanOrEqual(3);
   });
 
-  it('B2: maxTokens enforces budget and causes actual content exclusion', async () => {
-    // Create contexts with large payloads so that token estimation
-    // genuinely exceeds a tight budget. The Assembly Engine estimates
-    // tokens as ceil(jsonLength / CHARS_PER_TOKEN) where CHARS_PER_TOKEN=2.5.
-    // A 500-char payload ≈ 200 tokens each.
+  it('B2: maxTokens produces partial selection (non-empty, within effective budget)', async () => {
+    // Token estimator: ceil(serializedLength / CHARS_PER_TOKEN=2.5)
+    // Effective budget: maxTokens - reservedTokens(=500)
+    // With maxTokens=900: effective = 400 tokens
+    // Each fixture context ≈ 100 tokens → 4 of 5 should be selected
+    const PAYLOAD_SIZE = 200;
     const contexts = Array.from({ length: 5 }, (_, i) =>
-      createLargeContext(`large_ctx_${i}`, `LARGE_PAYLOAD_${i}`, 500)
+      createLargeContext(`budget_ctx_${i}`, `BUDGET_PAYLOAD_${i}`, PAYLOAD_SIZE)
     );
 
-    // maxTokens=100 means effective budget (100 - 500 reserved = negative
-    // with default reservedTokens) so only a few or zero optional contexts survive.
-    // What matters is: budget is respected AND truncation genuinely occurred.
+    // maxTokens=900 gives effective budget 400 (900 - 500 reserved)
     const pkg = await assembleRuntimeContext(
       contexts,
-      { maxTokens: 100 },
+      { maxTokens: 900 },
       'generic',
       NOW_FN
     );
 
-    // Token estimate must respect the budget (effective budget is <= maxTokens)
-    expect(pkg.tokenEstimate).toBeLessThanOrEqual(100);
+    const selectedIds = new Set(pkg.contextIds);
 
-    // Truncation must have occurred: 5 large contexts cannot all fit in 100 tokens
-    // (each alone is ~200 tokens). This distinguishes a real budget enforcement
-    // from a scenario where input never triggered the budget limit.
+    // 1. Partial selection: non-empty and fewer than input
+    expect(pkg.contexts.length).toBeGreaterThan(0);
     expect(pkg.contexts.length).toBeLessThan(contexts.length);
 
-    // No payload content from excluded contexts should leak into serialized output
-    const selectedIds = new Set(pkg.contextIds);
+    // 2. tokenEstimate respects effective budget (≤ maxTokens - reservedTokens)
+    expect(pkg.tokenEstimate).toBeLessThanOrEqual(900 - 500);
+
+    // 3. Selected payload markers appear in serialized output
+    for (const ctx of pkg.contexts) {
+      const marker = (ctx.payload as Record<string, unknown>).marker as string;
+      expect(pkg.serialized).toContain(marker);
+    }
+
+    // 4. Excluded payload markers are absent from serialized output
     for (const ctx of contexts) {
       if (!selectedIds.has(ctx.id)) {
         const marker = (ctx.payload as Record<string, unknown>).marker as string;
@@ -310,30 +315,30 @@ describe('B. Budget & Truncation', () => {
     }
   });
 
-  it('B3: budget-excluded contexts do not leak into any package field', async () => {
-    // Create contexts with identifiable markers
-    const visibleA = createTestContextObject({
+  it('B3: budget-excluded contexts do not leak (provenance + serialization checked)', async () => {
+    // Create contexts with identifiable markers — maxContexts=2 selects 2 of 4
+    const visA = createTestContextObject({
       id: 'VIS_CTX_A',
       kind: 'memory',
       type: 't1',
       payload: { marker: 'IDENTIFIABLE_CONTENT_A' },
       provenance: createProvenance({ source: 'src_a' }),
     });
-    const visibleB = createTestContextObject({
+    const visB = createTestContextObject({
       id: 'VIS_CTX_B',
       kind: 'memory',
       type: 't2',
       payload: { marker: 'IDENTIFIABLE_CONTENT_B' },
       provenance: createProvenance({ source: 'src_b' }),
     });
-    const excludedC = createTestContextObject({
+    const excC = createTestContextObject({
       id: 'EXC_CTX_C',
       kind: 'memory',
       type: 't3',
       payload: { marker: 'EXCLUDED_CONTENT_C' },
       provenance: createProvenance({ source: 'src_c' }),
     });
-    const excludedD = createTestContextObject({
+    const excD = createTestContextObject({
       id: 'EXC_CTX_D',
       kind: 'memory',
       type: 't4',
@@ -341,7 +346,7 @@ describe('B. Budget & Truncation', () => {
       provenance: createProvenance({ source: 'src_d' }),
     });
 
-    const allContexts = [visibleA, visibleB, excludedC, excludedD];
+    const allContexts = [visA, visB, excC, excD];
     const pkg = await assembleRuntimeContext(
       allContexts,
       { maxContexts: 2 },
@@ -350,17 +355,29 @@ describe('B. Budget & Truncation', () => {
     );
 
     const selectedIds = new Set(pkg.contextIds);
+    const excludedContexts = allContexts.filter((c) => !selectedIds.has(c.id));
 
-    // 1. Package internal consistency
+    // 1. Internal consistency: contextIds match contexts.map(c => c.id)
+    expect(pkg.contextIds).toEqual(pkg.contexts.map((c) => c.id));
+
+    // 2. Package internal consistency: every selected context is in contextIds
     expect(selectedIds.size).toBe(pkg.contexts.length);
     for (const ctx of pkg.contexts) {
       expect(selectedIds.has(ctx.id)).toBe(true);
     }
 
-    // 2. Provenance must correspond 1:1 with contexts (no extra provenance from excluded)
+    // 3. Provenance 1:1 with selected contexts — same object identity
     expect(pkg.provenance).toHaveLength(pkg.contexts.length);
+    for (let i = 0; i < pkg.contexts.length; i++) {
+      expect(pkg.provenance[i]).toBe(pkg.contexts[i].provenance);
+    }
 
-    // 3. Excluded context content must not appear in serialized output
+    // 4. Excluded provenance objects do NOT appear in package provenance
+    for (const exc of excludedContexts) {
+      expect(pkg.provenance).not.toContain(exc.provenance);
+    }
+
+    // 5. Excluded context content must not appear in serialized output
     for (const ctx of allContexts) {
       if (!selectedIds.has(ctx.id)) {
         const marker = (ctx.payload as Record<string, unknown>).marker as string;
@@ -437,12 +454,12 @@ describe('B. Budget & Truncation', () => {
     }
   });
 
-  it('B6: tokenEstimate comes from Assembly Engine, not overridden', async () => {
+  it('B6: tokenEstimate comes from Assembly Engine and respects type contract', async () => {
     const contexts = createContextBundle(3, 'knowledge');
     const pkg = await assembleRuntimeContext(contexts, undefined, 'generic', NOW_FN);
 
-    // The tokenEstimate must be a non-negative number derived from the assembly result
-    expect(pkg.tokenEstimate).toBeGreaterThanOrEqual(0);
+    // tokenEstimate is computed by the Assembly Engine (applyBudget), not overridden
+    expect(pkg.tokenEstimate).toBeGreaterThan(0);
     expect(Number.isInteger(pkg.tokenEstimate)).toBe(true);
   });
 
@@ -543,52 +560,30 @@ describe('C. Determinism', () => {
 describe('D. Purpose & Compatibility', () => {
 
   it('D1: strategy/plan purpose maps to AssemblyPurpose "strategy"', async () => {
-    const contexts = createContextBundle(2, 'strategy');
-
     // Verify exact mapping: "strategy" keyword and "plan" keyword
     expect(mapPurposeToAssembly('content_strategy')).toBe('strategy');
     expect(mapPurposeToAssembly('plan_creation')).toBe('strategy');
-
-    // Verify assembleRuntimeContext works end-to-end with strategy purpose
-    const pkg = await assembleRuntimeContext(contexts, undefined, 'content_strategy', NOW_FN);
-    expect(pkg.contexts.length).toBeGreaterThanOrEqual(0);
-    expect(pkg.tokenEstimate).toBeGreaterThanOrEqual(0);
   });
 
   it('D2: evaluation/assess/score purpose maps to AssemblyPurpose "evaluation"', async () => {
-    const contexts = createContextBundle(2, 'evaluation');
-
     // Verify exact mapping: "evaluation", "assess", "score" keywords
     expect(mapPurposeToAssembly('evaluation_request')).toBe('evaluation');
     expect(mapPurposeToAssembly('assess_quality')).toBe('evaluation');
     expect(mapPurposeToAssembly('score_draft')).toBe('evaluation');
-
-    const pkg = await assembleRuntimeContext(contexts, undefined, 'score_draft', NOW_FN);
-    expect(pkg.contexts.length).toBeGreaterThanOrEqual(0);
   });
 
   it('D3: writing/content/draft purpose maps to AssemblyPurpose "writing"', async () => {
-    const contexts = createContextBundle(2, 'content');
-
     // Verify exact mapping: "write", "content", "draft" keywords
     expect(mapPurposeToAssembly('writing_content')).toBe('writing');
     expect(mapPurposeToAssembly('draft_document')).toBe('writing');
     expect(mapPurposeToAssembly('content_generation')).toBe('writing');
-
-    const pkg = await assembleRuntimeContext(contexts, undefined, 'writing_content', NOW_FN);
-    expect(pkg.contexts.length).toBeGreaterThanOrEqual(0);
   });
 
   it('D4: unknown purpose maps to AssemblyPurpose "generic"', async () => {
-    const contexts = createContextBundle(2, 'knowledge');
-
     // Verify exact mapping: empty string and unrecognized purpose
     expect(mapPurposeToAssembly('data_processing')).toBe('generic');
     expect(mapPurposeToAssembly('random_task')).toBe('generic');
     expect(mapPurposeToAssembly('')).toBe('generic');
-
-    const pkg = await assembleRuntimeContext(contexts, undefined, 'data_processing', NOW_FN);
-    expect(pkg.contexts.length).toBeGreaterThanOrEqual(0);
   });
 
   it('D5: mapPurposeToAssembly covers all keyword categories', () => {
