@@ -95,6 +95,25 @@ function createContextBundle(count: number, kind: ContextObject['kind'] = 'knowl
   );
 }
 
+/**
+ * Create a context with a large payload to trigger token budget constraints.
+ * The payload contains repeated text to ensure the Assembly Engine's
+ * token estimator (chars / CHARS_PER_TOKEN) computes a large value.
+ */
+function createLargeContext(id: string, marker: string, sizeChars: number): ContextObject {
+  return createTestContextObject({
+    id,
+    kind: 'memory',
+    type: `type_${id}`,
+    // 'x'.repeat(sizeChars) creates a payload whose JSON serialization
+    // is approximately sizeChars + key overhead in length — enough to
+    // trigger token budget enforcement at typical budgets.
+    // 'memory' kind hits the generic fallback serializer (key:value output).
+    payload: { marker, data: 'x'.repeat(sizeChars) },
+    provenance: createProvenance({ source: `source_${id}` }),
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Group A: Package Structure & Consistency
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -131,22 +150,65 @@ describe('A. Package Structure & Consistency', () => {
     }
   });
 
-  it('A4: serialized output must contain only the final selected contexts', async () => {
-    // Use strategy contexts whose serializer includes identifiable content
-    const contexts = createContextBundle(3, 'strategy');
-    // Add coreThesis to make them serialize with identifiable text
-    contexts.forEach((ctx, i) => {
-      ctx.payload = { coreThesis: `Thesis ${i}` };
+  it('A4: serialized output contains only the final selected (post-budget) contexts', async () => {
+    // Use generic contexts whose serializer includes identifiable payload content
+    // (generic fallback serializer outputs key:value pairs from payload)
+    const visibleA = createTestContextObject({
+      id: 'visible_a',
+      kind: 'memory',
+      type: 't1',
+      payload: { marker: 'MARKER_VISIBLE_A' },
+      provenance: createProvenance({ source: 'src_a' }),
     });
-    const pkg = await assembleRuntimeContext(contexts, undefined, 'generic', NOW_FN);
+    const visibleB = createTestContextObject({
+      id: 'visible_b',
+      kind: 'memory',
+      type: 't2',
+      payload: { marker: 'MARKER_VISIBLE_B' },
+      provenance: createProvenance({ source: 'src_b' }),
+    });
+    const excludedC = createTestContextObject({
+      id: 'excluded_c',
+      kind: 'memory',
+      type: 't3',
+      payload: { marker: 'MARKER_EXCLUDED_C' },
+      provenance: createProvenance({ source: 'src_c' }),
+    });
+    const excludedD = createTestContextObject({
+      id: 'excluded_d',
+      kind: 'memory',
+      type: 't4',
+      payload: { marker: 'MARKER_EXCLUDED_D' },
+      provenance: createProvenance({ source: 'src_d' }),
+    });
 
-    // Serialized should contain the strategy section header
-    expect(pkg.serialized).toContain('[Strategy]');
-    // Each selected context's payload content should appear in serialized output
+    const contexts = [visibleA, visibleB, excludedC, excludedD];
+    const pkg = await assembleRuntimeContext(
+      contexts,
+      { maxContexts: 2 },
+      'generic',
+      NOW_FN
+    );
+
+    // Verify some contexts were excluded
+    expect(pkg.contexts.length).toBeLessThan(contexts.length);
+    expect(pkg.contexts.length).toBeLessThanOrEqual(2);
+
+    const selectedIds = new Set(pkg.contextIds);
+
+    // Selected context content MUST appear in serialized output
     for (const ctx of pkg.contexts) {
       const payload = ctx.payload as Record<string, unknown>;
-      if (payload.coreThesis) {
-        expect(pkg.serialized).toContain(payload.coreThesis as string);
+      if (payload.marker) {
+        expect(pkg.serialized).toContain(payload.marker as string);
+      }
+    }
+
+    // Excluded context content must NOT appear in serialized output
+    for (const ctx of contexts) {
+      const payload = ctx.payload as Record<string, unknown>;
+      if (payload.marker && !selectedIds.has(ctx.id)) {
+        expect(pkg.serialized).not.toContain(payload.marker as string);
       }
     }
   });
@@ -211,40 +273,103 @@ describe('B. Budget & Truncation', () => {
     expect(pkg.contextIds.length).toBeLessThanOrEqual(3);
   });
 
-  it('B2: maxTokens is passed through to the Assembly Engine', async () => {
-    const contexts = createContextBundle(10, 'knowledge');
-    // Use a very small token budget to force truncation
+  it('B2: maxTokens enforces budget and causes actual content exclusion', async () => {
+    // Create contexts with large payloads so that token estimation
+    // genuinely exceeds a tight budget. The Assembly Engine estimates
+    // tokens as ceil(jsonLength / CHARS_PER_TOKEN) where CHARS_PER_TOKEN=2.5.
+    // A 500-char payload ≈ 200 tokens each.
+    const contexts = Array.from({ length: 5 }, (_, i) =>
+      createLargeContext(`large_ctx_${i}`, `LARGE_PAYLOAD_${i}`, 500)
+    );
+
+    // maxTokens=100 means effective budget (100 - 500 reserved = negative
+    // with default reservedTokens) so only a few or zero optional contexts survive.
+    // What matters is: budget is respected AND truncation genuinely occurred.
     const pkg = await assembleRuntimeContext(
       contexts,
-      { maxTokens: 50 },
+      { maxTokens: 100 },
       'generic',
       NOW_FN
     );
 
-    // Token estimate should respect the budget constraint
-    expect(pkg.tokenEstimate).toBeLessThanOrEqual(50);
+    // Token estimate must respect the budget (effective budget is <= maxTokens)
+    expect(pkg.tokenEstimate).toBeLessThanOrEqual(100);
+
+    // Truncation must have occurred: 5 large contexts cannot all fit in 100 tokens
+    // (each alone is ~200 tokens). This distinguishes a real budget enforcement
+    // from a scenario where input never triggered the budget limit.
+    expect(pkg.contexts.length).toBeLessThan(contexts.length);
+
+    // No payload content from excluded contexts should leak into serialized output
+    const selectedIds = new Set(pkg.contextIds);
+    for (const ctx of contexts) {
+      if (!selectedIds.has(ctx.id)) {
+        const marker = (ctx.payload as Record<string, unknown>).marker as string;
+        expect(pkg.serialized).not.toContain(marker);
+      }
+    }
   });
 
-  it('B3: truncated contexts must NOT appear in any package field', async () => {
-    const contexts = createContextBundle(10, 'knowledge');
+  it('B3: budget-excluded contexts do not leak into any package field', async () => {
+    // Create contexts with identifiable markers
+    const visibleA = createTestContextObject({
+      id: 'VIS_CTX_A',
+      kind: 'memory',
+      type: 't1',
+      payload: { marker: 'IDENTIFIABLE_CONTENT_A' },
+      provenance: createProvenance({ source: 'src_a' }),
+    });
+    const visibleB = createTestContextObject({
+      id: 'VIS_CTX_B',
+      kind: 'memory',
+      type: 't2',
+      payload: { marker: 'IDENTIFIABLE_CONTENT_B' },
+      provenance: createProvenance({ source: 'src_b' }),
+    });
+    const excludedC = createTestContextObject({
+      id: 'EXC_CTX_C',
+      kind: 'memory',
+      type: 't3',
+      payload: { marker: 'EXCLUDED_CONTENT_C' },
+      provenance: createProvenance({ source: 'src_c' }),
+    });
+    const excludedD = createTestContextObject({
+      id: 'EXC_CTX_D',
+      kind: 'memory',
+      type: 't4',
+      payload: { marker: 'EXCLUDED_CONTENT_D' },
+      provenance: createProvenance({ source: 'src_d' }),
+    });
+
+    const allContexts = [visibleA, visibleB, excludedC, excludedD];
     const pkg = await assembleRuntimeContext(
-      contexts,
+      allContexts,
       { maxContexts: 2 },
       'generic',
       NOW_FN
     );
 
-    // Only selected contexts should be in the package
     const selectedIds = new Set(pkg.contextIds);
-    expect(selectedIds.size).toBe(pkg.contexts.length);
 
-    // Verify no extra contexts leaked in
+    // 1. Package internal consistency
+    expect(selectedIds.size).toBe(pkg.contexts.length);
     for (const ctx of pkg.contexts) {
       expect(selectedIds.has(ctx.id)).toBe(true);
     }
+
+    // 2. Provenance must correspond 1:1 with contexts (no extra provenance from excluded)
+    expect(pkg.provenance).toHaveLength(pkg.contexts.length);
+
+    // 3. Excluded context content must not appear in serialized output
+    for (const ctx of allContexts) {
+      if (!selectedIds.has(ctx.id)) {
+        const marker = (ctx.payload as Record<string, unknown>).marker as string;
+        expect(pkg.serialized).not.toContain(marker);
+      }
+    }
   });
 
-  it('B4: package with maxContexts=0 should return empty contexts', async () => {
+  it('B4: package with maxContexts=0 returns zero-length context arrays', async () => {
     const contexts = createContextBundle(5, 'knowledge');
     const pkg = await assembleRuntimeContext(
       contexts,
@@ -258,24 +383,56 @@ describe('B. Budget & Truncation', () => {
     expect(pkg.contextIds).toEqual([]);
   });
 
-  it('B5: serialized output does not include budget-excluded contexts', async () => {
-    // Create contexts with identifiable IDs
-    const contexts = createContextBundle(8, 'knowledge');
-    const allIds = contexts.map((c) => c.id);
+  it('B5: serialized output reflects only budget-selected content', async () => {
+    // Use generic contexts whose serializer outputs payload markers.
+    // This test verifies the serialization boundary: content from contexts
+    // eliminated by budget constraints must not appear in the serialized output.
+    const ctxA = createTestContextObject({
+      id: 'SEL_A',
+      kind: 'memory',
+      type: 't1',
+      payload: { marker: 'SERIALIZED_CONTENT_A' },
+      provenance: createProvenance({ source: 'src_a' }),
+    });
+    const ctxB = createTestContextObject({
+      id: 'SEL_B',
+      kind: 'memory',
+      type: 't2',
+      payload: { marker: 'SERIALIZED_CONTENT_B' },
+      provenance: createProvenance({ source: 'src_b' }),
+    });
+    const ctxC = createTestContextObject({
+      id: 'REJ_C',
+      kind: 'memory',
+      type: 't3',
+      payload: { marker: 'REJECTED_CONTENT_C' },
+      provenance: createProvenance({ source: 'src_c' }),
+    });
+    const ctxD = createTestContextObject({
+      id: 'REJ_D',
+      kind: 'memory',
+      type: 't4',
+      payload: { marker: 'REJECTED_CONTENT_D' },
+      provenance: createProvenance({ source: 'src_d' }),
+    });
 
+    const allContexts = [ctxA, ctxB, ctxC, ctxD];
     const pkg = await assembleRuntimeContext(
-      contexts,
-      { maxContexts: 3 },
+      allContexts,
+      { maxContexts: 2 },
       'generic',
       NOW_FN
     );
 
     const selectedIds = new Set(pkg.contextIds);
 
-    // Non-selected IDs should NOT appear in serialized output
-    for (const id of allIds) {
-      if (!selectedIds.has(id)) {
-        expect(pkg.serialized).not.toContain(id);
+    // Verify: excluded context content does NOT appear in serialized output
+    for (const ctx of allContexts) {
+      const marker = (ctx.payload as Record<string, unknown>).marker as string;
+      if (selectedIds.has(ctx.id)) {
+        expect(pkg.serialized).toContain(marker);
+      } else {
+        expect(pkg.serialized).not.toContain(marker);
       }
     }
   });
@@ -385,42 +542,67 @@ describe('C. Determinism', () => {
 
 describe('D. Purpose & Compatibility', () => {
 
-  it('D1: strategy purpose maps correctly', async () => {
+  it('D1: strategy/plan purpose maps to AssemblyPurpose "strategy"', async () => {
     const contexts = createContextBundle(2, 'strategy');
-    const pkg = await assembleRuntimeContext(contexts, undefined, 'content_strategy', NOW_FN);
 
+    // Verify exact mapping: "strategy" keyword and "plan" keyword
+    expect(mapPurposeToAssembly('content_strategy')).toBe('strategy');
+    expect(mapPurposeToAssembly('plan_creation')).toBe('strategy');
+
+    // Verify assembleRuntimeContext works end-to-end with strategy purpose
+    const pkg = await assembleRuntimeContext(contexts, undefined, 'content_strategy', NOW_FN);
     expect(pkg.contexts.length).toBeGreaterThanOrEqual(0);
     expect(pkg.tokenEstimate).toBeGreaterThanOrEqual(0);
   });
 
-  it('D2: writing purpose maps correctly', async () => {
-    const contexts = createContextBundle(2, 'content');
-    const pkg = await assembleRuntimeContext(contexts, undefined, 'writing_content', NOW_FN);
-
-    expect(pkg.contexts.length).toBeGreaterThanOrEqual(0);
-  });
-
-  it('D3: evaluation purpose maps correctly', async () => {
+  it('D2: evaluation/assess/score purpose maps to AssemblyPurpose "evaluation"', async () => {
     const contexts = createContextBundle(2, 'evaluation');
+
+    // Verify exact mapping: "evaluation", "assess", "score" keywords
+    expect(mapPurposeToAssembly('evaluation_request')).toBe('evaluation');
+    expect(mapPurposeToAssembly('assess_quality')).toBe('evaluation');
+    expect(mapPurposeToAssembly('score_draft')).toBe('evaluation');
+
     const pkg = await assembleRuntimeContext(contexts, undefined, 'score_draft', NOW_FN);
-
     expect(pkg.contexts.length).toBeGreaterThanOrEqual(0);
   });
 
-  it('D4: generic purpose maps correctly for unknown keywords', async () => {
+  it('D3: writing/content/draft purpose maps to AssemblyPurpose "writing"', async () => {
+    const contexts = createContextBundle(2, 'content');
+
+    // Verify exact mapping: "write", "content", "draft" keywords
+    expect(mapPurposeToAssembly('writing_content')).toBe('writing');
+    expect(mapPurposeToAssembly('draft_document')).toBe('writing');
+    expect(mapPurposeToAssembly('content_generation')).toBe('writing');
+
+    const pkg = await assembleRuntimeContext(contexts, undefined, 'writing_content', NOW_FN);
+    expect(pkg.contexts.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('D4: unknown purpose maps to AssemblyPurpose "generic"', async () => {
     const contexts = createContextBundle(2, 'knowledge');
-    const pkg = await assembleRuntimeContext(contexts, undefined, 'data_processing', NOW_FN);
 
+    // Verify exact mapping: empty string and unrecognized purpose
+    expect(mapPurposeToAssembly('data_processing')).toBe('generic');
+    expect(mapPurposeToAssembly('random_task')).toBe('generic');
+    expect(mapPurposeToAssembly('')).toBe('generic');
+
+    const pkg = await assembleRuntimeContext(contexts, undefined, 'data_processing', NOW_FN);
     expect(pkg.contexts.length).toBeGreaterThanOrEqual(0);
   });
 
-  it('D5: mapPurposeToAssembly returns correct AssemblyPurpose values', () => {
+  it('D5: mapPurposeToAssembly covers all keyword categories', () => {
+    // strategy keywords
     expect(mapPurposeToAssembly('content_strategy')).toBe('strategy');
     expect(mapPurposeToAssembly('plan_creation')).toBe('strategy');
-    expect(mapPurposeToAssembly('writing_content')).toBe('writing');
+    // evaluation keywords
     expect(mapPurposeToAssembly('evaluation_request')).toBe('evaluation');
     expect(mapPurposeToAssembly('score_draft')).toBe('evaluation');
+    // writing keywords
+    expect(mapPurposeToAssembly('writing_content')).toBe('writing');
+    // unknown → generic
     expect(mapPurposeToAssembly('random_task')).toBe('generic');
+    // empty → generic
     expect(mapPurposeToAssembly('')).toBe('generic');
   });
 
@@ -512,7 +694,7 @@ describe('D. Purpose & Compatibility', () => {
 
 describe('E. Error Handling', () => {
 
-  it('E1: assembly failure causes runContextOS promise to reject', async () => {
+  it('E1: assembly failure causes runContextOS to reject with ContextOSRuntimeError', async () => {
     const contexts = createContextBundle(2, 'knowledge');
 
     const mockDeps: ContextOSRuntimeFullDependencies = {
@@ -527,8 +709,19 @@ describe('E. Error Handling', () => {
       input: {},
     };
 
-    await expect(runContextOS(request, mockDeps)).rejects.toThrow(ContextOSRuntimeError);
-    await expect(runContextOS(request, mockDeps)).rejects.toThrow('Assembly engine failure');
+    // Single call — capture error and verify all observable properties
+    let caughtError: ContextOSRuntimeError | undefined;
+    try {
+      await runContextOS(request, mockDeps);
+    } catch (e) {
+      caughtError = e as ContextOSRuntimeError;
+    }
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError).toBeInstanceOf(ContextOSRuntimeError);
+    expect(caughtError!.code).toBe('RUNTIME_EXECUTION');
+    expect(caughtError!.message).toContain('Assembly engine failure');
+    expect(caughtError!.requestId).toBe(`run_user_1_${FIXED_TIMESTAMP}`);
   });
 
   it('E2: error must include run ID for diagnostics', async () => {
@@ -558,7 +751,7 @@ describe('E. Error Handling', () => {
     expect(caughtError!.code).toBe('RUNTIME_EXECUTION');
   });
 
-  it('E3: retrieval error is not swallowed by injection layer', async () => {
+  it('E3: retrieval error is not swallowed — throws ContextOSRuntimeError with details', async () => {
     const mockDeps: ContextOSRuntimeFullDependencies = {
       retrieveContext: vi.fn().mockRejectedValue(new Error('Memory DB connection lost')),
       assembleContext: vi.fn().mockResolvedValue({
@@ -578,8 +771,19 @@ describe('E. Error Handling', () => {
       input: {},
     };
 
-    await expect(runContextOS(request, mockDeps)).rejects.toThrow(ContextOSRuntimeError);
-    await expect(runContextOS(request, mockDeps)).rejects.toThrow('Memory DB connection lost');
+    // Single call — capture and verify all observable error properties
+    let caughtError: ContextOSRuntimeError | undefined;
+    try {
+      await runContextOS(request, mockDeps);
+    } catch (e) {
+      caughtError = e as ContextOSRuntimeError;
+    }
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError).toBeInstanceOf(ContextOSRuntimeError);
+    expect(caughtError!.code).toBe('RUNTIME_EXECUTION');
+    expect(caughtError!.message).toContain('Memory DB connection lost');
+    expect(caughtError!.requestId).toBe(`run_user_1_${FIXED_TIMESTAMP}`);
   });
 
   it('E4: normal empty result is distinguishable from execution failure', async () => {
@@ -616,10 +820,18 @@ describe('E. Error Handling', () => {
       now: NOW_FN,
     };
 
-    await expect(runContextOS(request, mockDepsFail)).rejects.toThrow(ContextOSRuntimeError);
+    let caughtError: ContextOSRuntimeError | undefined;
+    try {
+      await runContextOS(request, mockDepsFail);
+    } catch (e) {
+      caughtError = e as ContextOSRuntimeError;
+    }
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError!.code).toBe('RUNTIME_EXECUTION');
   });
 
-  it('E5: RuntimeValidationError is thrown for invalid request, not masked', async () => {
+  it('E5: RuntimeValidationError is thrown for invalid request (empty ownerId)', async () => {
     const mockDeps: ContextOSRuntimeFullDependencies = {
       retrieveContext: vi.fn().mockResolvedValue([]),
       assembleContext: vi.fn().mockResolvedValue({
@@ -633,15 +845,24 @@ describe('E. Error Handling', () => {
       now: NOW_FN,
     };
 
-    // Empty ownerId
     const request = {
       ownerId: '',
       purpose: 'test',
       input: {},
     } as ContextOSRuntimeRequest;
 
-    await expect(runContextOS(request, mockDeps)).rejects.toThrow(RuntimeValidationError);
-    await expect(runContextOS(request, mockDeps)).rejects.toThrow('ownerId is required');
+    // Single call — verify both error type and message
+    let caughtError: ContextOSRuntimeError | undefined;
+    try {
+      await runContextOS(request, mockDeps);
+    } catch (e) {
+      caughtError = e as ContextOSRuntimeError;
+    }
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError).toBeInstanceOf(RuntimeValidationError);
+    expect(caughtError!.code).toBe('RUNTIME_VALIDATION');
+    expect(caughtError!.message).toContain('ownerId is required');
   });
 
   it('E6: no fabricated success package on assembly failure', async () => {
@@ -671,7 +892,7 @@ describe('E. Error Handling', () => {
     expect(caughtError!.code).toBe('RUNTIME_EXECUTION');
   });
 
-  it('E7: run status is "failed" on unrecoverable injection error', async () => {
+  it('E7: failed run surfaces run correlation ID in error for diagnostics', async () => {
     const contexts = createContextBundle(2, 'knowledge');
 
     const mockDeps: ContextOSRuntimeFullDependencies = {
@@ -693,8 +914,13 @@ describe('E. Error Handling', () => {
       caughtError = e as ContextOSRuntimeError;
     }
 
-    // The error carries the run ID, confirming the run was tracked as failed
+    // Observable: the error carries the run ID (run_${ownerId}_${timestamp})
+    // which the runtime assigned before the failure. Callers cannot read the
+    // run's internal 'failed' status directly — the error's requestId IS the
+    // observable evidence that a run was tracked and failed.
     expect(caughtError).toBeDefined();
-    expect(caughtError!.requestId).toBeDefined();
+    expect(caughtError!.requestId).toBe(`run_user_1_${FIXED_TIMESTAMP}`);
+    expect(caughtError!.code).toBe('RUNTIME_EXECUTION');
+    expect(caughtError!.message).toContain('Pipeline crash');
   });
 });
