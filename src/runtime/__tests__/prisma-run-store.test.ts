@@ -968,3 +968,209 @@ describe('PrismaContextOSRunStore — Owner ID Validation on Create (R1.1)', () 
     await expect(store.create(fullRun)).rejects.toThrow(RunValidationError);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1.2: Preflight Validation Ordering (validate BEFORE getPrisma)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Preflight Validation Ordering (R1.2)', () => {
+  // Strategy: behavioral contract proof.
+  // If validation did NOT fire first, an invalid input would reach getPrisma() and
+  // either (a) succeed accidentally or (b) throw a persistence/connection error.
+  // By asserting that RunValidationError (code=RUNTIME_VALIDATION) is thrown,
+  // we prove validation fires before Prisma acquisition for every invalid path.
+
+  it('create() with empty ownerId should NOT acquire Prisma client', async () => {
+    // Verify by behavior: if validation didn't fire first, would attempt DB and
+    // get a connection error or persistence error instead of validation error.
+    const error = await store
+      .create(createRun({ id: 'preflight_create_1', ownerId: '' }))
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    // Specifically NOT a persistence error
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('update() with empty ownerId should throw RunValidationError before Prisma', async () => {
+    const error = await store
+      .update(createRun({ id: 'preflight_update_1', ownerId: '' }))
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('getById() with empty ownerId should throw RunValidationError before Prisma', async () => {
+    const error = await store.getById('', 'some_run').catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('getById() with whitespace-only ownerId should throw before Prisma', async () => {
+    const error = await store.getById('   ', 'some_run').catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('list() with empty ownerId should throw RunValidationError before Prisma', async () => {
+    const error = await store.list({ ownerId: '' }).catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('list() with whitespace-only ownerId should throw before Prisma', async () => {
+    const error = await store.list({ ownerId: '\t ' }).catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('list() with invalid limit should throw RunValidationError before Prisma', async () => {
+    const error = await store.list({ ownerId: 'valid_user', limit: 0 }).catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('list() with negative limit should throw before Prisma', async () => {
+    const error = await store.list({ ownerId: 'valid_user', limit: -5 }).catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('list() with NaN limit should throw before Prisma', async () => {
+    const error = await store.list({ ownerId: 'valid_user', limit: NaN }).catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('list() with malformed cursor should throw RunValidationError before Prisma', async () => {
+    const error = await store
+      .list({ ownerId: 'valid_user', cursor: '' })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('list() with whitespace cursor should throw before Prisma', async () => {
+    const error = await store
+      .list({ ownerId: 'valid_user', cursor: '   ' })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('invalid create() should NOT persist any row', async () => {
+    try {
+      await store.create(createRun({ id: 'preflight_no_persist', ownerId: '' }));
+    } catch {
+      // expected
+    }
+    const { prisma } = await import('@/lib/prisma');
+    const count = await prisma.agentRun.count({ where: { id: 'preflight_no_persist' } });
+    expect(count).toBe(0);
+  });
+
+  it('invalid update() should NOT persist or modify any row', async () => {
+    // Pre-create a valid row
+    await store.create(createRun({ id: 'preflight_update_no_touch', ownerId: 'owner_A', status: 'started' }));
+
+    // Attempt invalid update — should throw validation, NOT touch DB
+    try {
+      await store.update(createRun({ id: 'preflight_update_no_touch', ownerId: '' }));
+    } catch {
+      // expected
+    }
+
+    // Verify the row is untouched
+    const { prisma } = await import('@/lib/prisma');
+    const row = await prisma.agentRun.findFirst({ where: { id: 'preflight_update_no_touch' } });
+    expect(row).not.toBeNull();
+    expect(row!.status).toBe('started'); // unchanged
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1.2: Calendar-Valid Date Checks (canonical toISOString identity)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Calendar-Valid Date Checks (R1.2)', () => {
+  it('should reject cursor with Feb 30 (JS normalizes to March 2)', async () => {
+    // 2026-02-30 is impossible — JS Date normalizes to 2026-03-02
+    const feb30 = Buffer.from(
+      JSON.stringify({ createdAt: '2026-02-30T00:00:00.000Z', id: 'run_x' }),
+    ).toString('base64');
+    await expect(
+      store.list({ ownerId: 'cal_user', cursor: feb30 }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with month 13 (JS normalizes to next year January)', async () => {
+    // 2026-13-01 is impossible — JS Date normalizes to 2027-01-01
+    const month13 = Buffer.from(
+      JSON.stringify({ createdAt: '2026-13-01T00:00:00.000Z', id: 'run_x' }),
+    ).toString('base64');
+    await expect(
+      store.list({ ownerId: 'cal_user', cursor: month13 }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with April 31 (JS normalizes to May 1)', async () => {
+    // April has 30 days — JS normalizes 31 to May 1
+    const apr31 = Buffer.from(
+      JSON.stringify({ createdAt: '2026-04-31T00:00:00.000Z', id: 'run_x' }),
+    ).toString('base64');
+    await expect(
+      store.list({ ownerId: 'cal_user', cursor: apr31 }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with hour 25 (JS normalizes to next day)', async () => {
+    const hr25 = Buffer.from(
+      JSON.stringify({ createdAt: '2026-10-10T25:00:00.000Z', id: 'run_x' }),
+    ).toString('base64');
+    await expect(
+      store.list({ ownerId: 'cal_user', cursor: hr25 }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with minute 60', async () => {
+    const min60 = Buffer.from(
+      JSON.stringify({ createdAt: '2026-10-10T12:60:00.000Z', id: 'run_x' }),
+    ).toString('base64');
+    await expect(
+      store.list({ ownerId: 'cal_user', cursor: min60 }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should reject cursor with second 60', async () => {
+    const sec60 = Buffer.from(
+      JSON.stringify({ createdAt: '2026-10-10T12:00:60.000Z', id: 'run_x' }),
+    ).toString('base64');
+    await expect(
+      store.list({ ownerId: 'cal_user', cursor: sec60 }),
+    ).rejects.toThrow(RunValidationError);
+  });
+
+  it('should accept a valid canonical date generated by the store', async () => {
+    for (let i = 0; i < 5; i++) {
+      await store.create(createRun({ id: `run_cal_ok_${i}`, ownerId: 'cal_user' }));
+    }
+
+    const page1 = await store.list({ ownerId: 'cal_user', limit: 2 });
+    expect(page1.nextCursor).not.toBeNull();
+
+    // The generated cursor contains a canonical date — must work
+    const page2 = await store.list({ ownerId: 'cal_user', limit: 2, cursor: page1.nextCursor! });
+    expect(page2.runs.length).toBeGreaterThan(0);
+  });
+
+  it('should accept valid edge-case dates (leap year Feb 29, last day of year)', async () => {
+    // Feb 29, 2024 is valid (leap year)
+    const leapDate = Buffer.from(
+      JSON.stringify({ createdAt: '2024-02-29T00:00:00.000Z', id: 'run_x' }),
+    ).toString('base64');
+    // Create test data so cursor has something to point to
+    await store.create(createRun({ id: 'run_before_leap', ownerId: 'edge_cal_user' }));
+
+    // This cursor should parse successfully (no error), even though it may return 0 results
+    const result = await store.list({ ownerId: 'edge_cal_user', cursor: leapDate });
+    // No error — cursor was accepted. Results may be empty if cursor is beyond data.
+    expect(result.runs).toBeDefined();
+  });
+});

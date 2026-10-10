@@ -229,8 +229,17 @@ function parseCursor(cursor: string): { createdAt: Date; id: string } {
   }
 
   const date = new Date(obj.createdAt);
-  if (isNaN(date.getTime())) {
+
+  // getTime() must be finite — catches NaN and Infinity edge cases
+  if (!Number.isFinite(date.getTime())) {
     throw new RunValidationError('Cursor is malformed: createdAt is not a valid date');
+  }
+
+  // Canonical identity check: date → toISOString() must EXACTLY equal input.
+  // This rejects impossible calendar dates that JS silently normalizes,
+  // e.g. "2026-02-30" → "2026-03-02", "2026-13-01" → "2027-01-01".
+  if (date.toISOString() !== obj.createdAt) {
+    throw new RunValidationError('Cursor is malformed: createdAt is not a calendar-valid ISO 8601 timestamp');
   }
 
   return { createdAt: date, id: obj.id };
@@ -337,10 +346,10 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
    * back the persisted result with a scoped query.
    */
   async update(run: ContextOSRun): Promise<ContextOSRun> {
-    const prisma = await getPrisma();
-
-    // Validate inputs before hitting the database
+    // Validate inputs BEFORE acquiring Prisma client — fail fast, no DB access
     validateOwnerId(run.ownerId);
+
+    const prisma = await getPrisma();
 
     try {
       // Atomic owner-scoped update: WHERE id = run.id AND ownerId = run.ownerId
@@ -413,10 +422,10 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
    * by the caller — same response either way.
    */
   async getById(ownerId: string, runId: string): Promise<ContextOSRun | null> {
-    const prisma = await getPrisma();
-
-    // Validate ownerId before hitting the database
+    // Validate ownerId BEFORE acquiring Prisma client — fail fast, no DB access
     validateOwnerId(ownerId);
+
+    const prisma = await getPrisma();
 
     try {
       const row = await prisma.agentRun.findFirst({
@@ -453,9 +462,7 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
    *   - cursor: strict validation, throws on malformed input
    */
   async list(query: ContextOSRunQuery): Promise<ContextOSRunListResult> {
-    const prisma = await getPrisma();
-
-    // Validate before any database access
+    // Validate ALL inputs BEFORE acquiring Prisma client — fail fast, no DB access
     validateOwnerId(query.ownerId);
     const limit = validateLimit(query.limit);
 
@@ -489,6 +496,9 @@ export class PrismaContextOSRunStore implements ContextOSRunStore {
           ],
         }
       : { AND: baseAnd };
+
+    // Acquire Prisma client only after all validation succeeds
+    const prisma = await getPrisma();
 
     try {
       const rows = await prisma.agentRun.findMany({
