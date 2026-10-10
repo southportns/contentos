@@ -419,16 +419,40 @@ export type RuntimeContextSourceName =
 /**
  * Status of a context source in the Runtime Retrieval pipeline.
  *
- * - included:    Source returned valid contexts that passed validation.
- * - disabled:    Policy explicitly disabled this source.
- * - unavailable: Required optional provider not configured.
- * - failed:      Source execution failed, or all results rejected by security.
+ * Semantics (P0.7.2-R1):
+ * - included:    Source executed successfully (returned 0+ contexts that passed
+ *                validation).  Even if result count is 0, the source ran to
+ *                completion — this is NOT disabled.
+ * - disabled:    Policy explicitly disabled this source (include* flag=false).
+ *                The source was never invoked.
+ * - unavailable: Policy enabled the source, but the required optional provider
+ *                dependency (knowledgeRetriever / graphContextProvider) is not
+ *                configured.  Execution could not start.
+ * - failed:      Source execution threw an error.  The error message is stored
+ *                in the `warning` field.
  */
 export type RuntimeContextSourceStatus =
   | 'included'
   | 'disabled'
   | 'unavailable'
   | 'failed';
+
+/**
+ * Metadata attached to a source report for sources that expose richer
+ * retrieval statistics.
+ *
+ * P0.7.2-R1: Outcome source uses this to propagate scan/completeness data.
+ */
+export interface RuntimeContextSourceMetadata {
+  /** Total records scanned by the underlying retriever */
+  scannedRecords?: number;
+  /** Number of batches fetched */
+  batchesFetched?: number;
+  /** True = retrieval reached a safety bound before data exhaustion */
+  truncated?: boolean;
+  /** True = retrieval ran out of data (DB exhausted or partial batch) */
+  exhausted?: boolean;
+}
 
 /**
  * Report for a single context source in the Runtime Retrieval pipeline.
@@ -445,6 +469,12 @@ export interface RuntimeContextSourceReport {
 
   /** Optional warning message */
   warning?: string;
+
+  /**
+   * P0.7.2-R1 — Optional source-specific metadata.
+   * Present when the source exposes richer statistics (e.g., Outcome scan data).
+   */
+  metadata?: RuntimeContextSourceMetadata;
 }
 
 /**

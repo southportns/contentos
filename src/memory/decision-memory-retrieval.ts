@@ -52,6 +52,16 @@ export interface DecisionRetrievalParams {
 
   /** Include reversed decisions in results */
   includeReversed?: boolean;
+
+  /**
+   * P0.7.2-R1 — Explicit scope override.
+   * When provided, passed to MemoryRetriever to enforce scope isolation:
+   *   'global'  → only global-scoped records
+   *   'project' → only project-scoped records matching projectId
+   *   'topic'   → only topic-scoped records matching projectId+topicId
+   *   'session' → returns empty (persistent memory scope)
+   */
+  scope?: import('./memory-scope').MemoryScope;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -78,6 +88,7 @@ export async function retrieveDecisionMemories(
     ownerId: params.ownerId,
     projectId: params.projectId,
     topicId: params.topicId,
+    scope: params.scope,
     policy: {
       maxResults: limit,
       includeSuperseded: params.includeSuperseded,
@@ -117,6 +128,7 @@ export async function getActiveDecisions(
     ownerId: params.ownerId,
     projectId: params.projectId,
     topicId: params.topicId,
+    scope: params.scope,
     policy: {
       maxResults: limit,
       includeSuperseded: false,
@@ -152,6 +164,7 @@ export async function getDecisionHistory(
     ownerId: params.ownerId,
     projectId: params.projectId,
     topicId: params.topicId,
+    scope: params.scope,
     policy: {
       maxResults: limit,
       includeSuperseded: true,
@@ -196,6 +209,11 @@ export interface GetDecisionByIdParams {
 
   /** Topic ID filter (optional) */
   topicId?: string;
+
+  /**
+   * P0.7.2-R1 — Explicit scope override for point lookup.
+   */
+  scope?: import('./memory-scope').MemoryScope;
 }
 
 /**
@@ -227,6 +245,7 @@ export async function getDecisionById(
     ownerId: params.ownerId,
     projectId: params.projectId,
     topicId: params.topicId,
+    scope: params.scope,
     id: params.decisionId,
     policy: {
       maxResults: 1,

@@ -80,6 +80,7 @@ export function memoryRecordToContext(
       source: record.source,
       sourceType: record.sourceType,
       ownerId: record.ownerId,
+      scope: record.scope,
       projectId: record.projectId,
       topicId: record.topicId,
       derivedFrom: record.derivedFrom,

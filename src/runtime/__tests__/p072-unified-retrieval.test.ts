@@ -1,7 +1,9 @@
 /**
- * P0.7.2 — Unified Context Retrieval Tests
+ * P0.7.2-R1 — Unified Context Retrieval Tests
  *
- * Comprehensive test suite for the unified multi-source context retrieval.
+ * Comprehensive test suite for the unified multi-source context retrieval
+ * with hardened scope enforcement, provenance validation, and error
+ * propagation.
  *
  * Test Groups:
  *   A. Memory Retrieval
@@ -11,9 +13,12 @@
  *   E. Knowledge Retrieval
  *   F. Graph Enrichment
  *   G. Unified Policy (kind filters, dedup, diagnostics)
- *   H. Scope & Owner Boundary
+ *   H. Scope & Owner Boundary (strengthened)
  *   I. Determinism
  *   J. Compatibility (backward-compat API)
+ *   K. Error Propagation
+ *   L. Outcome Metadata Preservation
+ *   M. Scope Enforcement (allowedScopes)
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -24,17 +29,61 @@ import {
 } from '../runtime-context';
 import type { ContextOSRuntimeRequest } from '../runtime-types';
 import type { ContextObject } from '@/context/context-object';
+import type { ContextProvenance } from '@/context/context-provenance';
+import type { ContextLifecycleState } from '@/context/context-lifecycle';
 import type { MemoryRecord } from '@/memory/memory-record';
 import type { MemoryRetriever } from '@/memory/memory-retriever';
 import type { ContextRetriever } from '@/context/assembly/types';
 import { InMemoryRetriever } from '@/memory/memory-retriever';
+import { ContextOSRuntimeError } from '../runtime-types';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Test Fixtures
+// Test Fixtures & Factories
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const FIXED_TIMESTAMP = '2026-10-04T10:00:00.000Z';
 const NOW_FN = () => FIXED_TIMESTAMP;
+
+/**
+ * Create a valid ContextLifecycleState for test data.
+ */
+function createLifecycle(): ContextLifecycleState {
+  return { stage: 'retrieved', updatedAt: FIXED_TIMESTAMP };
+}
+
+/**
+ * Create a valid ContextProvenance for test data.
+ */
+function createProvenance(overrides: Partial<ContextProvenance> = {}): ContextProvenance {
+  return {
+    source: 'test',
+    sourceType: 'memory',
+    ownerId: 'user_1',
+    scope: 'global',
+    ...overrides,
+  };
+}
+
+/**
+ * Create a valid ContextObject for use in mock provider tests.
+ * This factory ensures all required fields are present and correct.
+ */
+function createTestContextObject(overrides: Partial<ContextObject> & { id: string; kind: ContextObject['kind'] }): ContextObject {
+  return {
+    type: 'static',
+    payload: { text: `Payload for ${overrides.id}` },
+    provenance: createProvenance(),
+    lifecycle: createLifecycle(),
+    confidence: 0.8,
+    createdAt: FIXED_TIMESTAMP,
+    updatedAt: FIXED_TIMESTAMP,
+    ...overrides,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MemoryRecord Factories (for InMemoryRetriever)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 function createGeneralMemoryRecord(
   id: string,
@@ -269,6 +318,20 @@ describe('A. Memory Retrieval', () => {
     const memoryCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_mem_'));
     expect(memoryCtxs.length).toBe(3);
   });
+
+  it('A6: source with 0 results should be "included" (not disabled) when enabled', async () => {
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest();
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      now: NOW_FN,
+    });
+
+    // Memory is enabled but returned 0 results → should be 'included'
+    expect(result.sources.find((s) => s.source === 'memory')?.status).toBe('included');
+    expect(result.sources.find((s) => s.source === 'memory')?.contextCount).toBe(0);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -461,7 +524,8 @@ describe('D. Feedback Retrieval', () => {
 
     const fbCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_dfb_'));
     expect(fbCtxs.length).toBe(0);
-    expect(result.sources.find((s) => s.source === 'feedback')?.status).toBeDefined();
+    // Source ran successfully with 0 results → 'included'
+    expect(result.sources.find((s) => s.source === 'feedback')?.status).toBe('included');
   });
 
   it('D2: should not generate feedback when includeFeedback=false', async () => {
@@ -513,17 +577,14 @@ describe('D. Feedback Retrieval', () => {
 describe('E. Knowledge Retrieval', () => {
   it('E1: should call knowledge retriever when includeKnowledge=true and provider exists', async () => {
     const knowledgeCtxs: ContextObject[] = [
-      {
+      createTestContextObject({
         id: 'ctx_know_1',
         kind: 'knowledge',
-        type: 'static' as ContextObject['type'],
-        content: { text: 'Knowledge 1' },
+        type: 'static',
+        payload: { text: 'Knowledge 1' },
+        provenance: { source: 'knowledge-source', sourceType: 'knowledge', ownerId: 'shared', scope: 'global' },
         confidence: 0.9,
-        importance: 0.7,
-        createdAt: FIXED_TIMESTAMP,
-        updatedAt: FIXED_TIMESTAMP,
-        provenance: { source: 'knowledge-source', sourceType: 'knowledge', ownerId: 'shared' } as ContextObject['provenance'],
-      },
+      }),
     ];
     const mockKnowledgeRetriever = createMockKnowledgeRetriever(knowledgeCtxs);
     const retriever = new InMemoryRetriever([]);
@@ -616,6 +677,33 @@ describe('E. Knowledge Retrieval', () => {
     expect(result.sources.find((s) => s.source === 'knowledge')?.status).toBe('failed');
     expect(result.contexts.filter((c) => c.kind === 'knowledge')).toHaveLength(0);
   });
+
+  it('E6: unowned shared knowledge (global scope, sourceType=knowledge) should pass validation', async () => {
+    const sharedKnowledge: ContextObject = createTestContextObject({
+      id: 'ctx_know_shared_global',
+      kind: 'knowledge',
+      provenance: {
+        source: 'knowledge',
+        sourceType: 'knowledge',
+        scope: 'global',
+      },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([sharedKnowledge]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      contextPolicy: { includeKnowledge: true, includeMemory: false },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // Unowned shared global knowledge should pass validation
+    expect(result.contexts.filter((c) => c.id === 'ctx_know_shared_global').length).toBe(1);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -637,17 +725,12 @@ describe('F. Graph Enrichment', () => {
 
   it('F2: should call graph provider when includeGraph=true', async () => {
     const graphCtxs: ContextObject[] = [
-      {
+      createTestContextObject({
         id: 'ctx_graph_1',
-        kind: 'graph',
-        type: 'static' as ContextObject['type'],
-        content: { text: 'Graph 1' },
+        kind: 'memory',
+        provenance: { source: 'graph-provider', sourceType: 'graph', ownerId: 'user_1', scope: 'global' },
         confidence: 0.7,
-        importance: 0.6,
-        createdAt: FIXED_TIMESTAMP,
-        updatedAt: FIXED_TIMESTAMP,
-        provenance: { source: 'graph-provider', sourceType: 'graph', ownerId: 'shared' } as ContextObject['provenance'],
-      },
+      }),
     ];
     const graphProvider = createMockGraphProvider(graphCtxs);
     const retriever = new InMemoryRetriever([]);
@@ -698,6 +781,28 @@ describe('F. Graph Enrichment', () => {
     expect(memoryCtxs.length).toBe(1);
     expect(result.sources.find((s) => s.source === 'graph')?.status).toBe('failed');
     expect(result.sources.find((s) => s.source === 'memory')?.status).toBe('included');
+  });
+
+  it('F5: graph context from different owner should be excluded', async () => {
+    const foreignGraph: ContextObject = createTestContextObject({
+      id: 'ctx_graph_foreign',
+      kind: 'memory',
+      provenance: { source: 'graph-provider', sourceType: 'graph', ownerId: 'other_user', scope: 'global' },
+    });
+    const graphProvider = createMockGraphProvider([foreignGraph]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      contextPolicy: { includeGraph: true, includeMemory: false },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      graphContextProvider: graphProvider,
+      now: NOW_FN,
+    });
+
+    expect(result.contexts.filter((c) => c.id === 'ctx_graph_foreign')).toHaveLength(0);
   });
 });
 
@@ -776,21 +881,16 @@ describe('G. Unified Policy', () => {
   });
 
   it('G4: should deduplicate contexts by id across sources', async () => {
-    const general = [createGeneralMemoryRecord('shared_id', 'global', 'user_1')];
+    const general = [createGeneralMemoryRecord('shared', 'global', 'user_1')];
     const retriever = new InMemoryRetriever(general);
 
     // Mock graph provider returns a context with same id as memory
-    const duplicateGraphCtx: ContextObject = {
-      id: 'ctx_mem_shared_id', // Same ID as general memory would produce
-      kind: 'graph',
-      type: 'static' as ContextObject['type'],
-      content: { text: 'Duplicate' },
+    const duplicateGraphCtx: ContextObject = createTestContextObject({
+      id: 'ctx_mem_shared', // Same ID as general memory would produce
+      kind: 'memory',
+      provenance: { source: 'graph', sourceType: 'graph', ownerId: 'user_1', scope: 'global' },
       confidence: 0.5,
-      importance: 0.5,
-      createdAt: FIXED_TIMESTAMP,
-      updatedAt: FIXED_TIMESTAMP,
-      provenance: { source: 'graph', sourceType: 'graph', ownerId: 'user_1' } as ContextObject['provenance'],
-    };
+    });
     const graphProvider = createMockGraphProvider([duplicateGraphCtx]);
 
     const request = createMinimalRequest({
@@ -802,8 +902,8 @@ describe('G. Unified Policy', () => {
       now: NOW_FN,
     });
 
-    // Should have only ONE context with id ctx_mem_shared_id
-    const sameIdCtxs = result.contexts.filter((c) => c.id === 'ctx_mem_shared_id');
+    // Should have only ONE context with id ctx_mem_shared
+    const sameIdCtxs = result.contexts.filter((c) => c.id === 'ctx_mem_shared');
     expect(sameIdCtxs.length).toBe(1);
   });
 
@@ -851,22 +951,17 @@ describe('G. Unified Policy', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Group H: Scope & Owner Boundary
+// Group H: Scope & Owner Boundary (strengthened P0.7.2-R1)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 describe('H. Scope & Owner Boundary', () => {
   it('H1: knowledge context with different owner should be excluded', async () => {
-    const foreignKnowledge: ContextObject = {
+    const foreignKnowledge: ContextObject = createTestContextObject({
       id: 'ctx_know_foreign',
       kind: 'knowledge',
-      type: 'static' as ContextObject['type'],
-      content: { text: 'Foreign knowledge' },
+      provenance: { source: 'knowledge', sourceType: 'knowledge', ownerId: 'other_user', scope: 'global' },
       confidence: 0.8,
-      importance: 0.6,
-      createdAt: FIXED_TIMESTAMP,
-      updatedAt: FIXED_TIMESTAMP,
-      provenance: { source: 'knowledge', sourceType: 'knowledge', ownerId: 'other_user' } as ContextObject['provenance'],
-    };
+    });
     const mockKnowledgeRetriever = createMockKnowledgeRetriever([foreignKnowledge]);
     const retriever = new InMemoryRetriever([]);
 
@@ -885,17 +980,12 @@ describe('H. Scope & Owner Boundary', () => {
   });
 
   it('H2: graph context from different owner should be excluded', async () => {
-    const foreignGraph: ContextObject = {
+    const foreignGraph: ContextObject = createTestContextObject({
       id: 'ctx_graph_foreign',
-      kind: 'graph',
-      type: 'static' as ContextObject['type'],
-      content: { text: 'Foreign graph' },
+      kind: 'memory',
+      provenance: { source: 'graph', sourceType: 'graph', ownerId: 'other_user', scope: 'global' },
       confidence: 0.7,
-      importance: 0.5,
-      createdAt: FIXED_TIMESTAMP,
-      updatedAt: FIXED_TIMESTAMP,
-      provenance: { source: 'graph', sourceType: 'graph', ownerId: 'other_user' } as ContextObject['provenance'],
-    };
+    });
     const graphProvider = createMockGraphProvider([foreignGraph]);
     const retriever = new InMemoryRetriever([]);
 
@@ -912,18 +1002,13 @@ describe('H. Scope & Owner Boundary', () => {
     expect(result.contexts.filter((c) => c.id === 'ctx_graph_foreign')).toHaveLength(0);
   });
 
-  it('H3: unowned shared knowledge should be allowed', async () => {
-    const sharedKnowledge: ContextObject = {
+  it('H3: unowned shared knowledge (global scope, sourceType=knowledge) should be allowed', async () => {
+    const sharedKnowledge: ContextObject = createTestContextObject({
       id: 'ctx_know_shared',
       kind: 'knowledge',
-      type: 'static' as ContextObject['type'],
-      content: { text: 'Shared knowledge' },
+      provenance: { source: 'knowledge', sourceType: 'knowledge', scope: 'global' },
       confidence: 0.9,
-      importance: 0.7,
-      createdAt: FIXED_TIMESTAMP,
-      updatedAt: FIXED_TIMESTAMP,
-      provenance: { source: 'knowledge', sourceType: 'knowledge' } as ContextObject['provenance'],
-    };
+    });
     const mockKnowledgeRetriever = createMockKnowledgeRetriever([sharedKnowledge]);
     const retriever = new InMemoryRetriever([]);
 
@@ -937,7 +1022,7 @@ describe('H. Scope & Owner Boundary', () => {
       now: NOW_FN,
     });
 
-    // Unowned (shared) knowledge should pass through
+    // Unowned (shared) knowledge with sourceType=knowledge + scope=global should pass through
     expect(result.contexts.filter((c) => c.id === 'ctx_know_shared').length).toBe(1);
   });
 
@@ -965,6 +1050,76 @@ describe('H. Scope & Owner Boundary', () => {
     const ids = memoryCtxs.map((c) => c.id);
     expect(ids).toContain('ctx_mem_shared');
     expect(ids).toContain('ctx_mem_unique_proj');
+  });
+
+  it('H5: unowned data without proper sourceType/scope should be rejected', async () => {
+    // Graph data without owner should NOT be treated as shared knowledge
+    const unownedGraph: ContextObject = createTestContextObject({
+      id: 'ctx_graph_unowned',
+      kind: 'memory',
+      provenance: { source: 'graph-provider', sourceType: 'graph', scope: 'global' },
+    });
+    const graphProvider = createMockGraphProvider([unownedGraph]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      contextPolicy: { includeGraph: true, includeMemory: false },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      graphContextProvider: graphProvider,
+      now: NOW_FN,
+    });
+
+    // Unowned graph data (sourceType !== 'knowledge') should be rejected
+    expect(result.contexts.filter((c) => c.id === 'ctx_graph_unowned')).toHaveLength(0);
+  });
+
+  it('H6: unowned knowledge with unknown scope should be rejected', async () => {
+    const unknownScopeKnowledge: ContextObject = createTestContextObject({
+      id: 'ctx_know_unknown',
+      kind: 'knowledge',
+      provenance: { source: 'knowledge', sourceType: 'knowledge', scope: 'unknown' },
+    });
+    const mockKnowledgeRetriever = createMockKnowledgeRetriever([unknownScopeKnowledge]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      contextPolicy: { includeKnowledge: true, includeMemory: false },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      knowledgeRetriever: mockKnowledgeRetriever,
+      now: NOW_FN,
+    });
+
+    // Unknown scope → reject even if sourceType is knowledge
+    expect(result.contexts.filter((c) => c.id === 'ctx_know_unknown')).toHaveLength(0);
+  });
+
+  it('H7: context with owner missing but sourceType=memory should be rejected', async () => {
+    // regular graph/memory data without owner → reject
+    const unownedMemory: ContextObject = createTestContextObject({
+      id: 'ctx_unowned_memory',
+      kind: 'memory',
+      provenance: { source: 'memory-store', sourceType: 'memory', scope: 'global' },
+    });
+    const graphProvider = createMockGraphProvider([unownedMemory]);
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      ownerId: 'user_1',
+      contextPolicy: { includeGraph: true, includeMemory: false },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      graphContextProvider: graphProvider,
+      now: NOW_FN,
+    });
+
+    expect(result.contexts.filter((c) => c.id === 'ctx_unowned_memory')).toHaveLength(0);
   });
 });
 
@@ -1048,6 +1203,8 @@ describe('J. Compatibility', () => {
       expect(ctx).toHaveProperty('id');
       expect(ctx).toHaveProperty('kind');
       expect(ctx).toHaveProperty('provenance');
+      expect(ctx).toHaveProperty('payload');
+      expect(ctx).toHaveProperty('lifecycle');
     });
   });
 
@@ -1088,3 +1245,283 @@ import { createRuntimeRunner } from '../runtime-context';
 function createMinimalRunner(retriever: MemoryRetriever) {
   return createRuntimeRunner(retriever, NOW_FN);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Group K: Error Propagation (P0.7.2-R1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('K. Error Propagation', () => {
+  it('K1: primary memory retriever failure should reject the promise', async () => {
+    const failingRetriever: MemoryRetriever = {
+      retrieve: async () => { throw new Error('DB connection lost'); },
+    };
+    const request = createMinimalRequest();
+
+    await expect(
+      retrieveRuntimeContextWithMetadata(request, {
+        memoryRetriever: failingRetriever,
+        now: NOW_FN,
+      })
+    ).rejects.toThrow(ContextOSRuntimeError);
+  });
+
+  it('K2: primary memory failure should include error message', async () => {
+    const failingRetriever: MemoryRetriever = {
+      retrieve: async () => { throw new Error('DB connection lost'); },
+    };
+    const request = createMinimalRequest();
+
+    try {
+      await retrieveRuntimeContextWithMetadata(request, {
+        memoryRetriever: failingRetriever,
+        now: NOW_FN,
+      });
+      expect.unreachable('Should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ContextOSRuntimeError);
+      expect((err as ContextOSRuntimeError).code).toBe('RUNTIME_EXECUTION');
+      expect((err as Error).message).toContain('DB connection lost');
+    }
+  });
+
+  it('K3: optional source failure should not block other sources', async () => {
+    const general = [createGeneralMemoryRecord('g1', 'global', 'user_1')];
+    const retriever = new InMemoryRetriever(general);
+
+    const failingGraphProvider = vi.fn(async () => { throw new Error('Graph unavailable'); });
+
+    const request = createMinimalRequest({
+      contextPolicy: { includeGraph: true, includeMemory: true },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      graphContextProvider: failingGraphProvider as unknown as RuntimeRetrievalDependencies['graphContextProvider'],
+      now: NOW_FN,
+    });
+
+    // Memory should still be included despite graph failure
+    const memoryCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_mem_'));
+    expect(memoryCtxs.length).toBe(1);
+    expect(result.sources.find((s) => s.source === 'graph')?.status).toBe('failed');
+    expect(result.sources.find((s) => s.source === 'memory')?.status).toBe('included');
+  });
+
+  it('K4: decision source failure should not block memory', async () => {
+    const general = [createGeneralMemoryRecord('g1', 'global', 'user_1')];
+    const retriever = new InMemoryRetriever(general);
+
+    // Create a retriever that throws only for decision queries
+    // Decision retrieval is identified by policy.includeSuperseded being true
+    const originalRetrieve = retriever.retrieve.bind(retriever);
+    const spyRetriever: MemoryRetriever = {
+      retrieve: async (req) => {
+        // Simulate decision retrieval failure (decisions set includeSuperseded=true)
+        if (req.policy?.includeSuperseded === true) {
+          throw new Error('Decision store unavailable');
+        }
+        return originalRetrieve(req);
+      },
+    };
+
+    const request = createMinimalRequest({
+      contextPolicy: {
+        includeMemory: true,
+        includeDecisions: true,
+        includeOutcomes: false,
+        includeFeedback: false,
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: spyRetriever,
+      now: NOW_FN,
+    });
+
+    // Memory should still be included
+    const memoryCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_mem_'));
+    expect(memoryCtxs.length).toBe(1);
+    // Decision should be marked as failed
+    expect(result.sources.find((s) => s.source === 'decision')?.status).toBe('failed');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Group L: Outcome Metadata Preservation (P0.7.2-R1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('L. Outcome Metadata Preservation', () => {
+  it('L1: source report includes metadata when outcome retrieval succeeds', async () => {
+    const outcomes = [createOutcomeMemoryRecord('o1', 'user_1', 'project', 'proj_1')];
+    const retriever = new InMemoryRetriever(outcomes);
+
+    const request = createMinimalRequest({
+      projectId: 'proj_1',
+      contextPolicy: {
+        includeOutcomes: true,
+        includeMemory: false,
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      now: NOW_FN,
+    });
+
+    const outcomeSource = result.sources.find((s) => s.source === 'outcome');
+    expect(outcomeSource).toBeDefined();
+    expect(outcomeSource!.status).toBe('included');
+    expect(outcomeSource!.metadata).toBeDefined();
+    expect(outcomeSource!.metadata!.scannedRecords).toBeGreaterThanOrEqual(0);
+    expect(outcomeSource!.metadata!.batchesFetched).toBeGreaterThanOrEqual(0);
+    expect(typeof outcomeSource!.metadata!.truncated).toBe('boolean');
+    expect(typeof outcomeSource!.metadata!.exhausted).toBe('boolean');
+  });
+
+  it('L2: metadata is undefined when outcome source is disabled', async () => {
+    const retriever = new InMemoryRetriever([]);
+
+    const request = createMinimalRequest({
+      contextPolicy: {
+        includeOutcomes: false,
+        includeMemory: false,
+      },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      now: NOW_FN,
+    });
+
+    const outcomeSource = result.sources.find((s) => s.source === 'outcome');
+    expect(outcomeSource).toBeDefined();
+    expect(outcomeSource!.status).toBe('disabled');
+    expect(outcomeSource!.metadata).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Group M: Scope Enforcement (allowedScopes)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('M. Scope Enforcement', () => {
+  it('M1: allowedScopes=["project"] filters memory to project scope', async () => {
+    const records = [
+      createGeneralMemoryRecord('g1', 'global', 'user_1'),
+      createGeneralMemoryRecord('p1', 'project', 'user_1', 'proj_1'),
+      createGeneralMemoryRecord('t1', 'topic', 'user_1', 'proj_1', 'topic_1'),
+    ];
+    const retriever = new InMemoryRetriever(records);
+
+    const request = createMinimalRequest({
+      projectId: 'proj_1',
+      topicId: 'topic_1',
+      contextPolicy: { allowedScopes: ['project'] },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      now: NOW_FN,
+    });
+
+    // When scope is 'project', only project-scoped records are returned
+    // (explicit scope matching excludes global records)
+    const memoryCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_mem_'));
+    const scopes = memoryCtxs.map((c) => c.provenance.scope);
+    // Must include project
+    expect(scopes).toContain('project');
+    // Must NOT include topic or global (scope is strictly 'project')
+    expect(scopes).not.toContain('topic');
+    expect(scopes).not.toContain('global');
+  });
+
+  it('M2: allowedScopes=["topic"] filters memory to topic + global', async () => {
+    const records = [
+      createGeneralMemoryRecord('g1', 'global', 'user_1'),
+      createGeneralMemoryRecord('p1', 'project', 'user_1', 'proj_1'),
+      createGeneralMemoryRecord('t1', 'topic', 'user_1', 'proj_1', 'topic_1'),
+    ];
+    const retriever = new InMemoryRetriever(records);
+
+    const request = createMinimalRequest({
+      projectId: 'proj_1',
+      topicId: 'topic_1',
+      contextPolicy: { allowedScopes: ['topic'] },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      now: NOW_FN,
+    });
+
+    // When scope is 'topic', only topic-scoped records are returned
+    const memoryCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_mem_'));
+    const scopes = memoryCtxs.map((c) => c.provenance.scope);
+    expect(scopes).toContain('topic');
+    // Must NOT include project or global (scope is strictly 'topic')
+    expect(scopes).not.toContain('project');
+    expect(scopes).not.toContain('global');
+  });
+
+  it('M3: allowedScopes=["global"] returns only global records', async () => {
+    const records = [
+      createGeneralMemoryRecord('g1', 'global', 'user_1'),
+      createGeneralMemoryRecord('p1', 'project', 'user_1', 'proj_1'),
+    ];
+    const retriever = new InMemoryRetriever(records);
+
+    const request = createMinimalRequest({
+      projectId: 'proj_1',
+      contextPolicy: { allowedScopes: ['global'] },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      now: NOW_FN,
+    });
+
+    const memoryCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_mem_'));
+    // Only global records (InMemoryRetriever allows global here)
+    expect(memoryCtxs.length).toBe(1);
+    expect(memoryCtxs[0].id).toBe('ctx_mem_g1');
+  });
+
+  it('M4: allowedScopes=["global","project"] returns both scopes', async () => {
+    const records = [
+      createGeneralMemoryRecord('g1', 'global', 'user_1'),
+      createGeneralMemoryRecord('p1', 'project', 'user_1', 'proj_1'),
+      createGeneralMemoryRecord('t1', 'topic', 'user_1', 'proj_1', 'topic_1'),
+    ];
+    const retriever = new InMemoryRetriever(records);
+
+    const request = createMinimalRequest({
+      projectId: 'proj_1',
+      topicId: 'topic_1',
+      contextPolicy: { allowedScopes: ['global', 'project'] },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      now: NOW_FN,
+    });
+
+    const memoryCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_mem_'));
+    const scopes = memoryCtxs.map((c) => c.provenance.scope);
+    expect(scopes).toContain('global');
+    expect(scopes).toContain('project');
+    expect(scopes).not.toContain('topic');
+  });
+
+  it('M5: empty allowedScopes means no scope restriction (default behavior)', async () => {
+    const records = [
+      createGeneralMemoryRecord('g1', 'global', 'user_1'),
+      createGeneralMemoryRecord('p1', 'project', 'user_1', 'proj_1'),
+    ];
+    const retriever = new InMemoryRetriever(records);
+
+    const request = createMinimalRequest({
+      projectId: 'proj_1',
+      contextPolicy: { allowedScopes: [] },
+    });
+    const result = await retrieveRuntimeContextWithMetadata(request, {
+      memoryRetriever: retriever,
+      now: NOW_FN,
+    });
+
+    const memoryCtxs = result.contexts.filter((c) => c.id.startsWith('ctx_mem_'));
+    // All records returned when no scope restriction
+    expect(memoryCtxs.length).toBe(2);
+  });
+});

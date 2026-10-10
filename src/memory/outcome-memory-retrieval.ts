@@ -109,6 +109,16 @@ export interface OutcomeRetrievalParams {
 
   /** Include archived outcomes (default: false) */
   includeArchived?: boolean;
+
+  /**
+   * P0.7.2-R1 — Explicit scope override.
+   * When provided, passed to MemoryRetriever to enforce scope isolation:
+   *   'global'  → only global-scoped records
+   *   'project' → only project-scoped records matching projectId
+   *   'topic'   → only topic-scoped records matching projectId+topicId
+   *   'session' → returns empty (persistent memory scope)
+   */
+  scope?: import('./memory-scope').MemoryScope;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -492,6 +502,7 @@ function buildBatchRequest(
     ownerId: params.ownerId,
     projectId: params.projectId,
     topicId: params.topicId,
+    scope: params.scope,
     policy: {
       maxResults: DEFAULT_OUTCOME_BATCH_SIZE,
       types: [OUTCOME_MEMORY_TYPE],

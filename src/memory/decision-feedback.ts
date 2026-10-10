@@ -202,6 +202,13 @@ export interface DecisionFeedbackParams {
    * Enables deterministic replays in tests and orchestrated pipelines.
    */
   now?: () => string;
+
+  /**
+   * P0.7.2-R1 — Explicit scope override.
+   * When provided, propagated to Decision lookup and Outcome retrieval
+   * to enforce scope isolation consistent with Runtime policy.
+   */
+  scope?: import('./memory-scope').MemoryScope;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -267,6 +274,12 @@ export interface DecisionOutcomeRetrievalParams {
    * Outcomes with observedAt >= windowEnd are excluded.
    */
   windowEnd?: string;
+
+  /**
+   * P0.7.2-R1 — Explicit scope override.
+   * Passed through to OutcomeRetrievalParams to enforce scope isolation.
+   */
+  scope?: import('./memory-scope').MemoryScope;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -409,6 +422,7 @@ export async function retrieveDecisionOutcomes(
     topicId: params.topicId,
     outcomeType: params.outcomeType,
     limit: params.limit ?? 50,
+    scope: params.scope,
   };
 
   // Step 1: Retrieve outcomes using the standard pipeline

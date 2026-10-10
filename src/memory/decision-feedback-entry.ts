@@ -35,6 +35,7 @@ import { resolveDecisionFeedbackWindow } from './decision-feedback';
 import type { DecisionFeedbackService } from './decision-feedback-service';
 import { DecisionFeedbackServiceImpl } from './decision-feedback-service';
 import { getDecisionById } from './decision-memory-retrieval';
+import type { GetDecisionByIdParams } from './decision-memory-retrieval';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Entry Point
@@ -80,14 +81,17 @@ export async function buildDecisionFeedback(
   const requestNow = params.now ? params.now() : new Date().toISOString();
 
   // Step 2: Retrieve the Decision by ID (owner-scoped, reuses existing retrieval)
-  // Pass projectId/topicId if available to enable scope-restricted lookup.
-  // Scope info comes from the caller (e.g., Context Loop request).
-  const decision = await getDecisionById(retriever, {
+  // Pass projectId/topicId/scope if available to enable scope-restricted lookup.
+  const getByIdParams: GetDecisionByIdParams = {
     ownerId: params.ownerId,
     decisionId: params.decisionId,
     projectId: params.projectId,
     topicId: params.topicId,
-  });
+  };
+  if (params.scope) {
+    getByIdParams.scope = params.scope;
+  }
+  const decision = await getDecisionById(retriever, getByIdParams);
 
   if (!decision) {
     throw new MemoryNotFoundError(
@@ -107,15 +111,19 @@ export async function buildDecisionFeedback(
   );
 
   // Step 4: Retrieve Outcomes attributed to the Decision (with window filter)
-  const outcomeResult = await retrieveDecisionOutcomes(retriever, {
+  const outcomeRetrievalParams: Parameters<typeof retrieveDecisionOutcomes>[1] = {
     ownerId: params.ownerId,
     decisionId: params.decisionId,
-    projectId: decision.projectId ?? undefined,
-    topicId: decision.topicId ?? undefined,
+    projectId: params.projectId ?? (decision.projectId ?? undefined),
+    topicId: params.topicId ?? (decision.topicId ?? undefined),
     limit: params.retrievalLimit ?? 500,
     windowStart,
     windowEnd,
-  });
+  };
+  if (params.scope) {
+    outcomeRetrievalParams.scope = params.scope;
+  }
+  const outcomeResult = await retrieveDecisionOutcomes(retriever, outcomeRetrievalParams);
 
   // Step 5: Build feedback via service
   const buildOptions: DecisionFeedbackBuildOptions = {
