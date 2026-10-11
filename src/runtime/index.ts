@@ -8,15 +8,11 @@
  *   runtime-types.ts         — Type contracts
  *   runtime-core.ts          — Main orchestrator (runContextOS)
  *   runtime-context.ts       — Context lifecycle (retrieval + assembly)
+ *   runtime-learning.ts      — P0.7.5 learning pipeline
  *
- * Future modules (P0.7.2+):
- *   runtime-retrieval.ts     — Unified retrieval entry point
- *   runtime-assembly.ts      — Assembly orchestration
+ * Future modules (P0.7.6+):
  *   runtime-injection.ts     — Context package formation
  *   runtime-run.ts           — Agent Run lifecycle
- *   runtime-learning.ts      — Learning candidate generation
- *   runtime-policy.ts        — Memory policy evaluation
- *   runtime-errors.ts        — Error handling
  */
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -80,6 +76,31 @@ export type {
 } from './runtime-context';
 
 export { DEFAULT_RUNTIME_POLICY } from './runtime-context';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.5 — Learning Pipeline
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export {
+  runRuntimeLearning,
+  evaluateLearningCandidate,
+  validatePolicy,
+  DEFAULT_LEARNING_POLICY,
+  LearningAuthorizationError,
+  LearningValidationError,
+} from './runtime-learning';
+
+export type {
+  RuntimeLearningSource,
+  RuntimeLearningDependencies,
+  RuntimeLearningInput,
+  ContextOSLearningPolicy,
+  RuntimeLearningPolicyReasonCode,
+  RuntimeLearningPolicyEvaluation,
+  RuntimeLearningItemStatus,
+  RuntimeLearningItemResult,
+  RuntimeLearningResult,
+} from './runtime-learning';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // P0.7.4 — Run Store (Persistence Abstraction)
