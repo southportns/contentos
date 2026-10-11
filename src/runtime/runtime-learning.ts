@@ -113,10 +113,21 @@ export type RuntimeLearningItemStatus =
   | 'already_exists'
   | 'failed';
 
+/**
+ * Machine-readable error codes for persistence-layer failures.
+ * Distinct from reasonCode (which carries policy-evaluation semantics).
+ */
+export type RuntimeLearningItemErrorCode =
+  | 'PERSISTENCE_READ_FAILED'
+  | 'PERSISTENCE_WRITE_FAILED'
+  | 'DUPLICATE_ID_CONFLICT'
+  | 'DUPLICATE_RECHECK_FAILED';
+
 export interface RuntimeLearningItemResult {
   candidateId: string;
   status: RuntimeLearningItemStatus;
   reasonCode?: RuntimeLearningPolicyReasonCode | 'MAX_CANDIDATES_PER_RUN';
+  errorCode?: RuntimeLearningItemErrorCode;
   scope?: PersistentMemoryScope;
 }
 
@@ -136,18 +147,25 @@ export interface RuntimeLearningResult {
 // Default Policy
 // ═══════════════════════════════════════════════════════════════════════════════
 
+const _DEFAULT_ALLOWED_CANDIDATE_TYPES: readonly LearningCandidateType[] = Object.freeze([
+  'decision_pattern',
+  'successful_pattern',
+  'failure_pattern',
+  'preference_signal',
+  'strategy_signal',
+]);
+
+const _DEFAULT_ALLOWED_SCOPES: readonly PersistentMemoryScope[] = Object.freeze([
+  'topic',
+  'project',
+]);
+
 const DEFAULT_LEARNING_POLICY: ContextOSLearningPolicy = {
   minConfidence: 0.3,
   minImportance: 0,
   maxCandidatesPerRun: 20,
-  allowedCandidateTypes: [
-    'decision_pattern',
-    'successful_pattern',
-    'failure_pattern',
-    'preference_signal',
-    'strategy_signal',
-  ],
-  allowedScopes: ['topic', 'project'],
+  allowedCandidateTypes: _DEFAULT_ALLOWED_CANDIDATE_TYPES,
+  allowedScopes: _DEFAULT_ALLOWED_SCOPES,
   requireOutcomeEvidence: true,
 };
 
@@ -157,6 +175,22 @@ export { DEFAULT_LEARNING_POLICY };
 // Policy Validation
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/** Runtime-valid candidate types (mirrors LearningCandidateType union). */
+const VALID_CANDIDATE_TYPES = new Set<string>([
+  'decision_pattern',
+  'successful_pattern',
+  'failure_pattern',
+  'preference_signal',
+  'strategy_signal',
+]);
+
+/** Runtime-valid scope values. */
+const VALID_SCOPES = new Set<string>([
+  'global',
+  'project',
+  'topic',
+]);
+
 export function validatePolicy(
   partial: Partial<ContextOSLearningPolicy> = {},
 ): ContextOSLearningPolicy {
@@ -165,14 +199,15 @@ export function validatePolicy(
     ...partial,
   };
 
-  // Arrays: use caller-provided value if explicitly set, else keep default
+  // Arrays: use caller-provided copy if explicitly set, else frozen default persists
   if (partial.allowedCandidateTypes !== undefined) {
-    merged.allowedCandidateTypes = partial.allowedCandidateTypes;
+    merged.allowedCandidateTypes = Object.freeze([...partial.allowedCandidateTypes]);
   }
   if (partial.allowedScopes !== undefined) {
-    merged.allowedScopes = partial.allowedScopes;
+    merged.allowedScopes = Object.freeze([...partial.allowedScopes]);
   }
 
+  // ── minConfidence ────────────────────────────────────────────────────
   if (
     typeof merged.minConfidence !== 'number' ||
     !Number.isFinite(merged.minConfidence) ||
@@ -184,6 +219,7 @@ export function validatePolicy(
     );
   }
 
+  // ── minImportance ────────────────────────────────────────────────────
   if (
     typeof merged.minImportance !== 'number' ||
     !Number.isFinite(merged.minImportance) ||
@@ -195,6 +231,7 @@ export function validatePolicy(
     );
   }
 
+  // ── maxCandidatesPerRun ──────────────────────────────────────────────
   if (
     typeof merged.maxCandidatesPerRun !== 'number' ||
     !Number.isInteger(merged.maxCandidatesPerRun) ||
@@ -205,6 +242,7 @@ export function validatePolicy(
     );
   }
 
+  // ── allowedCandidateTypes ────────────────────────────────────────────
   if (
     !Array.isArray(merged.allowedCandidateTypes) ||
     merged.allowedCandidateTypes.length === 0
@@ -213,10 +251,32 @@ export function validatePolicy(
       'allowedCandidateTypes must be a non-empty array of LearningCandidateType values',
     );
   }
+  for (const ct of merged.allowedCandidateTypes) {
+    if (!VALID_CANDIDATE_TYPES.has(ct)) {
+      throw new LearningValidationError(
+        `allowedCandidateTypes contains unknown value: "${ct}"`,
+      );
+    }
+  }
 
+  // ── allowedScopes ────────────────────────────────────────────────────
   if (!Array.isArray(merged.allowedScopes) || merged.allowedScopes.length === 0) {
     throw new LearningValidationError(
       'allowedScopes must be a non-empty array of PersistentMemoryScope values',
+    );
+  }
+  for (const sc of merged.allowedScopes) {
+    if (!VALID_SCOPES.has(sc)) {
+      throw new LearningValidationError(
+        `allowedScopes contains unknown value: "${sc}"`,
+      );
+    }
+  }
+
+  // ── requireOutcomeEvidence ───────────────────────────────────────────
+  if (typeof merged.requireOutcomeEvidence !== 'boolean') {
+    throw new LearningValidationError(
+      `requireOutcomeEvidence must be a boolean. Got: ${merged.requireOutcomeEvidence}`,
     );
   }
 
@@ -261,7 +321,10 @@ export function evaluateLearningCandidate(
     return ineligible('INVALID_STATUS');
   }
 
-  // 4. Type must be allowed
+  // 4. Type must be a non-empty string and allowed
+  if (typeof candidate.type !== 'string' || candidate.type.trim().length === 0) {
+    return ineligible('DISALLOWED_CANDIDATE_TYPE');
+  }
   if (!policy.allowedCandidateTypes.includes(candidate.type)) {
     return ineligible('DISALLOWED_CANDIDATE_TYPE');
   }
@@ -287,7 +350,11 @@ export function evaluateLearningCandidate(
   }
 
   // 9. Outcome evidence required (when policy demands it)
-  if (policy.requireOutcomeEvidence && candidate.sourceOutcomeIds.length === 0) {
+  // Defensively handle malformed outcome-ID collections (non-array = treated as missing).
+  const outcomeIds: readonly string[] = Array.isArray(candidate.sourceOutcomeIds)
+    ? candidate.sourceOutcomeIds
+    : ([] as string[]);
+  if (policy.requireOutcomeEvidence && outcomeIds.length === 0) {
     return ineligible('MISSING_OUTCOME_SOURCE');
   }
 
@@ -437,19 +504,31 @@ async function persistEligibleCandidate(
 ): Promise<RuntimeLearningItemResult> {
   const store = deps.memoryStore;
   const ownerId = input.authenticatedOwnerId;
+  const memId = `mem_${candidate.id}`;
 
-  // Step 1: Idempotency check — owner-scoped lookup
-  const existing = await store.getById(`mem_${candidate.id}`, ownerId);
-  if (existing) {
+  // Step 1: Idempotency check — owner-scoped lookup.
+  // Catch read failures: a failed pre-check must NOT crash the whole pipeline.
+  try {
+    const existing = await store.getById(memId, ownerId);
+    if (existing) {
+      return {
+        candidateId: candidate.id,
+        status: 'already_exists',
+        scope: policyEval.resolvedScope,
+        reasonCode: 'VALID_POLICY',
+      };
+    }
+  } catch (_readErr) {
+    // Read failure: record as failed with specific error code. Never expose raw DB error.
     return {
       candidateId: candidate.id,
-      status: 'already_exists',
+      status: 'failed',
       scope: policyEval.resolvedScope,
-      reasonCode: 'VALID_POLICY',
+      errorCode: 'PERSISTENCE_READ_FAILED',
     };
   }
 
-  // Step 2: Construct and validate the record
+  // Step 2: Construct the record
   const record = buildMemoryRecord(
     candidate,
     policyEval,
@@ -469,22 +548,40 @@ async function persistEligibleCandidate(
   } catch (err) {
     if (err instanceof MemoryConcurrencyError) {
       // Race condition — another worker persisted between our getById and create.
-      // Re-check ownership to disambiguous from cross-owner ID collision.
-      const raced = await store.getById(`mem_${candidate.id}`, ownerId);
-      if (raced) {
+      // Owner-scoped recheck disambiguates cross-owner ID collision from genuine duplicate.
+      try {
+        const raced = await store.getById(memId, ownerId);
+        if (raced) {
+          return {
+            candidateId: candidate.id,
+            status: 'already_exists',
+            scope: policyEval.resolvedScope,
+            reasonCode: 'VALID_POLICY',
+          };
+        }
+        // Foreign-owner record: collision on ID but not owned by caller.
         return {
           candidateId: candidate.id,
-          status: 'already_exists',
+          status: 'failed',
           scope: policyEval.resolvedScope,
-          reasonCode: 'VALID_POLICY',
+          errorCode: 'DUPLICATE_ID_CONFLICT',
+        };
+      } catch (_recheckErr) {
+        // Recheck itself failed. Do not expose raw error; do NOT report as already_exists.
+        return {
+          candidateId: candidate.id,
+          status: 'failed',
+          scope: policyEval.resolvedScope,
+          errorCode: 'DUPLICATE_RECHECK_FAILED',
         };
       }
     }
+    // Non-concurrency create failure: generic write failure.
     return {
       candidateId: candidate.id,
       status: 'failed',
       scope: policyEval.resolvedScope,
-      reasonCode: 'VALID_POLICY',
+      errorCode: 'PERSISTENCE_WRITE_FAILED',
     };
   }
 }

@@ -99,6 +99,7 @@ export type {
   RuntimeLearningPolicyEvaluation,
   RuntimeLearningItemStatus,
   RuntimeLearningItemResult,
+  RuntimeLearningItemErrorCode,
   RuntimeLearningResult,
 } from './runtime-learning';
 
