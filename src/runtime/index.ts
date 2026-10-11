@@ -9,10 +9,7 @@
  *   runtime-core.ts          — Main orchestrator (runContextOS)
  *   runtime-context.ts       — Context lifecycle (retrieval + assembly)
  *   runtime-learning.ts      — P0.7.5 learning pipeline
- *
- * Future modules (P0.7.6+):
- *   runtime-injection.ts     — Context package formation
- *   runtime-run.ts           — Agent Run lifecycle
+ *   runtime-agent-loop.ts    — P0.7.6 end-to-end Agent loop
  */
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -124,3 +121,21 @@ export {
 
 export { createPrismaRunStore } from './prisma-run-store';
 export type { PrismaContextOSRunStore } from './prisma-run-store';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.6 — End-to-End Agent Context Loop
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export { runContextOSAgentLoop } from './runtime-agent-loop';
+
+export type {
+  RuntimeAgentLoopDependencies,
+  RuntimeAgentExecutionInput,
+  RuntimeAgentExecutionResult,
+  RuntimeAgentExecutor,
+  RuntimeLearningEvidenceResolver,
+  RuntimeAgentLoopDiagnostics,
+  RuntimeAgentLoopStageStatus,
+  RuntimeAgentLearningStageOutcome,
+  RuntimeAgentLoopResult,
+} from './runtime-agent-loop';
