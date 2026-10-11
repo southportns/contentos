@@ -253,13 +253,20 @@ function parseCursor(cursor: string): { createdAt: Date; id: string } {
  * Validate and normalize the limit parameter.
  *
  * Policy:
- *   - Missing/undefined → DEFAULT_RUN_LIMIT
+ *   - undefined (caller omitted) → DEFAULT_RUN_LIMIT
+ *   - Explicit null → RunValidationError (invalid supplied value)
  *   - Values > MAX_RUN_LIMIT → clamped to MAX_RUN_LIMIT
  *   - 0, negative, NaN, Infinity, non-integer, non-finite → RunValidationError
+ *   - Non-number types (string, object, etc.) → RunValidationError
  */
 function validateLimit(limit: unknown): number {
-  if (limit === undefined || limit === null) {
+  if (limit === undefined) {
     return DEFAULT_RUN_LIMIT;
+  }
+
+  // Explicit null is an invalid supplied value — NOT a default request
+  if (limit === null) {
+    throw new RunValidationError('Limit must be a number, received null');
   }
 
   if (typeof limit !== 'number') {

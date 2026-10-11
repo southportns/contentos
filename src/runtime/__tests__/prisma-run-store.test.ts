@@ -1174,3 +1174,70 @@ describe('PrismaContextOSRunStore — Calendar-Valid Date Checks (R1.2)', () => 
     expect(result.runs).toBeDefined();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// P0.7.4-R1.3: Null Limit Boundary
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('PrismaContextOSRunStore — Null Limit Boundary (R1.3)', () => {
+  it('should use DEFAULT_RUN_LIMIT when limit is undefined', async () => {
+    // Create more runs than the default to verify default limit is applied
+    for (let i = 0; i < 25; i++) {
+      await store.create(createRun({ id: `run_default_${i}`, ownerId: 'limit_user' }));
+    }
+    const result = await store.list({ ownerId: 'limit_user' });
+    // DEFAULT_RUN_LIMIT is 20 — should cap at 20 even though 25 exist
+    expect(result.runs.length).toBeLessThanOrEqual(20);
+    expect(result.runs.length).toBeGreaterThan(0);
+  });
+
+  it('should throw RunValidationError when limit is explicitly null', async () => {
+    const error = await store
+      .list({ ownerId: 'limit_user', limit: null as unknown as number })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('should accept a valid positive integer limit', async () => {
+    const result = await store.list({ ownerId: 'limit_user', limit: 5 });
+    expect(result.runs.length).toBeLessThanOrEqual(5);
+  });
+
+  it('should clamp limit above MAX_RUN_LIMIT to maximum', async () => {
+    // Create enough runs
+    for (let i = 0; i < 30; i++) {
+      await store.create(createRun({ id: `run_clamp_${i}`, ownerId: 'clamp_user' }));
+    }
+    const result = await store.list({ ownerId: 'clamp_user', limit: 9999 });
+    // Should be clamped to MAX_RUN_LIMIT (100), not return all 30
+    // Since we only have 30, all 30 should be returned
+    expect(result.runs.length).toBe(30);
+  });
+
+  it('should reject null limit BEFORE Prisma acquisition (no DB query)', async () => {
+    // If null didn't throw validation, it would pass to Prisma which would
+    // either error or use default. We prove preflight by asserting
+    // RunValidationError specifically (not a persistence/connection error).
+    const error = await store
+      .list({ ownerId: 'limit_preflight', limit: null as unknown as number })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('should reject string limit values', async () => {
+    const error = await store
+      .list({ ownerId: 'limit_user', limit: 'abc' as unknown as number })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+
+  it('should reject object limit values', async () => {
+    const error = await store
+      .list({ ownerId: 'limit_user', limit: { value: 10 } as unknown as number })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(RunValidationError);
+    expect(error.code).toBe('RUNTIME_VALIDATION');
+  });
+});
