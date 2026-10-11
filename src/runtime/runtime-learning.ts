@@ -564,7 +564,7 @@ async function persistEligibleCandidate(
         reasonCode: 'VALID_POLICY',
       };
     }
-  } catch (_readErr) {
+  } catch {
     // Read failure: record as failed with specific error code. Never expose raw DB error.
     return {
       candidateId: candidate.id,
@@ -612,7 +612,7 @@ async function persistEligibleCandidate(
           scope: policyEval.resolvedScope,
           errorCode: 'DUPLICATE_ID_CONFLICT',
         };
-      } catch (_recheckErr) {
+      } catch {
         // Recheck itself failed. Do not expose raw error; do NOT report as already_exists.
         return {
           candidateId: candidate.id,
