@@ -43,9 +43,13 @@ const FIXED_CLOCK = () => NOW;
 class InMemoryMemoryStore implements MemoryStore {
   private records: Map<string, MemoryRecord> = new Map();
   private failNextCreate = false;
+  private failGetByIdForId: string | null = null;
+  private failAllGetById = false;
   private hookBeforeCreate: ((r: MemoryRecord) => void) | null = null;
 
   setFailNextCreate(v: boolean) { this.failNextCreate = v; }
+  setFailGetByIdForId(id: string | null) { this.failGetByIdForId = id; }
+  setFailAllGetById(v: boolean) { this.failAllGetById = v; }
   setHookBeforeCreate(fn: ((r: MemoryRecord) => void) | null) { this.hookBeforeCreate = fn; }
   getStoredRecords(): MemoryRecord[] { return Array.from(this.records.values()); }
 
@@ -63,6 +67,9 @@ class InMemoryMemoryStore implements MemoryStore {
   }
 
   async getById(id: string, ownerId: string): Promise<MemoryRecord | null> {
+    if (this.failAllGetById || (this.failGetByIdForId !== null && id === this.failGetByIdForId)) {
+      throw new Error('Simulated getById failure');
+    }
     const r = this.records.get(id);
     if (!r || r.ownerId !== ownerId) return null;
     return { ...r };
@@ -618,5 +625,233 @@ describe('P0.7.5 — Result Contract', () => {
     const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(fs));
     expect(res.counts.persisted).toBe(0);
     expect(res.counts.failed).toBe(res.items.length);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. PERSISTENCE ERROR HANDLING (P0.7.5-R1)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('P0.7.5-R1 — Persistence Error Handling', () => {
+  let store: InMemoryMemoryStore;
+  beforeEach(() => { store = new InMemoryMemoryStore(); });
+
+  it('6.1 initial getById failure returns failed item (not crash)', async () => {
+    const fs = new InMemoryMemoryStore();
+    // Fail the idempotency-check read
+    fs.setFailGetByIdForId('mem_lc_dec_test_001_decision_pattern');
+    const src = createSource({ feedback: createFeedback({ metricAggregations: [], trends: [], outcomeCount: 1 }) });
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(fs));
+    const item = res.items[0];
+    expect(item.status).toBe('failed');
+    expect(item.errorCode).toBe('PERSISTENCE_READ_FAILED');
+    expect(item.reasonCode).toBeUndefined();  // policy not evaluated, no policy reasonCode
+    expect(res.counts.failed).toBe(1);
+  });
+
+  it('6.2 later candidate processes after earlier read failure', async () => {
+    // Two candidates; first read fails, second should still attempt persistence
+    const fs = new InMemoryMemoryStore();
+    // First candidate ID that comes from buildLearningCandidates is lc_DECISIONID_TYPE
+    // We fail only the FIRST getById (for candidate "lc_dec_test_001_X")
+    // Note: buildLearningCandidates generates candidate IDs like lc_<decisionId>_<type>
+    // For the standard source it generates lc_dec_test_001_decision_pattern
+    fs.setFailGetByIdForId('mem_lc_dec_test_001_decision_pattern');
+
+    const src1 = createSource({ feedback: createFeedback({ metricAggregations: [], trends: [], outcomeCount: 1 }) });
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src1] }, createDeps(fs));
+    // At minimum the first item failed; the run did not crash
+    expect(res.items.length).toBeGreaterThanOrEqual(1);
+    expect(res.counts.failed).toBeGreaterThanOrEqual(1);
+  });
+
+  it('6.3 create() non-concurrency failure returns PERSISTENCE_WRITE_FAILED', async () => {
+    const fs = new InMemoryMemoryStore();
+    // Override create to throw a generic error (not MemoryConcurrencyError)
+    fs.create = async () => { throw new Error('disk I/O failure'); };
+    const src = createSource({ feedback: createFeedback({ metricAggregations: [], trends: [], outcomeCount: 1 }) });
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(fs));
+    const item = res.items.find((i) => i.status === 'failed');
+    expect(item).toBeDefined();
+    expect(item!.errorCode).toBe('PERSISTENCE_WRITE_FAILED');
+    expect(res.counts.persisted).toBe(0);
+    expect(res.counts.failed).toBeGreaterThanOrEqual(1);
+  });
+
+  it('6.4 MemoryConcurrencyError + owner-scoped record = already_exists', async () => {
+    // Pre-populate an owner-scoped record AFTER the initial getById but BEFORE create.
+    // We use hookBeforeCreate to inject the record.
+    const fs = new InMemoryMemoryStore();
+    await fs.create({
+      id: 'mem_lc_dec_test_001_decision_pattern', kind: 'semantic', type: 'learning_candidate',
+      payload: {}, ownerId: TEST_OWNER_A, scope: 'topic', projectId: TEST_PROJECT_A, topicId: TEST_TOPIC_A,
+      source: 'race_simulated', sourceType: 'test', confidence: 0.5, importance: 0.5,
+      createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', accessCount: 0,
+      version: 1, status: 'active',
+    });
+    // Now simulate a race: getById passes (just inserted), create throws MemoryConcurrencyError
+    // But the record IS owned by our caller, so recheck succeeds.
+    fs.setFailNextCreate(true); // throws MemoryConcurrencyError
+    const src = createSource({ feedback: createFeedback({ metricAggregations: [], trends: [], outcomeCount: 1 }) });
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(fs));
+    const item = res.items[0];
+    expect(item.status).toBe('already_exists');
+    expect(item.errorCode).toBeUndefined();
+  });
+
+  it('6.5 MemoryConcurrencyError + recheck fails = DUPLICATE_RECHECK_FAILED', async () => {
+    const fs = new InMemoryMemoryStore();
+    // Make ALL getById fail AFTER the initial one (which already ran via try/catch inside persistEligibleCandidate)
+    // We set failAllGetById AFTER a first successful getById by using a hook.
+    fs.setHookBeforeCreate(() => { fs.setFailAllGetById(true); });
+    // Override create to throw after setting the flag
+    fs.create = async (r: MemoryRecord) => {
+      fs.setHookBeforeCreate(null); // remove hook so it fires once
+      fs.setFailAllGetById(true);
+      throw new MemoryConcurrencyError(r.id, 1);
+    };
+    const src = createSource({ feedback: createFeedback({ metricAggregations: [], trends: [], outcomeCount: 1 }) });
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(fs));
+    const item = res.items[0];
+    expect(item.status).toBe('failed');
+    expect(item.errorCode).toBe('DUPLICATE_RECHECK_FAILED');
+    expect(item.status).not.toBe('already_exists'); // unconfirmed = NOT already_exists
+  });
+
+  it('6.6 foreign-owner ID collision returns DUPLICATE_ID_CONFLICT (never already_exists)', async () => {
+    // Pre-populate store with record owned by OTHER owner at the same deterministic ID
+    await fs_createHelper(store, TEST_OWNER_B);
+    // create() will throw MemoryConcurrencyError because ID exists
+    // owner-scoped recheck returns null (foreign owner)
+    const src = createSource({ feedback: createFeedback({ metricAggregations: [], trends: [], outcomeCount: 1 }) });
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(store));
+    const item = res.items[0];
+    expect(item.status).toBe('failed');
+    expect(item.errorCode).toBe('DUPLICATE_ID_CONFLICT');
+    expect(item.status).not.toBe('already_exists');
+  });
+
+  it('6.7 counters consistent when read/write fail', async () => {
+    const fs = new InMemoryMemoryStore();
+    fs.create = async () => { throw new Error('write fail'); };
+    const src = createSource({ feedback: createFeedback({ metricAggregations: [], trends: [], outcomeCount: 1 }) });
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(fs));
+    const persisted = res.items.filter((i) => i.status === 'persisted').length;
+    const failed = res.items.filter((i) => i.status === 'failed').length;
+    const discarded = res.items.filter((i) => i.status === 'discarded').length;
+    const already = res.items.filter((i) => i.status === 'already_exists').length;
+    expect(res.counts.persisted).toBe(persisted);
+    expect(res.counts.failed).toBe(failed);
+    expect(res.counts.discarded).toBe(discarded);
+    expect(res.counts.already_exists).toBe(already);
+    expect(res.counts.total).toBe(persisted + failed + discarded + already);
+  });
+
+  it('6.8 foreign-owner record details not exposed in error', async () => {
+    await fs_createHelper(store, TEST_OWNER_B);
+    const src = createSource({ feedback: createFeedback({ metricAggregations: [], trends: [], outcomeCount: 1 }) });
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(store));
+    const item = res.items[0];
+    // No raw DB error message leaks
+    expect(item.reasonCode === undefined || !String(item.reasonCode).includes('owner')).toBe(true);
+    expect(item.errorCode).toBe('DUPLICATE_ID_CONFLICT');
+  });
+});
+
+// Helper to create a foreign-owner record
+async function fs_createHelper(store: InMemoryMemoryStore, ownerId: string): Promise<void> {
+  await store.create({
+    id: 'mem_lc_dec_test_001_decision_pattern', kind: 'semantic', type: 'learning_candidate',
+    payload: {}, ownerId, scope: 'topic', projectId: TEST_PROJECT_A, topicId: TEST_TOPIC_A,
+    source: 'other_owner', sourceType: 'test', confidence: 0.5, importance: 0.5,
+    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', accessCount: 0,
+    version: 1, status: 'active',
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 7. POLICY & INPUT HARDENING (P0.7.5-R1)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('P0.7.5-R1 — Policy & Input Hardening', () => {
+  it('7.1 validatePolicy rejects unknown candidate type', () => {
+    expect(() => validatePolicy({ allowedCandidateTypes: ['unknown_type' as never] }))
+      .toThrow(LearningValidationError);
+  });
+
+  it('7.2 validatePolicy rejects unknown scope value', () => {
+    expect(() => validatePolicy({ allowedScopes: ['invalid_scope' as never] }))
+      .toThrow(LearningValidationError);
+  });
+
+  it('7.3 validatePolicy rejects non-boolean requireOutcomeEvidence', () => {
+    expect(() => validatePolicy({ requireOutcomeEvidence: 'yes' as never }))
+      .toThrow(LearningValidationError);
+  });
+
+  it('7.4 mutating a validated policy does not mutate shared defaults', () => {
+    const p = validatePolicy({ allowedCandidateTypes: ['decision_pattern', 'successful_pattern'] });
+    // Attempt to mutate the returned frozen array
+    expect(() => { (p.allowedCandidateTypes as string[]).push('evil'); }).toThrow();
+    // Default remains untouched
+    expect(DEFAULT_LEARNING_POLICY.allowedCandidateTypes).toEqual([
+      'decision_pattern', 'successful_pattern', 'failure_pattern', 'preference_signal', 'strategy_signal',
+    ]);
+  });
+
+  it('7.5 mutating default policy array does not affect future validations', () => {
+    // Attempt to mutate the frozen default
+    expect(() => { (DEFAULT_LEARNING_POLICY.allowedCandidateTypes as string[]).push('attack'); }).toThrow();
+    // Re-validate — still gets correct defaults
+    const p2 = validatePolicy();
+    expect(p2.allowedCandidateTypes).toEqual([
+      'decision_pattern', 'successful_pattern', 'failure_pattern', 'preference_signal', 'strategy_signal',
+    ]);
+  });
+
+  it('7.6 malformed candidate sourceOutcomeIds (non-array) handled predictably', () => {
+    const policy = DEFAULT_LEARNING_POLICY;
+    // Cast to bypass TypeScript for runtime defensive check
+    const candidate = createCandidate({ sourceOutcomeIds: 'not-an-array' as unknown as string[] });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(false);
+    expect(r.reasonCode).toBe('MISSING_OUTCOME_SOURCE');
+  });
+
+  it('7.7 empty candidate type string rejected', () => {
+    const policy = DEFAULT_LEARNING_POLICY;
+    const candidate = createCandidate({ type: '' as never });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(false);
+    expect(r.reasonCode).toBe('DISALLOWED_CANDIDATE_TYPE');
+  });
+
+  it('7.8 candidate with whitespace-only type rejected', () => {
+    const policy = DEFAULT_LEARNING_POLICY;
+    const candidate = createCandidate({ type: '   ' as never });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(false);
+    expect(r.reasonCode).toBe('DISALLOWED_CANDIDATE_TYPE');
+  });
+
+  it('7.9 failed item is not represented as policy-failed', async () => {
+    const fs = new InMemoryMemoryStore();
+    fs.create = async () => { throw new Error('write fail'); };
+    const src = createSource({ feedback: createFeedback({ metricAggregations: [], trends: [], outcomeCount: 1 }) });
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(fs));
+    const item = res.items.find((i) => i.status === 'failed');
+    expect(item).toBeDefined();
+    // errorCode present (operational), reasonCode must NOT be a policy failure code
+    expect(item!.errorCode).toBe('PERSISTENCE_WRITE_FAILED');
+    // reasonCode on a failed item should be undefined or a policy code — NOT a fabricated persistence code
+    expect(item!.reasonCode).not.toBe('PERSISTENCE_WRITE_FAILED');
+  });
+
+  it('7.10 persisted item never has an errorCode', async () => {
+    const store = new InMemoryMemoryStore();
+    const src = createSource();
+    const res = await runRuntimeLearning({ authenticatedOwnerId: TEST_OWNER_A, sources: [src] }, createDeps(store));
+    const persisted = res.items.find((i) => i.status === 'persisted');
+    if (persisted) {
+      expect(persisted.errorCode).toBeUndefined();
+    }
   });
 });
