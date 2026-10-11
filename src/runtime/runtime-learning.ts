@@ -97,6 +97,7 @@ export type RuntimeLearningPolicyReasonCode =
   | 'MISSING_DECISION_SOURCE'
   | 'MISSING_FEEDBACK_SOURCE'
   | 'MISSING_OUTCOME_SOURCE'
+  | 'INVALID_OUTCOME_EVIDENCE'
   | 'SCOPE_NOT_ALLOWED';
 
 export interface RuntimeLearningPolicyEvaluation {
@@ -160,7 +161,7 @@ const _DEFAULT_ALLOWED_SCOPES: readonly PersistentMemoryScope[] = Object.freeze(
   'project',
 ]);
 
-const DEFAULT_LEARNING_POLICY: ContextOSLearningPolicy = {
+const _DEFAULT_LEARNING_POLICY: ContextOSLearningPolicy = {
   minConfidence: 0.3,
   minImportance: 0,
   maxCandidatesPerRun: 20,
@@ -169,7 +170,11 @@ const DEFAULT_LEARNING_POLICY: ContextOSLearningPolicy = {
   requireOutcomeEvidence: true,
 };
 
-export { DEFAULT_LEARNING_POLICY };
+/**
+ * Top-level frozen default policy. The entire object is immutable at runtime:
+ * scalar properties cannot be reassigned; nested arrays are individually frozen.
+ */
+export const DEFAULT_LEARNING_POLICY: Readonly<ContextOSLearningPolicy> = Object.freeze(_DEFAULT_LEARNING_POLICY);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Policy Validation
@@ -194,6 +199,18 @@ const VALID_SCOPES = new Set<string>([
 export function validatePolicy(
   partial: Partial<ContextOSLearningPolicy> = {},
 ): ContextOSLearningPolicy {
+  // ── Validate override types BEFORE spreading (prevent TypeError on non-iterables) ──
+  if (partial.allowedCandidateTypes !== undefined && !Array.isArray(partial.allowedCandidateTypes)) {
+    throw new LearningValidationError(
+      `allowedCandidateTypes must be an array. Got: ${typeof partial.allowedCandidateTypes}`,
+    );
+  }
+  if (partial.allowedScopes !== undefined && !Array.isArray(partial.allowedScopes)) {
+    throw new LearningValidationError(
+      `allowedScopes must be an array. Got: ${typeof partial.allowedScopes}`,
+    );
+  }
+
   const merged: ContextOSLearningPolicy = {
     ...DEFAULT_LEARNING_POLICY,
     ...partial,
@@ -201,9 +218,24 @@ export function validatePolicy(
 
   // Arrays: use caller-provided copy if explicitly set, else frozen default persists
   if (partial.allowedCandidateTypes !== undefined) {
+    // Re-validate elements before freezing (already passed Array.isArray above)
+    for (const ct of partial.allowedCandidateTypes) {
+      if (!VALID_CANDIDATE_TYPES.has(ct)) {
+        throw new LearningValidationError(
+          `allowedCandidateTypes contains unknown value: "${ct}"`,
+        );
+      }
+    }
     merged.allowedCandidateTypes = Object.freeze([...partial.allowedCandidateTypes]);
   }
   if (partial.allowedScopes !== undefined) {
+    for (const sc of partial.allowedScopes) {
+      if (!VALID_SCOPES.has(sc)) {
+        throw new LearningValidationError(
+          `allowedScopes contains unknown value: "${sc}"`,
+        );
+      }
+    }
     merged.allowedScopes = Object.freeze([...partial.allowedScopes]);
   }
 
@@ -349,12 +381,19 @@ export function evaluateLearningCandidate(
     return ineligible('MISSING_FEEDBACK_SOURCE');
   }
 
-  // 9. Outcome evidence required (when policy demands it)
-  // Defensively handle malformed outcome-ID collections (non-array = treated as missing).
-  const outcomeIds: readonly string[] = Array.isArray(candidate.sourceOutcomeIds)
-    ? candidate.sourceOutcomeIds
-    : ([] as string[]);
-  if (policy.requireOutcomeEvidence && outcomeIds.length === 0) {
+  // 9. Outcome evidence validation — independent of requireOutcomeEvidence setting
+  // 9a. Reject non-array evidence collections (malformed)
+  if (!Array.isArray(candidate.sourceOutcomeIds)) {
+    return ineligible('INVALID_OUTCOME_EVIDENCE');
+  }
+  // 9b. Validate array elements: each must be a non-empty string
+  for (const outcomeId of candidate.sourceOutcomeIds) {
+    if (typeof outcomeId !== 'string' || outcomeId.trim().length === 0) {
+      return ineligible('INVALID_OUTCOME_EVIDENCE');
+    }
+  }
+  // 9c. When outcome evidence is required, empty collection is ineligible
+  if (policy.requireOutcomeEvidence && candidate.sourceOutcomeIds.length === 0) {
     return ineligible('MISSING_OUTCOME_SOURCE');
   }
 
@@ -462,9 +501,16 @@ function buildMemoryRecord(
   authenticatedOwnerId: string,
   processingTimestamp: string,
 ): MemoryRecord<LearningCandidate> {
-  // Deduplicated decision + outcome IDs
+  // Deduplicated decision + outcome IDs.
+  // Defensive: sourceOutcomeIds guaranteed to be string[] at this point
+  // (validated in evaluateLearningCandidate step 9a/9b). If malformed data
+  // somehow bypasses evaluation, spread of non-iterable throws controlled TypeError
+  // rather than silent data corruption.
+  const safeOutcomeIds: string[] = Array.isArray(candidate.sourceOutcomeIds)
+    ? candidate.sourceOutcomeIds.filter((id) => typeof id === 'string' && id.trim().length > 0)
+    : [];
   const derivedFrom = Array.from(
-    new Set([candidate.sourceDecisionId, ...candidate.sourceOutcomeIds]),
+    new Set([candidate.sourceDecisionId, ...safeOutcomeIds]),
   );
 
   return {

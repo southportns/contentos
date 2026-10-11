@@ -807,13 +807,13 @@ describe('P0.7.5-R1 — Policy & Input Hardening', () => {
     ]);
   });
 
-  it('7.6 malformed candidate sourceOutcomeIds (non-array) handled predictably', () => {
+  it('7.6 malformed candidate sourceOutcomeIds (non-array) returns INVALID_OUTCOME_EVIDENCE', () => {
     const policy = DEFAULT_LEARNING_POLICY;
     // Cast to bypass TypeScript for runtime defensive check
     const candidate = createCandidate({ sourceOutcomeIds: 'not-an-array' as unknown as string[] });
     const r = evaluateLearningCandidate(candidate, policy);
     expect(r.eligible).toBe(false);
-    expect(r.reasonCode).toBe('MISSING_OUTCOME_SOURCE');
+    expect(r.reasonCode).toBe('INVALID_OUTCOME_EVIDENCE');
   });
 
   it('7.7 empty candidate type string rejected', () => {
@@ -853,5 +853,175 @@ describe('P0.7.5-R1 — Policy & Input Hardening', () => {
     if (persisted) {
       expect(persisted.errorCode).toBeUndefined();
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 8. POLICY IMMUTABILITY (P0.7.5-R1.1)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('P0.7.5-R1.1 — Policy Immutability', () => {
+  it('8.1 DEFAULT_LEARNING_POLICY is frozen at top-level', () => {
+    expect(Object.isFrozen(DEFAULT_LEARNING_POLICY)).toBe(true);
+  });
+
+  it('8.2 nested default arrays are frozen', () => {
+    expect(Object.isFrozen(DEFAULT_LEARNING_POLICY.allowedCandidateTypes)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_LEARNING_POLICY.allowedScopes)).toBe(true);
+  });
+
+  it('8.3 mutation of scalar default property throws (strict mode) or is silently ignored', () => {
+    // In strict mode (common for ESM), assignment to frozen property throws TypeError.
+    // In slient mode it silently fails. Either way, the value must NOT change.
+    const before = DEFAULT_LEARNING_POLICY.minConfidence;
+    try {
+      (DEFAULT_LEARNING_POLICY as { minConfidence: number }).minConfidence = 999;
+    } catch {
+      // Expected in strict mode
+    }
+    expect(DEFAULT_LEARNING_POLICY.minConfidence).toBe(before);
+    expect(DEFAULT_LEARNING_POLICY.minConfidence).toBe(0.3); // preserved original
+  });
+
+  it('8.4 validatePolicy returns original defaults after mutation attempt on default', () => {
+    // Attempt to reassign default property (may throw in strict mode)
+    try {
+      (DEFAULT_LEARNING_POLICY as { maxCandidatesPerRun: number }).maxCandidatesPerRun = 999;
+    } catch {
+      // Expected
+    }
+    // After mutation attempt, validatePolicy must still produce correct defaults
+    const p = validatePolicy();
+    expect(p.minConfidence).toBe(0.3);
+    expect(p.minImportance).toBe(0);
+    expect(p.maxCandidatesPerRun).toBe(20);
+    expect(p.requireOutcomeEvidence).toBe(true);
+    expect(p.allowedCandidateTypes).toEqual([
+      'decision_pattern', 'successful_pattern', 'failure_pattern', 'preference_signal', 'strategy_signal',
+    ]);
+    expect(p.allowedScopes).toEqual(['topic', 'project']);
+  });
+
+  it('8.5 caller-supplied overrides are isolated from shared defaults', () => {
+    const p = validatePolicy({ minConfidence: 0.8, allowedScopes: ['global'] });
+    expect(p.minConfidence).toBe(0.8);
+    expect(p.allowedScopes).toEqual(['global']);
+    // Default must remain unchanged
+    expect(DEFAULT_LEARNING_POLICY.minConfidence).toBe(0.3);
+    expect(DEFAULT_LEARNING_POLICY.allowedScopes).toEqual(['topic', 'project']);
+  });
+
+  it('8.6 muted returned policy arrays do not leak back to defaults', () => {
+    const p = validatePolicy({ allowedCandidateTypes: ['decision_pattern'] });
+    // Attempt to mutate the returned frozen array
+    expect(() => { (p.allowedCandidateTypes as string[]).push('evil'); }).toThrow();
+    // Default arrays must remain intact
+    expect(DEFAULT_LEARNING_POLICY.allowedCandidateTypes).toEqual([
+      'decision_pattern', 'successful_pattern', 'failure_pattern', 'preference_signal', 'strategy_signal',
+    ]);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 9. OUTCOME EVIDENCE VALIDATION (P0.7.5-R1.1)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('P0.7.5-R1.1 — Outcome Evidence Validation', () => {
+  it('9.1 non-array outcome IDs with required policy → INVALID_OUTCOME_EVIDENCE', () => {
+    const policy: ContextOSLearningPolicy = DEFAULT_LEARNING_POLICY;
+    const candidate = createCandidate({ sourceOutcomeIds: 'malformed' as unknown as string[] });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(false);
+    expect(r.reasonCode).toBe('INVALID_OUTCOME_EVIDENCE');
+  });
+
+  it('9.2 non-array outcome IDs with optional policy → INVALID_OUTCOME_EVIDENCE', () => {
+    const policy: ContextOSLearningPolicy = { ...DEFAULT_LEARNING_POLICY, requireOutcomeEvidence: false };
+    const candidate = createCandidate({ sourceOutcomeIds: 42 as unknown as string[] });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(false);
+    expect(r.reasonCode).toBe('INVALID_OUTCOME_EVIDENCE');
+  });
+
+  it('9.3 array with non-string ID → INVALID_OUTCOME_EVIDENCE', () => {
+    const policy: ContextOSLearningPolicy = DEFAULT_LEARNING_POLICY;
+    const candidate = createCandidate({ sourceOutcomeIds: [123 as unknown as string] });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(false);
+    expect(r.reasonCode).toBe('INVALID_OUTCOME_EVIDENCE');
+  });
+
+  it('9.4 array with empty-string ID → INVALID_OUTCOME_EVIDENCE', () => {
+    const policy: ContextOSLearningPolicy = DEFAULT_LEARNING_POLICY;
+    const candidate = createCandidate({ sourceOutcomeIds: [''] });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(false);
+    expect(r.reasonCode).toBe('INVALID_OUTCOME_EVIDENCE');
+  });
+
+  it('9.5 array with whitespace-only ID → INVALID_OUTCOME_EVIDENCE', () => {
+    const policy: ContextOSLearningPolicy = DEFAULT_LEARNING_POLICY;
+    const candidate = createCandidate({ sourceOutcomeIds: ['   '] });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(false);
+    expect(r.reasonCode).toBe('INVALID_OUTCOME_EVIDENCE');
+  });
+
+  it('9.6 valid empty outcome array when policy allows absent evidence', () => {
+    const policy: ContextOSLearningPolicy = { ...DEFAULT_LEARNING_POLICY, requireOutcomeEvidence: false };
+    const candidate = createCandidate({ sourceOutcomeIds: [] });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(true);
+    expect(r.reasonCode).toBe('VALID_POLICY');
+  });
+
+  it('9.7 malformed evidence never reaches memory construction', () => {
+    // Even if requireOutcomeEvidence is false, malformed evidence is rejected
+    // regardless of requireOutcomeEvidence — buildMemoryRecord is only called after passing eval
+    const policy: ContextOSLearningPolicy = validatePolicy({ requireOutcomeEvidence: false });
+    const candidate = createCandidate({ sourceOutcomeIds: [null as unknown as string] });
+    const r = evaluateLearningCandidate(candidate, policy);
+    expect(r.eligible).toBe(false);
+    expect(r.reasonCode).toBe('INVALID_OUTCOME_EVIDENCE');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 10. POLICY OVERRIDE TYPE VALIDATION (P0.7.5-R1.1)
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('P0.7.5-R1.1 — Policy Override Type Validation', () => {
+  it('10.1 non-array allowedCandidateTypes throws LearningValidationError', () => {
+    expect(() => validatePolicy({ allowedCandidateTypes: 'decision_pattern' as never }))
+      .toThrow(LearningValidationError);
+  });
+
+  it('10.2 non-array allowedScopes throws LearningValidationError', () => {
+    expect(() => validatePolicy({ allowedScopes: 'topic' as never }))
+      .toThrow(LearningValidationError);
+  });
+
+  it('10.3 number override for allowedCandidateTypes throws', () => {
+    expect(() => validatePolicy({ allowedCandidateTypes: 42 as never }))
+      .toThrow(LearningValidationError);
+  });
+
+  it('10.4 object override for allowedScopes throws', () => {
+    expect(() => validatePolicy({ allowedScopes: { topic: true } as never }))
+      .toThrow(LearningValidationError);
+  });
+
+  it('10.5 array with unknown entries still rejected', () => {
+    expect(() => validatePolicy({ allowedCandidateTypes: ['unknown_type' as never] }))
+      .toThrow(LearningValidationError);
+    expect(() => validatePolicy({ allowedScopes: ['invalid_scope' as never] }))
+      .toThrow(LearningValidationError);
+  });
+
+  it('10.6 valid overrides with valid entries accepted', () => {
+    const p = validatePolicy({ allowedCandidateTypes: ['decision_pattern'] });
+    expect(p.allowedCandidateTypes).toEqual(['decision_pattern']);
+  });
+
+  it('10.7 empty array override rejected', () => {
+    expect(() => validatePolicy({ allowedCandidateTypes: [] as never }))
+      .toThrow(LearningValidationError);
   });
 });
