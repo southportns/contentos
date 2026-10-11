@@ -226,22 +226,38 @@ function makeDecisionMemory(id: string, ownerId: string): DecisionMemory {
 }
 
 function makeDecisionFeedback(decisionId: string, ownerId: string): DecisionFeedback {
+  // Produces a valid DecisionFeedback that can generate eligible candidates
+  // under DEFAULT_LEARNING_POLICY (requireOutcomeEvidence: true).
+  // outcomeIds MUST be non-empty for sourceOutcomeIds to pass validation.
   return {
     id: 'dfb_' + decisionId,
     ownerId,
     decisionId,
     status: 'evidence_available',
-    outcomeCount: 2,
+    outcomeCount: 1,
     outcomes: [],
-    outcomeIds: [],
+    outcomeIds: ['out_' + decisionId],
     metrics: [],
-    metricAggregations: [],
-    trends: [],
+    metricAggregations: [
+      {
+        metricKey: 'views', unit: 'count', count: 1,
+        sum: 15000, avg: 15000, min: 15000, max: 15000,
+        median: 15000, firstValue: 15000, lastValue: 15000,
+        firstObservedAt: NOW, lastObservedAt: NOW,
+      },
+    ],
+    trends: [
+      {
+        metricKey: 'views', unit: 'count',
+        currentValue: 15000, previousValue: 8000,
+        delta: 7000, deltaPercent: 87.5, direction: 'up',
+      },
+    ],
     trend: undefined,
     completeness: 'complete',
     windowStart: NOW,
     windowEnd: NOW,
-    outcomeTypes: [],
+    outcomeTypes: ['engagement'],
   };
 }
 
@@ -376,7 +392,7 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
       expect(memoryStore.callLog).toHaveLength(0);
     });
 
-    it('A-3: valid learning evidence reaches P0.7.5 pipeline', async () => {
+    it('A-3: valid learning evidence reaches P0.7.5 pipeline and persists', async () => {
       const callbacks = createTestCallbacks();
       const runStore = new FakeRunStore();
       const memoryStore = new FakeMemoryStore();
@@ -384,14 +400,18 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
 
       const result = await runContextOSAgentLoop(makeRequest(), deps);
 
-      // With the default policy (requireOutcomeEvidence: true) and our simple
-      // fixture (empty outcomeIds), candidates are evaluated but discarded
-      // (sourceOutcomeIds is empty → MISSING_OUTCOME_SOURCE → discarded).
-      // The key assertion: the pipeline RAN (was configured and executed).
+      // With valid outcomeIds and metricAggregations, the default policy
+      // (requireOutcomeEvidence: true) should produce eligible candidates.
+      // The pipeline RAN and persisted at least one record.
       expect(result.diagnostics.resolveEvidence).toBe('completed');
       expect(result.diagnostics.learning).toBe('completed');
-      // The result is populated (pipeline ran)
       expect(result.learningResult).not.toBeNull();
+      // Genuine persistence: MemoryStore.create was called at least once
+      const createCalls = memoryStore.callLog.filter((c) => c.startsWith('create:'));
+      expect(createCalls.length).toBeGreaterThan(0);
+      // learningOutcome is 'completed' (no failures)
+      expect(result.learningOutcome).toBe('completed');
+      expect(result.learningResult!.counts.persisted).toBeGreaterThan(0);
     });
   });
 
@@ -456,9 +476,11 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
       // Run persisted as started and then failed
       expect(runStore.callLog).toEqual(['create:started', 'update:failed']);
 
-      const persistedRun = runStore.getRun('run_' + TEST_OWNER + '_' + NOW);
-      expect(persistedRun?.status).toBe('failed');
-      expect(persistedRun?.completedAt).toBe(NOW);
+      // Find the failed run in the store (ID format includes contentHash)
+      const { runs: allRuns } = await runStore.list({ ownerId: TEST_OWNER });
+      expect(allRuns).toHaveLength(1);
+      expect(allRuns[0].status).toBe('failed');
+      expect(allRuns[0].completedAt).toBe(NOW);
     });
 
     it('B-4: assembly failure marks run failed', async () => {
@@ -546,7 +568,7 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
     it('B-9: failure-state persistence failure is reported without losing original error', async () => {
       const callbacks = createTestCallbacks();
       const runStore = new FakeRunStore();
-      const retrieveContext = vi.fn(async (): Promise<ContextOSObject[]> => {
+      const retrieveContext = vi.fn(async (): Promise<ContextObject[]> => {
         throw new Error('Original retrieval error');
       });
       const originalUpdate = runStore.update.bind(runStore);
@@ -581,7 +603,12 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
 
       // The loop still completes (learning failure is NOT a run failure)
       expect(result.run.status).toBe('completed');
+      // Resolution failure is distinguished from 'no_evidence':
+      //   - resolveEvidence = 'failed' (resolver threw)
+      //   - learningOutcome = 'failed' (resolution itself broke, not empty result)
       expect(result.diagnostics.resolveEvidence).toBe('failed');
+      expect(result.learningOutcome).toBe('failed');
+      expect(result.diagnostics.learning).toBe('failed');
       expect(result.diagnostics.warnings.some((w) => w.includes('Resolver crashed'))).toBe(true);
     });
 
@@ -618,36 +645,70 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
 
       const result = await runContextOSAgentLoop(makeRequest(), deps);
 
-      // The pipeline should run but produce a failed result
-      // This depends on the exact behavior of the learning pipeline
-      // With our simple fixture and default policy, candidates are discarded
-      // So learningOutcome is 'completed' with all discarded
-      expect(result.learningOutcome).toBe('completed');
+      // With valid outcomeIds, candidates ARE eligible.
+      // MemoryStore.create fails → pipeline records a failure (counts.failed > 0).
+      // Run still completes (learning failure != run failure).
+      expect(result.run.status).toBe('completed');
+      expect(result.learningOutcome).toBe('failed');
       expect(result.learningResult).not.toBeNull();
+      expect(result.learningResult!.counts.failed).toBeGreaterThan(0);
     });
 
-    it('C-4: repeated execution with deterministic IDs does not crash', async () => {
-      const callbacks = createTestCallbacks();
+    it('C-4: two independent runs with same store and clock produce different IDs', async () => {
+      const callbacks1 = createTestCallbacks();
+      const callbacks2 = createTestCallbacks();
       const memoryStore = new FakeMemoryStore();
 
-      // First execution
-      const runStore1 = new FakeRunStore();
-      const deps1 = makeDependencies(callbacks, { runStore: runStore1, memoryStore });
-      await runContextOSAgentLoop(makeRequest(), deps1);
-      const recordsAfterFirst = memoryStore.callLog.filter((c) => c.startsWith('create:')).length;
+      // SHARED runStore — both runs hit the same store
+      const sharedRunStore = new FakeRunStore();
 
-      // Second execution (different runStore because same ID would conflict)
+      // First run: default request (input: { text: 'test input' })
+      const req1 = makeRequest();
+      const deps1 = makeDependencies(callbacks1, { runStore: sharedRunStore, memoryStore });
+      const result1 = await runContextOSAgentLoop(req1, deps1);
+
+      // Second run: DIFFERENT input (produces different contentHash → different ID)
+      const req2 = makeRequest({ input: { text: 'different input' } });
+      const deps2 = makeDependencies(callbacks2, { runStore: sharedRunStore, memoryStore });
+      const result2 = await runContextOSAgentLoop(req2, deps2);
+
+      // Both runs complete successfully — no ID collision
+      expect(result1.run.status).toBe('completed');
+      expect(result2.run.status).toBe('completed');
+
+      // Different inputs → different content hashes → different Run IDs
+      expect(result1.run.id).not.toBe(result2.run.id);
+
+      // Both runs persisted in the same store
+      expect(sharedRunStore.getRun(result1.run.id)).toBeDefined();
+      expect(sharedRunStore.getRun(result2.run.id)).toBeDefined();
+
+      // Both should be logged as created
+      const createdStatuses = sharedRunStore.callLog.filter((c) => c === 'create:started');
+      expect(createdStatuses).toHaveLength(2);
+    });
+
+    it('C-5: explicit taskId contributes to run ID differentiation', async () => {
+      const callbacks1 = createTestCallbacks();
       const callbacks2 = createTestCallbacks();
-      const runStore2 = new FakeRunStore();
-      const req2 = makeRequest({ taskId: 'task_2' });
-      const deps2 = makeDependencies(callbacks2, { runStore: runStore2, memoryStore });
+      const memoryStore = new FakeMemoryStore();
+      const sharedRunStore = new FakeRunStore();
 
-      await runContextOSAgentLoop(req2, deps2);
-      const recordsAfterSecond = memoryStore.callLog.filter((c) => c.startsWith('create:')).length;
+      // Same owner, same clock, same input — but different taskId
+      const req1 = makeRequest({ taskId: 'task_alpha' });
+      const req2 = makeRequest({ taskId: 'task_beta' });
 
-      // Idempotency should prevent duplicate creates
-      // Either same count or same records
-      expect(recordsAfterSecond).toBeGreaterThanOrEqual(recordsAfterFirst);
+      const deps1 = makeDependencies(callbacks1, { runStore: sharedRunStore, memoryStore });
+      const result1 = await runContextOSAgentLoop(req1, deps1);
+
+      const deps2 = makeDependencies(callbacks2, { runStore: sharedRunStore, memoryStore });
+      const result2 = await runContextOSAgentLoop(req2, deps2);
+
+      // Different taskIds → different IDs (even with same timestamp)
+      expect(result1.run.id).not.toBe(result2.run.id);
+      // Both complete
+      expect(result1.run.status).toBe('completed');
+      expect(result2.run.status).toBe('completed');
     });
   });
 

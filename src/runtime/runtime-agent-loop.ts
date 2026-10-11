@@ -316,12 +316,48 @@ function sanitizeIdArray(ids: unknown): string[] {
  *
  * Reuses the same deterministic ID scheme as runContextOS().
  */
+/**
+ * Deterministic, collision-resistant Run ID generator.
+ *
+ * ID Format: `run_{ownerId}_{taskId|''}_{contentHash}_{timestamp}`
+ *
+ * Contract:
+ *   - `taskId` (optional) is a TRACKING identifier, NOT an idempotency key.
+ *     When present, it is included in the ID for observability.
+ *   - `contentHash` is a short deterministic hash of `{purpose, input}` that
+ *     guarantees uniqueness for different requests even with the same owner,
+ *     timestamp, and no taskId. This prevents silent merging of independent runs.
+ *   - Two requests with identical (owner, taskId, purpose, input, timestamp)
+ *     produce the same ID (legitimate retry). The first write wins.
+ *   - Backward compatibility with runContextOS() is NOT required because
+ *     runContextOS() uses its own `createRuntimeRunId()` function; P0.7.6
+ *     Agent Loop establishes its own ID contract.
+ */
+function generateRunId(request: ContextOSRuntimeRequest, timestamp: string): string {
+  const contentHash = shortHash(`${request.purpose}:${JSON.stringify(request.input)}`);
+  const trackingPart = request.taskId ? `${request.taskId}_` : '';
+  return `run_${request.ownerId}_${trackingPart}${contentHash}_${timestamp}`;
+}
+
+/**
+ * Fast deterministic string hash (djb2 variant).
+ * Produces an 8-character base-36 string with negligible collision
+ * probability for typical request volumes.
+ */
+function shortHash(str: string): string {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36).slice(0, 8);
+}
+
 function createStartedRun(
   request: ContextOSRuntimeRequest,
   timestamp: string
 ): ContextOSRun {
   return {
-    id: `run_${request.ownerId}_${timestamp}`,
+    id: generateRunId(request, timestamp),
     ownerId: request.ownerId,
     projectId: request.projectId,
     topicId: request.topicId,
@@ -464,6 +500,7 @@ export async function runContextOSAgentLoop(
     // ─── Stage 8: Resolve Learning Evidence ───────────────────────────────
     // The resolver returns ACTUAL persisted evidence (not fabricated).
     let learningSources: readonly RuntimeLearningSource[] = [];
+    let evidenceResolutionFailed = false;
     try {
       learningSources = await dependencies.resolveLearningEvidence(
         request,
@@ -473,6 +510,8 @@ export async function runContextOSAgentLoop(
       diagnostics.resolveEvidence = 'completed';
     } catch (resolveError) {
       // Resolution failure is reported truthfully — do not fabricate sources.
+      // This is DISTINCT from "no evidence": the resolver itself broke.
+      evidenceResolutionFailed = true;
       diagnostics.resolveEvidence = 'failed';
       diagnostics.warnings.push(
         `Learning evidence resolution failed: ${resolveError instanceof Error ? resolveError.message : String(resolveError)}`
@@ -481,9 +520,18 @@ export async function runContextOSAgentLoop(
 
     // ─── Stage 9: P0.7.5 Learning Pipeline ────────────────────────────────
     // Only execute if memoryStore is configured AND we have evidence.
+    // Critical state distinctions (R1 contract):
+    //   - memoryStore missing  → 'skipped' (never attempted)
+    //   - resolver threw       → 'failed'  (NOT no_evidence)
+    //   - resolver returned [] → 'no_evidence' (valid empty state)
+    //   - pipeline ran, items failed → 'failed' (persistence errors)
     if (!dependencies.memoryStore) {
       learningOutcome = 'skipped';
       diagnostics.learning = 'skipped';
+    } else if (evidenceResolutionFailed) {
+      // Resolution itself failed — NOT the same as 'no evidence'
+      learningOutcome = 'failed';
+      diagnostics.learning = 'failed';
     } else if (learningSources.length === 0) {
       // Valid state: no evidence available — not a failure.
       learningOutcome = 'no_evidence';
@@ -505,8 +553,19 @@ export async function runContextOSAgentLoop(
             now,
           }
         );
-        learningOutcome = 'completed';
-        diagnostics.learning = 'completed';
+        // Distinguish pipeline completion from successful persistence:
+        //   - counts.failed > 0 means some candidates failed to persist → 'failed'
+        //   - counts.failed === 0 means all candidates processed cleanly → 'completed'
+        if (learningResult.counts.failed > 0) {
+          learningOutcome = 'failed';
+          diagnostics.learning = 'failed';
+          diagnostics.warnings.push(
+            `Learning pipeline completed with ${learningResult.counts.failed} failed persistence/${learningResult.counts.total} total candidates`
+          );
+        } else {
+          learningOutcome = 'completed';
+          diagnostics.learning = 'completed';
+        }
       } catch (learningError) {
         // Learning failure (including owner mismatch) is reported,
         // NOT treated as a Run failure. The Agent succeeded even if learning didn't.
