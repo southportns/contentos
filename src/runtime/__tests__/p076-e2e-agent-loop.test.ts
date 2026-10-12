@@ -9,7 +9,7 @@
  * - Assert exact call ordering (not just "was called")
  * - Prove meaningful state transitions
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ContextOSRun, ContextOSRunStatus } from '../runtime-types';
 import type { ContextObject } from '@/context/context-object';
 import type { ContextOSRuntimeRequest } from '../runtime-types';
@@ -24,6 +24,8 @@ import type { DecisionFeedback } from '@/memory/decision-feedback';
 import { MemoryConcurrencyError } from '@/memory/persistence/memory-persistence-types';
 import {
   runContextOSAgentLoop,
+  generateRunId,
+  canonicalJson,
 } from '../runtime-agent-loop';
 import type {
   RuntimeAgentLoopDependencies,
@@ -476,7 +478,7 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
       // Run persisted as started and then failed
       expect(runStore.callLog).toEqual(['create:started', 'update:failed']);
 
-      // Find the failed run in the store (ID format includes contentHash)
+      // Find the failed run in the store (ID format includes sha256hex)
       const { runs: allRuns } = await runStore.list({ ownerId: TEST_OWNER });
       expect(allRuns).toHaveLength(1);
       expect(allRuns[0].status).toBe('failed');
@@ -667,7 +669,7 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
       const deps1 = makeDependencies(callbacks1, { runStore: sharedRunStore, memoryStore });
       const result1 = await runContextOSAgentLoop(req1, deps1);
 
-      // Second run: DIFFERENT input (produces different contentHash → different ID)
+      // Second run: DIFFERENT input (produces different sha256 → different ID)
       const req2 = makeRequest({ input: { text: 'different input' } });
       const deps2 = makeDependencies(callbacks2, { runStore: sharedRunStore, memoryStore });
       const result2 = await runContextOSAgentLoop(req2, deps2);
@@ -837,6 +839,118 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
       expect(result.run.decisionIds).toEqual([]);
       expect(result.run.outcomeIds).toEqual([]);
       expect(result.run.output).toBe('minimal');
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Group E: Run ID Hash Identity (R1.2)
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('Group E: Run ID Hash Identity (R1.2)', () => {
+    it('E-A: known collision pair produces different IDs under SHA-256', () => {
+      // These two inputs demonstrated collisions under the old djb2 shortHash.
+      // With SHA-256, they MUST produce different IDs.
+      const reqA = makeRequest({ input: { text: 'gRCtcDDK9gr8' } });
+      const reqB = makeRequest({ input: { text: 'scXV4x9hBVQV' } });
+
+      const idA = generateRunId(reqA, NOW);
+      const idB = generateRunId(reqB, NOW);
+
+      expect(idA).not.toBe(idB);
+    });
+
+    it('E-A-full: both collision-pair runs complete independently in shared store', async () => {
+      const callbacks1 = createTestCallbacks();
+      const callbacks2 = createTestCallbacks();
+      const memoryStore = new FakeMemoryStore();
+      const sharedRunStore = new FakeRunStore();
+
+      const req1 = makeRequest({ input: { text: 'gRCtcDDK9gr8' } });
+      const req2 = makeRequest({ input: { text: 'scXV4x9hBVQV' } });
+
+      const deps1 = makeDependencies(callbacks1, { runStore: sharedRunStore, memoryStore });
+      const result1 = await runContextOSAgentLoop(req1, deps1);
+
+      const deps2 = makeDependencies(callbacks2, { runStore: sharedRunStore, memoryStore });
+      const result2 = await runContextOSAgentLoop(req2, deps2);
+
+      expect(result1.run.status).toBe('completed');
+      expect(result2.run.status).toBe('completed');
+      expect(result1.run.id).not.toBe(result2.run.id);
+      expect(sharedRunStore.getRun(result1.run.id)).toBeDefined();
+      expect(sharedRunStore.getRun(result2.run.id)).toBeDefined();
+    });
+
+    it('E-B-projectId: different projectId yields different run ID', () => {
+      const reqA = makeRequest({ projectId: 'proj_alpha' });
+      const reqB = makeRequest({ projectId: 'proj_beta' });
+      expect(generateRunId(reqA, NOW)).not.toBe(generateRunId(reqB, NOW));
+    });
+
+    it('E-B-topicId: different topicId yields different run ID', () => {
+      const reqA = makeRequest({ topicId: 'topic_alpha' });
+      const reqB = makeRequest({ topicId: 'topic_beta' });
+      expect(generateRunId(reqA, NOW)).not.toBe(generateRunId(reqB, NOW));
+    });
+
+    it('E-B-contextPolicy: different contextPolicy yields different run ID', () => {
+      const reqA = makeRequest({ contextPolicy: { maxTokens: 4000 } });
+      const reqB = makeRequest({ contextPolicy: { maxTokens: 8000 } });
+      expect(generateRunId(reqA, NOW)).not.toBe(generateRunId(reqB, NOW));
+    });
+
+    it('E-C-order: key order does not affect canonical serialization', () => {
+      const canonical1 = canonicalJson({ a: 1, b: 2, c: 3 });
+      const canonical2 = canonicalJson({ c: 3, a: 1, b: 2 });
+      const canonical3 = canonicalJson({ b: 2, c: 3, a: 1 });
+      expect(canonical1).toBe(canonical2);
+      expect(canonical2).toBe(canonical3);
+    });
+
+    it('E-C-nested: nested objects produce stable serialization', () => {
+      const input1 = { user: { name: 'alice', tags: ['admin', 'user'] }, count: 5 };
+      const input2 = { count: 5, user: { tags: ['admin', 'user'], name: 'alice' } };
+      expect(canonicalJson(input1)).toBe(canonicalJson(input2));
+    });
+
+    it('E-C-null: null and missing fields are handled distinctly where present', () => {
+      // In generateRunId, null fields are passed as null (not undefined).
+      // canonicalJson(null) → 'null' string.
+      expect(canonicalJson(null)).toBe('null');
+      expect(canonicalJson([1, null, 'x'])).toBe('[1,null,"x"]');
+    });
+
+    it('E-C-throw: undefined values throw a descriptive error', () => {
+      expect(() => canonicalJson({ a: undefined })).toThrow(/undefined/);
+      expect(() => canonicalJson(undefined)).toThrow(/unsupported type/);
+    });
+
+    it('E-D-deterministic: same identity and timestamp produce same ID', () => {
+      const req = makeRequest({ taskId: 'retry_task' });
+      const id1 = generateRunId(req, NOW);
+      const id2 = generateRunId(req, NOW);
+      expect(id1).toBe(id2);
+    });
+
+    it('E-D-conflict: duplicate ID triggers RunConflictError, not overwrite', async () => {
+      const callbacks = createTestCallbacks();
+      const memoryStore = new FakeMemoryStore();
+      const sharedRunStore = new FakeRunStore();
+
+      // First run with explicit taskId to get a known ID
+      const req = makeRequest({ taskId: 'conflict_test' });
+      const deps1 = makeDependencies(callbacks, { runStore: sharedRunStore, memoryStore });
+      const result1 = await runContextOSAgentLoop(req, deps1);
+      expect(result1.run.status).toBe('completed');
+
+      // Second run with same identity + timestamp must fail on create
+      // (FakeRunStore throws 'already exists' for duplicate IDs)
+      const deps2 = makeDependencies(createTestCallbacks(), { runStore: sharedRunStore, memoryStore });
+      await expect(runContextOSAgentLoop(req, deps2)).rejects.toThrow(/already exists/);
+
+      // Original record is intact
+      const original = sharedRunStore.getRun(result1.run.id);
+      expect(original).toBeDefined();
+      expect(original!.status).toBe('completed');
     });
   });
 });

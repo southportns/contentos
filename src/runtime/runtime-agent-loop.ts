@@ -39,6 +39,7 @@
  *      are all surfaced distinctly
  */
 
+import { createHash } from 'node:crypto';
 import type {
   ContextOSRuntimeRequest,
   ContextOSContextPolicy,
@@ -317,39 +318,92 @@ function sanitizeIdArray(ids: unknown): string[] {
  * Reuses the same deterministic ID scheme as runContextOS().
  */
 /**
- * Deterministic, collision-resistant Run ID generator.
+ * Deterministic Run ID generator using SHA-256.
  *
- * ID Format: `run_{ownerId}_{taskId|''}_{contentHash}_{timestamp}`
+ * ID Format: `run_{ownerId}_{taskId?}_{sha256hex}_{timestamp}`
  *
  * Contract:
  *   - `taskId` (optional) is a TRACKING identifier, NOT an idempotency key.
- *     When present, it is included in the ID for observability.
- *   - `contentHash` is a short deterministic hash of `{purpose, input}` that
- *     guarantees uniqueness for different requests even with the same owner,
- *     timestamp, and no taskId. This prevents silent merging of independent runs.
- *   - Two requests with identical (owner, taskId, purpose, input, timestamp)
- *     produce the same ID (legitimate retry). The first write wins.
+ *     When present, it is embedded in the ID for observability.
+ *   - `sha256hex` is the full 64-character SHA-256 hex digest of a canonical
+ *     serialization of the request's identity fields: taskId, projectId,
+ *     topicId, purpose, input, and contextPolicy.
+ *   - Two requests with identical identity fields and timestamp produce the
+ *     same ID (deterministic; intended for stable retries). The first write
+ *     wins — duplicate IDs are rejected by RunStore.create() with
+ *     RunConflictError (no overwrite).
+ *   - SHA-256 provides 2^128 collision resistance (birthday bound). For any
+ *     practical request volume, collisions are astronomically improbable.
+ *     However, no hash function can guarantee mathematical uniqueness —
+ *     the system relies on the RunStore to enforce uniqueness at write time.
  *   - Backward compatibility with runContextOS() is NOT required because
  *     runContextOS() uses its own `createRuntimeRunId()` function; P0.7.6
  *     Agent Loop establishes its own ID contract.
  */
-function generateRunId(request: ContextOSRuntimeRequest, timestamp: string): string {
-  const contentHash = shortHash(`${request.purpose}:${JSON.stringify(request.input)}`);
+export function generateRunId(request: ContextOSRuntimeRequest, timestamp: string): string {
+  const identity = canonicalJson({
+    taskId: request.taskId ?? null,
+    projectId: request.projectId ?? null,
+    topicId: request.topicId ?? null,
+    purpose: request.purpose,
+    input: request.input ?? null,
+    contextPolicy: request.contextPolicy ?? null,
+  });
+  const sha256hex = sha256Hash(identity);
   const trackingPart = request.taskId ? `${request.taskId}_` : '';
-  return `run_${request.ownerId}_${trackingPart}${contentHash}_${timestamp}`;
+  return `run_${request.ownerId}_${trackingPart}${sha256hex}_${timestamp}`;
 }
 
 /**
- * Fast deterministic string hash (djb2 variant).
- * Produces an 8-character base-36 string with negligible collision
- * probability for typical request volumes.
+ * Compute the SHA-256 hex digest of a string.
+ * Produces a full 64-character lowercase hexadecimal string.
  */
-function shortHash(str: string): string {
-  let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+export function sha256Hash(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+/**
+ * Deterministic JSON serialization.
+ *
+ * Guarantees that objects with identical key-value pairs always produce
+ * the same string regardless of key order. Handles nested objects, arrays,
+ * and primitive types (string, number, boolean, null).
+ *
+ * Throws `Error` if the value contains types that cannot be deterministically
+ * serialized (e.g., undefined, functions, symbols, BigInt, Date objects).
+ * This prevents silent fallback to `[object Object]` or undefined behavior.
+ */
+export function canonicalJson(value: unknown): string {
+  if (value === null) {
+    return 'null';
   }
-  return Math.abs(hash).toString(36).slice(0, 8);
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map(canonicalJson).join(',') + ']';
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const sortedKeys = Object.keys(obj).sort();
+    const parts: string[] = [];
+    for (const key of sortedKeys) {
+      const v = obj[key];
+      if (v === undefined) {
+        throw new Error(
+          `canonicalJson: undefined value for key "${key}" — cannot serialize deterministically`
+        );
+      }
+      parts.push(`${JSON.stringify(key)}:${canonicalJson(v)}`);
+    }
+    return '{' + parts.join(',') + '}';
+  }
+  throw new Error(
+    `canonicalJson: unsupported type "${typeof value}" — cannot serialize deterministically`
+  );
 }
 
 function createStartedRun(
