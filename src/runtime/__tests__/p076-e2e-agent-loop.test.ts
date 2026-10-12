@@ -953,4 +953,168 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
       expect(original!.status).toBe('completed');
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Group F: Strict Canonical JSON & Identity Field Boundary (R1.2.1)
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('Group F: Strict Canonical JSON & Identity Field Boundary (R1.2.1)', () => {
+
+    // ─── F-A: contextQuery contributes to identity ───────────────────────
+    it('F-A-contextQuery: different contextQuery yields different run ID', () => {
+      const reqA = makeRequest({ contextQuery: 'query_alpha' });
+      const reqB = makeRequest({ contextQuery: 'query_beta' });
+      expect(generateRunId(reqA, NOW)).not.toBe(generateRunId(reqB, NOW));
+    });
+
+    it('F-A-contextQuery-deterministic: same identity and timestamp produce same ID with contextQuery', () => {
+      const req = makeRequest({ contextQuery: 'stable_query' });
+      const id1 = generateRunId(req, NOW);
+      const id2 = generateRunId(req, NOW);
+      expect(id1).toBe(id2);
+    });
+
+    it('F-A-contextQuery-shared-store: two runs with different contextQuery both persist', async () => {
+      const callbacks1 = createTestCallbacks();
+      const callbacks2 = createTestCallbacks();
+      const memoryStore = new FakeMemoryStore();
+      const sharedRunStore = new FakeRunStore();
+
+      const req1 = makeRequest({ contextQuery: 'how to write hooks' });
+      const req2 = makeRequest({ contextQuery: 'viral content strategy' });
+
+      const deps1 = makeDependencies(callbacks1, { runStore: sharedRunStore, memoryStore });
+      const result1 = await runContextOSAgentLoop(req1, deps1);
+
+      const deps2 = makeDependencies(callbacks2, { runStore: sharedRunStore, memoryStore });
+      const result2 = await runContextOSAgentLoop(req2, deps2);
+
+      expect(result1.run.status).toBe('completed');
+      expect(result2.run.status).toBe('completed');
+      expect(result1.run.id).not.toBe(result2.run.id);
+      expect(sharedRunStore.getRun(result1.run.id)).toBeDefined();
+      expect(sharedRunStore.getRun(result2.run.id)).toBeDefined();
+    });
+
+    // ─── F-B: unsupported types are explicitly rejected ──────────────────
+    it('F-B-date: Date instances throw (not silently serialized)', () => {
+      const d1 = new Date('2026-01-01T00:00:00.000Z');
+      const d2 = new Date('2026-06-15T00:00:00.000Z');
+      expect(() => canonicalJson(d1)).toThrow(/unsupported type/);
+      expect(() => canonicalJson(d2)).toThrow(/unsupported type/);
+    });
+
+    it('F-B-map: Map throws', () => {
+      const m = new Map([['k', 'v']]);
+      expect(() => canonicalJson(m)).toThrow(/unsupported type/);
+    });
+
+    it('F-B-set: Set throws', () => {
+      const s = new Set(['a', 'b']);
+      expect(() => canonicalJson(s)).toThrow(/unsupported type/);
+    });
+
+    it('F-B-regexp: RegExp throws', () => {
+      const r = /test/gi;
+      expect(() => canonicalJson(r)).toThrow(/unsupported type/);
+    });
+
+    it('F-B-custom-prototype: class instance throws', () => {
+      class MyClass { foo = 'bar'; }
+      const instance = new MyClass();
+      expect(() => canonicalJson(instance)).toThrow(/unsupported type/);
+    });
+
+    it('F-B-nan: NaN throws', () => {
+      expect(() => canonicalJson(NaN)).toThrow(/non-finite number/);
+    });
+
+    it('F-B-infinity: Infinity and -Infinity throw', () => {
+      expect(() => canonicalJson(Infinity)).toThrow(/non-finite number/);
+      expect(() => canonicalJson(-Infinity)).toThrow(/non-finite number/);
+    });
+
+    it('F-B-nested-invalid: nested object containing unsupported value throws', () => {
+      expect(() => canonicalJson({ a: new Date() })).toThrow(/unsupported type/);
+      expect(() => canonicalJson({ nested: { bad: NaN } })).toThrow(/non-finite number/);
+      expect(() => canonicalJson([1, new Map(), 3])).toThrow(/unsupported type/);
+      expect(() => canonicalJson([{ deep: [Infinity] }])).toThrow(/non-finite number/);
+    });
+
+    it('F-B-minus-zero: -0 normalizes deterministically', () => {
+      expect(canonicalJson(-0)).toBe('0');
+      expect(canonicalJson(0)).toBe('0');
+    });
+
+    // ─── F-C: input null vs undefined ───────────────────────────────────
+    it('F-C-input-null: explicit null input serializes deterministically', () => {
+      const identityObj = { input: null };
+      expect(canonicalJson(identityObj)).toBe('{"input":null}');
+      // null input must not be the same as a missing key
+      const missingObj = {};
+      expect(canonicalJson(missingObj)).toBe('{}');
+      expect(canonicalJson(identityObj)).not.toBe(canonicalJson(missingObj));
+    });
+
+    it('F-C-input-undefined: undefined input triggers validation error before persistence', async () => {
+      const callbacks = createTestCallbacks();
+      const runStore = new FakeRunStore();
+      const deps = makeDependencies(callbacks, { runStore });
+
+      const req = makeRequest({ input: undefined });
+      await expect(runContextOSAgentLoop(req, deps)).rejects.toThrow(RuntimeValidationError);
+
+      // No Run was created (validation fires before persistence)
+      expect(runStore.callLog).toHaveLength(0);
+    });
+
+    it('F-C-input-null-request: request with null input produces a valid run ID', () => {
+      const reqNull = makeRequest({ input: null });
+      // null input should NOT crash validation
+      const idNull = generateRunId(reqNull, NOW);
+      // Should produce a valid ID string
+      expect(idNull).toMatch(/^run_/);
+    });
+
+    // ─── F-D: regression — pre-existing R1.2 tests still pass ───────────
+    it('F-D-regression-collision: known collision pair still produces different IDs', () => {
+      const reqA = makeRequest({ input: { text: 'gRCtcDDK9gr8' } });
+      const reqB = makeRequest({ input: { text: 'scXV4x9hBVQV' } });
+      expect(generateRunId(reqA, NOW)).not.toBe(generateRunId(reqB, NOW));
+    });
+
+    it('F-D-regression-determinism: same identity → same ID', () => {
+      const req = makeRequest({ taskId: 'regress_task' });
+      expect(generateRunId(req, NOW)).toBe(generateRunId(req, NOW));
+    });
+
+    it('F-D-regression-key-order: key order does not affect serialization', () => {
+      const a = canonicalJson({ x: 1, y: 2, z: 3 });
+      const b = canonicalJson({ z: 3, x: 1, y: 2 });
+      expect(a).toBe(b);
+    });
+
+    it('F-D-regression-projectId-diff: different projectId still different', () => {
+      const reqA = makeRequest({ projectId: 'p1' });
+      const reqB = makeRequest({ projectId: 'p2' });
+      expect(generateRunId(reqA, NOW)).not.toBe(generateRunId(reqB, NOW));
+    });
+
+    it('F-D-regression-owner-isolation: owner mismatch in learning sources → no store I/O', async () => {
+      const callbacks = createTestCallbacks();
+      const runStore = new FakeRunStore();
+      const memoryStore = new FakeMemoryStore();
+      const resolveLearningEvidence = vi.fn(async (): Promise<readonly RuntimeLearningSource[]> => [
+        {
+          decision: makeDecisionMemory('dec_x', 'other_user'),
+          feedback: makeDecisionFeedback('dec_x', 'other_user'),
+        },
+      ]);
+      const deps = makeDependencies(callbacks, { runStore, memoryStore, resolveLearningEvidence });
+
+      const result = await runContextOSAgentLoop(makeRequest(), deps);
+      expect(result.run.status).toBe('completed');
+      const createCalls = memoryStore.callLog.filter((c) => c.startsWith('create:'));
+      expect(createCalls).toHaveLength(0);
+    });
+  });
 });

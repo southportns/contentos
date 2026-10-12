@@ -275,6 +275,14 @@ function validateAgentLoopRequest(request: ContextOSRuntimeRequest): void {
   if (!request.purpose || request.purpose.trim() === '') {
     throw new RuntimeValidationError('purpose is required');
   }
+
+  // input is required and MUST NOT be undefined.
+  // input: null is allowed (explicit null identity).
+  // input: undefined triggers an explicit validation error so that it never
+  // hashes to the same value as input: null.
+  if (request.input === undefined) {
+    throw new RuntimeValidationError('input is required and cannot be undefined');
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -346,7 +354,8 @@ export function generateRunId(request: ContextOSRuntimeRequest, timestamp: strin
     projectId: request.projectId ?? null,
     topicId: request.topicId ?? null,
     purpose: request.purpose,
-    input: request.input ?? null,
+    input: request.input,
+    contextQuery: request.contextQuery ?? null,
     contextPolicy: request.contextPolicy ?? null,
   });
   const sha256hex = sha256Hash(identity);
@@ -363,31 +372,76 @@ export function sha256Hash(input: string): string {
 }
 
 /**
- * Deterministic JSON serialization.
+ * Strict plain-object check.
  *
- * Guarantees that objects with identical key-value pairs always produce
- * the same string regardless of key order. Handles nested objects, arrays,
- * and primitive types (string, number, boolean, null).
+ * Returns true only for objects whose prototype is exactly `Object.prototype`
+ * or `null` (Object.create(null)). Rejects Date, Map, Set, RegExp, class
+ * instances, and any other non-plain object with custom prototype.
+ */
+function isPlainObject(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Deterministic JSON serialization with strict type enforcement.
  *
- * Throws `Error` if the value contains types that cannot be deterministically
- * serialized (e.g., undefined, functions, symbols, BigInt, Date objects).
- * This prevents silent fallback to `[object Object]` or undefined behavior.
+ * Guarantees that plain objects with identical key-value pairs always produce
+ * the same string regardless of key order.
+ *
+ * Supported types: null, string, finite number, boolean, Array, plain object.
+ *
+ * Explicitly rejected (throws Error, no silent fallback):
+ * - Date, Map, Set, RegExp, class instances (non-plain objects)
+ * - Function, Symbol, BigInt
+ * - undefined, NaN, Infinity, -Infinity
+ * - Circular references (detected via seen-set)
+ *
+ * Negative zero (-0) is normalized to "0" (consistent with JSON.stringify).
  */
 export function canonicalJson(value: unknown): string {
+  return canonicalJsonInner(value, new Set<object>());
+}
+
+/** Internal implementation with circular-reference detection. */
+function canonicalJsonInner(value: unknown, seen: Set<object>): string {
   if (value === null) {
     return 'null';
   }
   if (typeof value === 'string') {
     return JSON.stringify(value);
   }
-  if (typeof value === 'number' || typeof value === 'boolean') {
+  if (typeof value === 'boolean') {
+    return String(value);
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new Error(
+        `canonicalJson: non-finite number (${String(value)}) — cannot serialize deterministically`
+      );
+    }
+    // Normalize -0 to "0" to match JSON.stringify semantics deterministically.
+    if (Object.is(value, -0)) {
+      return '0';
+    }
     return String(value);
   }
   if (Array.isArray(value)) {
-    return '[' + value.map(canonicalJson).join(',') + ']';
+    if (seen.has(value)) {
+      throw new Error('canonicalJson: circular reference detected in array');
+    }
+    seen.add(value);
+    const items = value.map((item) => canonicalJsonInner(item, seen));
+    seen.delete(value);
+    return '[' + items.join(',') + ']';
   }
-  if (typeof value === 'object') {
+  if (isPlainObject(value)) {
     const obj = value as Record<string, unknown>;
+    if (seen.has(obj)) {
+      throw new Error('canonicalJson: circular reference detected in object');
+    }
+    seen.add(obj);
     const sortedKeys = Object.keys(obj).sort();
     const parts: string[] = [];
     for (const key of sortedKeys) {
@@ -397,12 +451,13 @@ export function canonicalJson(value: unknown): string {
           `canonicalJson: undefined value for key "${key}" — cannot serialize deterministically`
         );
       }
-      parts.push(`${JSON.stringify(key)}:${canonicalJson(v)}`);
+      parts.push(`${JSON.stringify(key)}:${canonicalJsonInner(v, seen)}`);
     }
+    seen.delete(obj);
     return '{' + parts.join(',') + '}';
   }
   throw new Error(
-    `canonicalJson: unsupported type "${typeof value}" — cannot serialize deterministically`
+    `canonicalJson: unsupported type "${typeof value}" (${value?.constructor?.name ?? String(value)}) — cannot serialize deterministically`
   );
 }
 
