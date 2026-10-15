@@ -1117,4 +1117,160 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
       expect(createCalls).toHaveLength(0);
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Group G: Sparse Arrays, Circular References & Remaining Types (R1.2.2)
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('Group G: Sparse Arrays, Circular References & Remaining Types (R1.2.2)', () => {
+
+    // ─── G-A: Sparse array detection ─────────────────────────────────────
+    it('G-A-empty-array: empty array serializes correctly as []', () => {
+      expect(canonicalJson([])).toBe('[]');
+      expect(canonicalJson([1, 2, 3])).toBe('[1,2,3]');
+    });
+
+    it('G-A-sparse-single: new Array(1) throws (sparse)', () => {
+      const sparse = new Array(1);
+      expect(() => canonicalJson(sparse)).toThrow(/sparse arrays are not supported/);
+    });
+
+    it('G-A-sparse-multi: sparse array with multiple holes throws', () => {
+      const sparse = new Array(5);
+      sparse[4] = 'only-last';
+      expect(() => canonicalJson(sparse)).toThrow(/sparse arrays are not supported/);
+    });
+
+    it('G-A-sparse-nested: nested object containing sparse array throws', () => {
+      const obj = { data: new Array(3) };
+      expect(() => canonicalJson(obj)).toThrow(/sparse arrays are not supported/);
+    });
+
+    it('G-A-sparse-identity: sparse array does not silently produce same identity as empty array', () => {
+      // Critical: canonicalJson(new Array(1)) must NOT equal canonicalJson([])
+      const emptyResult = canonicalJson([]);
+      let sparseThrew = false;
+      try {
+        canonicalJson(new Array(1));
+      } catch {
+        sparseThrew = true;
+      }
+      expect(sparseThrew).toBe(true);
+      // And the empty array result is the correct "[]" string
+      expect(emptyResult).toBe('[]');
+    });
+
+    it('G-A-explicit-undefined-element: [undefined] is NOT sparse — it throws on undefined value', () => {
+      // [undefined] has a real (explicit) undefined at index 0.
+      // It is NOT sparse, so the sparse check passes, but then
+      // undefined value serialization throws a different error.
+      expect(() => canonicalJson([undefined])).toThrow(/unsupported type/);
+    });
+
+    // ─── G-B: Circular references ────────────────────────────────────────
+    it('G-B-circular-object: self-referencing object throws', () => {
+      const obj: Record<string, unknown> = { a: 1 };
+      obj.self = obj;
+      expect(() => canonicalJson(obj)).toThrow(/circular reference detected in object/);
+    });
+
+    it('G-B-circular-array: self-referencing array throws', () => {
+      const arr: unknown[] = [1, 2];
+      arr.push(arr);
+      expect(() => canonicalJson(arr)).toThrow(/circular reference detected in array/);
+    });
+
+    it('G-B-circular-nested: nested circular reference throws', () => {
+      const parent: Record<string, unknown> = { child: { value: 42 } };
+      (parent.child as Record<string, unknown>).parent = parent;
+      expect(() => canonicalJson(parent)).toThrow(/circular reference detected/);
+    });
+
+    it('G-B-no-stack-overflow: deep nesting does not stack overflow', () => {
+      // Build a deeply nested structure (not circular)
+      let current: unknown = { leaf: true };
+      for (let i = 0; i < 100; i++) {
+        current = { nested: current };
+      }
+      // Should NOT throw stack overflow
+      const result = canonicalJson(current);
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    // ─── G-C: Remaining unsupported types ────────────────────────────────
+    it('G-C-function: Function throws', () => {
+      const fn = function test() { return 42; };
+      expect(() => canonicalJson(fn)).toThrow(/unsupported type "function"/);
+    });
+
+    it('G-C-arrow-function: arrow function throws', () => {
+      const arrow = () => 'hello';
+      expect(() => canonicalJson(arrow)).toThrow(/unsupported type "function"/);
+    });
+
+    it('G-C-symbol: Symbol throws', () => {
+      const sym = Symbol('test');
+      expect(() => canonicalJson(sym)).toThrow(/unsupported type "symbol"/);
+    });
+
+    it('G-C-bigint: BigInt throws', () => {
+      const big = BigInt(9007199254740991);
+      expect(() => canonicalJson(big)).toThrow(/unsupported type "bigint"/);
+    });
+
+    it('G-C-function-nested-in-array: function nested in array throws', () => {
+      expect(() => canonicalJson([1, function () { return 1; }, 3])).toThrow(/unsupported type "function"/);
+    });
+
+    it('G-C-function-nested-in-object: function nested in object throws', () => {
+      expect(() => canonicalJson({ a: 1, callback: () => null })).toThrow(/undefined value|unsupported type/);
+    });
+
+    it('G-C-symbol-nested: Symbol nested in array throws', () => {
+      expect(() => canonicalJson([Symbol('x')])).toThrow(/unsupported type "symbol"/);
+    });
+
+    it('G-C-bigint-nested: BigInt nested in object throws', () => {
+      expect(() => canonicalJson({ value: BigInt(123) })).toThrow(/unsupported type "bigint"/);
+    });
+
+    // ─── G-D: Regression — R1.2.2 does not weaken R1.2.1 tests ───────────
+    it('G-D-regression-existing-types: Date/Map/Set/RegExp still throw', () => {
+      expect(() => canonicalJson(new Date())).toThrow(/unsupported type/);
+      expect(() => canonicalJson(new Map())).toThrow(/unsupported type/);
+      expect(() => canonicalJson(new Set())).toThrow(/unsupported type/);
+      expect(() => canonicalJson(/regex/)).toThrow(/unsupported type/);
+    });
+
+    it('G-D-regression-nan-infinity: NaN/Infinity still throw', () => {
+      expect(() => canonicalJson(NaN)).toThrow(/non-finite number/);
+      expect(() => canonicalJson(Infinity)).toThrow(/non-finite number/);
+    });
+
+    it('G-D-regression-minus-zero: -0 normalization preserved', () => {
+      expect(canonicalJson(-0)).toBe('0');
+    });
+
+    it('G-D-regression-key-order: key order invariance still holds', () => {
+      const a = canonicalJson({ x: 1, y: 2 });
+      const b = canonicalJson({ y: 2, x: 1 });
+      expect(a).toBe(b);
+    });
+
+    it('G-D-regression-contextQuery: contextQuery still differentiates IDs', () => {
+      const reqA = makeRequest({ contextQuery: 'alpha' });
+      const reqB = makeRequest({ contextQuery: 'beta' });
+      expect(generateRunId(reqA, NOW)).not.toBe(generateRunId(reqB, NOW));
+    });
+
+    it('G-D-regression-input-null-vs-undefined: undefined input still triggers validation error', async () => {
+      const callbacks = createTestCallbacks();
+      const runStore = new FakeRunStore();
+      const deps = makeDependencies(callbacks, { runStore });
+
+      const req = makeRequest({ input: undefined });
+      await expect(runContextOSAgentLoop(req, deps)).rejects.toThrow(RuntimeValidationError);
+      expect(runStore.callLog).toHaveLength(0);
+    });
+  });
 });

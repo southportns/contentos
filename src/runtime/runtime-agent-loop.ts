@@ -397,6 +397,7 @@ function isPlainObject(value: unknown): boolean {
  * - Function, Symbol, BigInt
  * - undefined, NaN, Infinity, -Infinity
  * - Circular references (detected via seen-set)
+ * - Sparse arrays (missing indices — would silently serialize as empty)
  *
  * Negative zero (-0) is normalized to "0" (consistent with JSON.stringify).
  */
@@ -432,6 +433,17 @@ function canonicalJsonInner(value: unknown, seen: Set<object>): string {
       throw new Error('canonicalJson: circular reference detected in array');
     }
     seen.add(value);
+    // Sparse array detection: every index 0..length-1 MUST exist.
+    // value.map() silently skips empty holes, which would cause
+    // canonicalJson([]) === canonicalJson(new Array(1)) — identity corruption.
+    for (let i = 0; i < value.length; i++) {
+      if (!(i in value)) {
+        seen.delete(value);
+        throw new Error(
+          `canonicalJson: sparse arrays are not supported (missing index ${i})`
+        );
+      }
+    }
     const items = value.map((item) => canonicalJsonInner(item, seen));
     seen.delete(value);
     return '[' + items.join(',') + ']';
