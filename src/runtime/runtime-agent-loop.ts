@@ -433,11 +433,14 @@ function canonicalJsonInner(value: unknown, seen: Set<object>): string {
       throw new Error('canonicalJson: circular reference detected in array');
     }
     seen.add(value);
-    // Sparse array detection: every index 0..length-1 MUST exist.
+    // Sparse array detection: every index 0..length-1 MUST be an OWN property.
     // value.map() silently skips empty holes, which would cause
     // canonicalJson([]) === canonicalJson(new Array(1)) — identity corruption.
+    // Object.hasOwn (NOT `i in value`) prevents prototype chain pollution
+    // from masking genuine holes (e.g. Array.prototype[0] = 'x' must not
+    // fill a sparse array's missing index 0).
     for (let i = 0; i < value.length; i++) {
-      if (!(i in value)) {
+      if (!Object.hasOwn(value, i)) {
         seen.delete(value);
         throw new Error(
           `canonicalJson: sparse arrays are not supported (missing index ${i})`

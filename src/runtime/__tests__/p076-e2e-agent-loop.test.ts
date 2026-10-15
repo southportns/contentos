@@ -1163,7 +1163,52 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
       // [undefined] has a real (explicit) undefined at index 0.
       // It is NOT sparse, so the sparse check passes, but then
       // undefined value serialization throws a different error.
+      // Object.hasOwn([undefined], 0) === true → sparse check passes →
+      // then undefined serialization throws 'unsupported type'.
       expect(() => canonicalJson([undefined])).toThrow(/unsupported type/);
+      // Confirm it does NOT throw the sparse array error.
+      try {
+        canonicalJson([undefined]);
+      } catch (e) {
+        expect(e.message).not.toMatch(/sparse arrays are not supported/);
+        expect(e.message).toMatch(/undefined/);
+      }
+    });
+
+    it('G-A-sparse-prototype-pollution: Array.prototype index does NOT fill holes', () => {
+      // CRITICAL: Even if Array.prototype is polluted with numeric indices,
+      // Object.hasOwn (not `i in`) must still detect the hole.
+      // Save originals for cleanup.
+      const savedProto0 = (Array.prototype as any)[0];
+      const savedProto1 = (Array.prototype as any)[1];
+      try {
+        // Pollute Array.prototype with numeric indices.
+        (Array.prototype as any)[0] = 'proto_value_0';
+        (Array.prototype as any)[1] = 'proto_value_1';
+
+        // new Array(2) has length 2 but NO own properties at 0 or 1.
+        // With `i in value` → false-positive (prototype fills the hole).
+        // With Object.hasOwn → correctly detects the hole.
+        const sparse = new Array(2);
+        expect(() => canonicalJson(sparse)).toThrow(/sparse arrays are not supported/);
+
+        // Also verify that `in` operator WOULD have been fooled
+        // (proving why Object.hasOwn is necessary).
+        expect(0 in sparse).toBe(true);  // prototype pollutes!
+        expect(Object.hasOwn(sparse, 0)).toBe(false); // hasOwn is correct
+      } finally {
+        // CRITICAL: Restore Array.prototype to avoid polluting other tests.
+        if (savedProto0 !== undefined) {
+          (Array.prototype as any)[0] = savedProto0;
+        } else {
+          delete (Array.prototype as any)[0];
+        }
+        if (savedProto1 !== undefined) {
+          (Array.prototype as any)[1] = savedProto1;
+        } else {
+          delete (Array.prototype as any)[1];
+        }
+      }
     });
 
     // ─── G-B: Circular references ────────────────────────────────────────
@@ -1235,6 +1280,15 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
     });
 
     // ─── G-D: Regression — R1.2.2 does not weaken R1.2.1 tests ───────────
+    it('G-D-regression-prototype-clean: Array.prototype restored after pollution test', () => {
+      // Verify that the G-A-sparse-prototype-pollution test cleaned up properly.
+      expect((Array.prototype as any)[0]).toBeUndefined();
+      expect((Array.prototype as any)[1]).toBeUndefined();
+      // Also confirm normal arrays still work after cleanup.
+      expect(canonicalJson([])).toBe('[]');
+      expect(canonicalJson([1, 2, 3])).toBe('[1,2,3]');
+    });
+
     it('G-D-regression-existing-types: Date/Map/Set/RegExp still throw', () => {
       expect(() => canonicalJson(new Date())).toThrow(/unsupported type/);
       expect(() => canonicalJson(new Map())).toThrow(/unsupported type/);
