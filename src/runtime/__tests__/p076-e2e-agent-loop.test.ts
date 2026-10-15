@@ -8,7 +8,12 @@
  * - Injected fake Run Store, Memory Store, retrieval, assembly, agent, and resolver
  * - Assert exact call ordering (not just "was called")
  * - Prove meaningful state transitions
+ *
+ * NOTE: `as any` casts are used intentionally in prototype-pollution tests
+ * (Group G, Group H) where we must modify Array.prototype to verify
+ * canonicalJson's resilience. All modifications are restored in finally blocks.
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi } from 'vitest';
 import type { ContextOSRun, ContextOSRunStatus } from '../runtime-types';
 import type { ContextObject } from '@/context/context-object';
@@ -1325,6 +1330,135 @@ describe('P0.7.6 — End-to-End Agent Context Loop', () => {
       const req = makeRequest({ input: undefined });
       await expect(runContextOSAgentLoop(req, deps)).rejects.toThrow(RuntimeValidationError);
       expect(runStore.callLog).toHaveLength(0);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Group H: Custom map Method Immutability (R1.2.4)
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('Group H: Custom map Method Immutability (R1.2.4)', () => {
+
+    // ─── H-A: Instance-level map override ───────────────────────────────
+    it('H-A-own-map-override: custom instance map does not alter serialization', () => {
+      // Create a real array with one element.
+      const value: unknown[] = [1];
+
+      // Override the instance-level map to return an empty array.
+      (value as any).map = () => [];
+
+      // canonicalJson must serialize based on index access, NOT by calling map().
+      const result = canonicalJson(value);
+      expect(result).toBe('[1]');
+
+      // Confirm empty array produces a different serialization.
+      const emptyResult = canonicalJson([]);
+      expect(emptyResult).toBe('[]');
+      expect(result).not.toBe(emptyResult);
+
+      // Cleanup: remove the instance-level override.
+      delete (value as any).map;
+    });
+
+    it('H-A-own-map-override-empty: empty array with custom map returns []', () => {
+      const value: unknown[] = [];
+      (value as any).map = () => ['polluted'];
+      expect(canonicalJson(value)).toBe('[]');
+      delete (value as any).map;
+    });
+
+    // ─── H-B: Prototype-level map override ──────────────────────────────
+    it('H-B-prototype-map-override: global Array.prototype.map override does not alter serialization', () => {
+      // Save the original map descriptor for restoration.
+      const originalDescriptor = Object.getOwnPropertyDescriptor(Array.prototype, 'map');
+      try {
+        // Override Array.prototype.map globally to return a constant polluted array.
+        Object.defineProperty(Array.prototype, 'map', {
+          value: () => ['POLLUTED'],
+          writable: true,
+          configurable: true,
+          enumerable: false,
+        });
+
+        // Despite the polluted prototype, canonicalJson must produce correct output.
+        const value = [1, 2, 3];
+        expect(canonicalJson(value)).toBe('[1,2,3]');
+
+        // Verify empty array still works.
+        expect(canonicalJson([])).toBe('[]');
+
+        // Nested array with strings.
+        expect(canonicalJson(['a', 'b'])).toBe('["a","b"]');
+
+        // Array of objects.
+        expect(canonicalJson([{ x: 1 }, { y: 2 }])).toBe('[{"x":1},{"y":2}]');
+      } finally {
+        // CRITICAL: Restore original descriptor to avoid polluting other tests.
+        if (originalDescriptor) {
+          Object.defineProperty(Array.prototype, 'map', originalDescriptor);
+        } else {
+          delete (Array.prototype as any).map;
+        }
+      }
+    });
+
+    it('H-B-prototype-restored: Array.prototype.map restored after pollution test', () => {
+      // Verify the restoration worked: native map should function correctly.
+      const result = [1, 2, 3].map((x) => x * 2);
+      expect(result).toEqual([2, 4, 6]);
+    });
+
+    // ─── H-C: Regression — prior behaviours preserved ─────────────────
+    it('H-C-regression-sparse-vs-empty: sparse array still produces error, empty array works', () => {
+      expect(canonicalJson([])).toBe('[]');
+      expect(() => canonicalJson(new Array(1))).toThrow(/sparse arrays are not supported/);
+    });
+
+    it('H-C-regression-prototype-pollution-sparse: prototype index does not fill holes', () => {
+      const savedProto0 = (Array.prototype as any)[0];
+      try {
+        (Array.prototype as any)[0] = 'proto_value';
+        const sparse = new Array(2);
+        expect(() => canonicalJson(sparse)).toThrow(/sparse arrays are not supported/);
+        expect(0 in sparse).toBe(true);          // prototype pollutes `in`
+        expect(Object.hasOwn(sparse, 0)).toBe(false); // hasOwn is correct
+      } finally {
+        if (savedProto0 !== undefined) {
+          (Array.prototype as any)[0] = savedProto0;
+        } else {
+          delete (Array.prototype as any)[0];
+        }
+      }
+    });
+
+    it('H-C-regression-explicit-undefined-vs-sparse: [undefined] throws undefined not sparse', () => {
+      expect(() => canonicalJson([undefined])).toThrow(/undefined/);
+      try {
+        canonicalJson([undefined]);
+      } catch (e: any) {
+        expect(e.message).not.toMatch(/sparse arrays are not supported/);
+      }
+    });
+
+    it('H-C-regression-circular-refs: object and array circular refs still rejected', () => {
+      const obj: Record<string, unknown> = { a: 1 };
+      obj.self = obj;
+      expect(() => canonicalJson(obj)).toThrow(/circular reference detected in object/);
+
+      const arr: unknown[] = [1];
+      arr.push(arr);
+      expect(() => canonicalJson(arr)).toThrow(/circular reference detected in array/);
+    });
+
+    it('H-C-regression-known-collision-inputs: known djb2 collision pair still different IDs', () => {
+      const reqA = makeRequest({ input: { text: 'gRCtcDDK9gr8' } });
+      const reqB = makeRequest({ input: { text: 'scXV4x9hBVQV' } });
+      expect(generateRunId(reqA, NOW)).not.toBe(generateRunId(reqB, NOW));
+    });
+
+    it('H-C-regression-identity-scope-contextQuery: contextQuery and scope fields distinguish IDs', () => {
+      const reqQuery = makeRequest({ contextQuery: 'query_q' });
+      const reqScope = makeRequest({ contextQuery: 'query_q', projectId: 'p_different' });
+      expect(generateRunId(reqQuery, NOW)).not.toBe(generateRunId(reqScope, NOW));
     });
   });
 });

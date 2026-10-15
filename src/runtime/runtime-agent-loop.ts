@@ -447,7 +447,12 @@ function canonicalJsonInner(value: unknown, seen: Set<object>): string {
         );
       }
     }
-    const items = value.map((item) => canonicalJsonInner(item, seen));
+    // Explicit index loop: avoids calling value.map() which could be
+    // overridden by an instance-level or prototype-polluted map method.
+    const items: string[] = new Array(value.length);
+    for (let i = 0; i < value.length; i++) {
+      items[i] = canonicalJsonInner(value[i], seen);
+    }
     seen.delete(value);
     return '[' + items.join(',') + ']';
   }
