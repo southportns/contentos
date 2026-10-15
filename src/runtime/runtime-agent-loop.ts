@@ -321,32 +321,25 @@ function sanitizeIdArray(ids: unknown): string[] {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Create a new Run record in 'started' status.
- *
- * Reuses the same deterministic ID scheme as runContextOS().
- */
-/**
- * Deterministic Run ID generator using SHA-256.
+ * Deterministic Run ID generator using SHA-256 (P0.7.6 Agent Loop专属).
  *
  * ID Format: `run_{ownerId}_{taskId?}_{sha256hex}_{timestamp}`
  *
  * Contract:
- *   - `taskId` (optional) is a TRACKING identifier, NOT an idempotency key.
- *     When present, it is embedded in the ID for observability.
- *   - `sha256hex` is the full 64-character SHA-256 hex digest of a canonical
- *     serialization of the request's identity fields: taskId, projectId,
- *     topicId, purpose, input, and contextPolicy.
- *   - Two requests with identical identity fields and timestamp produce the
- *     same ID (deterministic; intended for stable retries). The first write
- *     wins — duplicate IDs are rejected by RunStore.create() with
- *     RunConflictError (no overwrite).
- *   - SHA-256 provides 2^128 collision resistance (birthday bound). For any
- *     practical request volume, collisions are astronomically improbable.
- *     However, no hash function can guarantee mathematical uniqueness —
- *     the system relies on the RunStore to enforce uniqueness at write time.
- *   - Backward compatibility with runContextOS() is NOT required because
- *     runContextOS() uses its own `createRuntimeRunId()` function; P0.7.6
- *     Agent Loop establishes its own ID contract.
+ *   - P0.7.6 Agent Loop 与传统 runContextOS() 使用不同的 Run ID 生成路径。
+ *     传统入口使用 `createRuntimeRunId(ownerId, timestamp)` 生成
+ *     `run_{ownerId}_{timestamp}`；本函数使用身份字段 SHA-256。
+ *   - `ownerId` 是 Run ID 的独立前缀，不在身份对象的哈希输入中。
+ *   - `taskId` (可选) 是追踪标识 (tracking identifier)，不是幂等键。
+ *     当存在时，嵌入 ID 用于可观测性。
+ *   - `sha256hex` 是对 `canonicalJson()` 生成的规范化身份字符串进行
+ *     完整 SHA-256 哈希，输出 64 位小写十六进制字符串。
+ *   - 哈希输入包含七个身份字段：taskId, projectId, topicId, purpose,
+ *     input, contextQuery, contextPolicy。
+ *   - 注入的 `timestamp` 是 ID 独立后缀，不在上述身份对象的哈希输入中。
+ *   - 相同身份字段和相同时间戳会产生相同 ID，但最终唯一性仍由
+ *     RunStore.create() 的冲突处理保证（重复 ID 抛 RunConflictError，
+ *     不覆盖已有记录）。
  */
 export function generateRunId(request: ContextOSRuntimeRequest, timestamp: string): string {
   const identity = canonicalJson({
