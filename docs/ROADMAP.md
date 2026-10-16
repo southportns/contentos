@@ -1,7 +1,11 @@
 # Content OS — Roadmap
 
-> 开发路线图  
+> 开发路线图
 > Version: 1.0
+
+---
+
+> **V1.0 Goal Baseline**: The project final objective, acceptance thresholds, and delivery milestones are frozen in **[FINAL_GOAL.md](FINAL_GOAL.md)**. This roadmap shows the historical development sequence; any conflict between this file and FINAL_GOAL.md shall be resolved in favor of FINAL_GOAL.md.
 
 ---
 

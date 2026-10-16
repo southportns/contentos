@@ -143,6 +143,14 @@ Infrastructure (数据库 / AI SDK)
 | transcript-correction | 口播文案纠错 |
 | content-search | 内容搜索 |
 
+## Final Goal
+
+The project ultimate objective is defined in **[docs/FINAL_GOAL.md](docs/FINAL_GOAL.md)**:
+
+A **personal AI Content Operating System** — ContentOS (user-facing production product) integrated with ContextOS (context and learning runtime layer).
+
+V1.0 acceptance indicators and milestones are frozen in that document. All new development tasks must reference it.
+
 ## License
 
 MIT

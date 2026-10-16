@@ -598,3 +598,19 @@ Build 通过
 不要：
 
 > 为未来不存在的需求提前设计复杂系统。
+
+---
+
+# 26. Goal Discipline (V1.0 Baseline)
+
+> Frozen by [FINAL_GOAL.md](FINAL_GOAL.md).
+
+Each new development task MUST answer:
+
+1. Which milestone (M1–M4) does it belong to?
+2. What proven problem does it solve?
+3. Which acceptance criterion does it map to?
+4. How will completion be verified?
+5. Is there a smaller, more direct solution?
+
+Tasks without clear answers to the above MUST NOT proceed.
