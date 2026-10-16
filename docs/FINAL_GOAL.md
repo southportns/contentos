@@ -2,7 +2,7 @@
 
 > **Frozen Date**: 2026-10-16
 > **Repository**: southportns/contentos
-> **Baseline Commit**: 0c84561 (verify with git rev-parse HEAD)
+> **Evidence Baseline**: Architecture and capability claims in this document are based on the actual repository state at freeze time. The implementation status snapshot (Section 9) reflects verified file presence and test results as of P0.8.0 freezing commit.
 > **Status**: Target Frozen — NOT YET VALIDATED
 
 ---
@@ -160,7 +160,7 @@ ContextOS Runtime is NOT called from the actual production content flow. The pro
 - README.md — project overview and quick start
 - docs/ROADMAP.md — development history and final goal baseline declaration
 - docs/P0.7_CONTEXTOS_RUNTIME.md — ContextOS architecture contract
-- docs/P0.7.6-R1_DELIVERY_REPORT.md — P0.7.8 delivery evidence
+- docs/P0.7.6-R1_DELIVERY_REPORT.md — P0.7.6-R1 ContextOS E2E Agent Loop delivery evidence
 
 ---
 
